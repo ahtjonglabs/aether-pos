@@ -39,82 +39,32 @@ export async function GET(request: NextRequest) {
     let products: unknown[]
     let total: number
 
-// M1: Raw SQL for best-selling — uses parameterized queries with proper type
-// NOTE: This uses SQLite syntax. For PostgreSQL, the parameter format differs ($1, $2).
-// The db.ts switcher handles this, but the SQL itself is SQLite-specific.
-// Fallback to Prisma-level sort if PostgreSQL is detected.
-    const dbProvider = process.env.DATABASE_PROVIDER || 'sqlite'
-
     if (sort === 'best-selling') {
-      if (dbProvider === 'postgresql') {
-        // PostgreSQL fallback: aggregate in JS after fetching products with relations
-        // This avoids raw SQL portability issues
-        const allProducts = await db.product.findMany({
-          where,
-          include: {
-            category: { select: { id: true, name: true, color: true } },
-            transactionItems: {
-              select: { qty: true },
-            },
+      // Use Prisma-level aggregation — works with PostgreSQL and SQLite
+      const allProducts = await db.product.findMany({
+        where,
+        include: {
+          category: { select: { id: true, name: true, color: true } },
+          transactionItems: {
+            select: { qty: true },
           },
-        })
+        },
+      })
 
-        // Calculate totalSold for each product and sort
-        const withSold = allProducts.map((p: Record<string, unknown>) => ({
-          ...p,
-          totalSold: Array.isArray(p.transactionItems)
-            ? (p.transactionItems as Array<{ qty: number }>).reduce((s: number, ti: { qty: number }) => s + ti.qty, 0)
-            : 0,
-        }))
-        withSold.sort((a: { totalSold: number }, b: { totalSold: number }) => b.totalSold - a.totalSold)
+      // Calculate totalSold for each product and sort
+      const withSold = allProducts.map((p: Record<string, unknown>) => ({
+        ...p,
+        totalSold: Array.isArray(p.transactionItems)
+          ? (p.transactionItems as Array<{ qty: number }>).reduce((s: number, ti: { qty: number }) => s + ti.qty, 0)
+          : 0,
+      }))
+      withSold.sort((a: { totalSold: number }, b: { totalSold: number }) => b.totalSold - a.totalSold)
 
-        total = withSold.length
-        // Remove transactionItems from response, strip totalSold
-        products = withSold
-          .slice(skip, skip + limit)
-          .map(({ totalSold: _ts, transactionItems: _ti, ...rest }: Record<string, unknown>) => rest)
-      } else {
-        // SQLite: Use raw SQL for best-selling sort
-        const rawProducts = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(`
-          SELECT p.*, COALESCE(SUM(ti.qty), 0) as totalSold,
-            c.id as "categoryId", c.name as "categoryName", c.color as "categoryColor"
-          FROM Product p
-          LEFT JOIN TransactionItem ti ON ti.productId = p.id
-          LEFT JOIN Category c ON c.id = p.categoryId
-          WHERE p.outletId = ?
-          ${search ? 'AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)' : ''}
-          ${categoryId ? 'AND p.categoryId = ?' : ''}
-          GROUP BY p.id
-          ORDER BY totalSold DESC
-          LIMIT ? OFFSET ?
-        `,
-          outletId,
-          search ? `%${search}%` : '',
-          search ? `%${search}%` : '',
-          search ? `%${search}%` : '',
-          ...(categoryId ? [categoryId] : []),
-          limit,
-          skip
-        )
-
-        // Get total count
-        total = await db.product.count({ where })
-
-        // Normalize raw products to include category object and remove extra fields
-        products = rawProducts.map(({ totalSold: _ts, categoryName, categoryColor, ...rest }: Record<string, unknown>) => {
-          const product: Record<string, unknown> = { ...rest }
-          if (rest.categoryId) {
-            product.category = {
-              id: rest.categoryId,
-              name: categoryName,
-              color: categoryColor,
-            }
-          } else {
-            product.category = null
-          }
-          return product
-        })
-      }
+      total = withSold.length
+      // Remove transactionItems from response, strip totalSold
+      products = withSold
+        .slice(skip, skip + limit)
+        .map(({ totalSold: _ts, transactionItems: _ti, ...rest }: Record<string, unknown>) => rest)
     } else {
       let orderBy: Record<string, string> = { createdAt: 'desc' }
 
