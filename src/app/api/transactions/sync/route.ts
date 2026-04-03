@@ -27,7 +27,7 @@ interface SyncTransaction {
 }
 
 interface SyncResult {
-  localId: number
+  localId: number | undefined
   success: boolean
   invoiceNumber?: string
   serverId?: string
@@ -56,11 +56,17 @@ export async function POST(request: NextRequest) {
 
     for (const tx of batch) {
       try {
+        // Validate localId
+        if (!tx.id) {
+          results.push({ localId: -1, success: false, error: 'Missing localId' })
+          continue
+        }
+
         const { payload, createdAt } = tx
 
         // Validate items
         if (!payload.items || payload.items.length === 0) {
-          results.push({ localId: tx.id!, success: false, error: 'Empty cart' })
+          results.push({ localId: tx.id, success: false, error: 'Empty cart' })
           continue
         }
 
@@ -243,7 +249,7 @@ export async function POST(request: NextRequest) {
         })
 
         results.push({
-          localId: tx.id!,
+          localId: tx.id,
           success: true,
           invoiceNumber: result.invoiceNumber,
           serverId: result.transactionId,
@@ -251,7 +257,7 @@ export async function POST(request: NextRequest) {
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Sync failed'
         results.push({
-          localId: tx.id!,
+          localId: tx.id,
           success: false,
           error: message,
         })

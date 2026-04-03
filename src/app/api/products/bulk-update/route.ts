@@ -64,7 +64,14 @@ export async function POST(request: NextRequest) {
 
     // Process each product in a transaction
     let updatedCount = 0
-    const auditLogs = []
+    const auditLogs: Array<{
+      action: string
+      entityType: string
+      entityId: string
+      details: string
+      outletId: string
+      userId: string
+    }> = []
 
     await db.$transaction(async (tx) => {
       for (const product of existingProducts) {

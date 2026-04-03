@@ -28,10 +28,10 @@ export async function PUT(
     const body = await request.json()
     const { name, whatsapp } = body
 
-    // If whatsapp is being changed, check uniqueness
+    // If whatsapp is being changed, check uniqueness within outlet
     if (whatsapp && whatsapp !== existing.whatsapp) {
-      const whatsappExists = await db.customer.findUnique({
-        where: { whatsapp },
+      const whatsappExists = await db.customer.findFirst({
+        where: { whatsapp, outletId, id: { not: id } },
       })
       if (whatsappExists) {
         return safeJsonError('WhatsApp number already registered', 400)

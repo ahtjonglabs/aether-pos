@@ -57,11 +57,11 @@ export async function POST(request: NextRequest) {
 
     // Check plan limits
     const planData = await getOutletPlan(user.outletId, db)
-    if (planData?.features.maxCrew !== -1) {
+    if (!planData || planData.features.maxCrew !== -1) {
       const currentCount = await db.user.count({
         where: { outletId: user.outletId, role: 'CREW' },
       })
-      if (currentCount >= planData.features.maxCrew) {
+      if (planData && currentCount >= planData.features.maxCrew) {
         return safeJsonError(`Batas crew (${planData.features.maxCrew}) sudah tercapai. Upgrade ke Pro untuk unlimited crew.`, 403)
       }
     }

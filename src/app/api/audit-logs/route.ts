@@ -59,10 +59,9 @@ export async function GET(request: NextRequest) {
       entityId: log.entityId,
       details: log.details,
       createdAt: log.createdAt,
-      user: {
-        name: log.user.name,
-        email: log.user.email,
-      },
+      user: log.user
+        ? { name: log.user.name, email: log.user.email }
+        : { name: 'System', email: '-' },
     }))
 
     return safeJson({

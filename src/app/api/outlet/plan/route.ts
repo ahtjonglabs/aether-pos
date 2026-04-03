@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     // Derive plan type (handles suspended: prefix)
     const rawPlan = resolvePlanType(outlet.accountType)
-    const isSuspended = outlet.accountType.startsWith('suspended:')
+    const isSuspended = outlet.accountType?.startsWith('suspended:') ?? false
     const features = getPlanFeatures(rawPlan)
 
     // Calculate usage vs limits

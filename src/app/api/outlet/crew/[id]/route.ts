@@ -37,9 +37,11 @@ export async function PUT(
     const updateData: Record<string, string> = {}
     if (name !== undefined) updateData.name = name
     if (email !== undefined) {
-      // Check email uniqueness (excluding current crew)
+      // Check email uniqueness within outlet (excluding current crew)
       if (email !== crew.email) {
-        const existingUser = await db.user.findFirst({ where: { email } })
+        const existingUser = await db.user.findFirst({
+          where: { email, outletId: user.outletId, id: { not: id } },
+        })
         if (existingUser) {
           return safeJsonError('Email sudah terdaftar', 409)
         }

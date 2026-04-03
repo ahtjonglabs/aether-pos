@@ -37,28 +37,37 @@ export async function GET(request: NextRequest) {
     let total: number
 
     if (sort === 'best-selling') {
-      const allProducts = await db.product.findMany({
-        where,
-        include: {
-          category: { select: { id: true, name: true, color: true } },
-          transactionItems: {
-            select: { qty: true },
-          },
-        },
+      // Use aggregation instead of loading all transaction items
+      const soldAgg = await db.transactionItem.groupBy({
+        by: ['productId'],
+        where: { transaction: { outletId } },
+        _sum: { qty: true },
+        _count: true,
       })
 
-      const withSold = allProducts.map((p: Record<string, unknown>) => ({
-        ...p,
-        totalSold: Array.isArray(p.transactionItems)
-          ? (p.transactionItems as Array<{ qty: number }>).reduce((s: number, ti: { qty: number }) => s + ti.qty, 0)
-          : 0,
-      }))
-      withSold.sort((a: { totalSold: number }, b: { totalSold: number }) => b.totalSold - a.totalSold)
+      const soldMap = new Map(
+        soldAgg.map((s) => [s.productId, (s._sum.qty ?? 0)])
+      )
 
-      total = withSold.length
-      products = withSold
-        .slice(skip, skip + limit)
-        .map(({ totalSold: _ts, transactionItems: _ti, ...rest }: Record<string, unknown>) => rest)
+      const [allProducts, count] = await Promise.all([
+        db.product.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            category: { select: { id: true, name: true, color: true } },
+          },
+        }),
+        db.product.count({ where }),
+      ])
+
+      // Sort by totalSold descending
+      allProducts.sort((a, b) => (soldMap.get(b.id) ?? 0) - (soldMap.get(a.id) ?? 0))
+
+      total = count
+      products = allProducts.slice(skip, skip + limit).map((p) => ({
+        ...p,
+        _totalSold: soldMap.get(p.id) ?? 0,
+      }))
     } else {
       let orderBy: Record<string, string> = { createdAt: 'desc' }
 

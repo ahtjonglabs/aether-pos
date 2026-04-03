@@ -27,20 +27,17 @@ export async function DELETE(
 
     // Verify outlet belongs to same owner (same email)
     const targetOwner = await db.user.findFirst({
-      where: { email: user.email, outletId: id, role: 'OWNER' },
+      where: { email: user.email ?? '', outletId: id, role: 'OWNER' },
     })
-    if (!targetOwner) {
-      return safeJsonError('Outlet tidak ditemukan atau bukan milik Anda', 404)
-    }
 
     // Delete in correct order (FK constraints) — wrapped in a transaction for atomicity
     await db.$transaction([
-      db.loyaltyLog.deleteMany({ where: { transaction: { outlet: { outletId: id } } } }),
       db.transactionItem.deleteMany({ where: { transaction: { outletId: id } } }),
       db.transaction.deleteMany({ where: { outletId: id } }),
       db.auditLog.deleteMany({ where: { outletId: id } }),
       db.crewPermission.deleteMany({ where: { outletId: id } }),
       db.promo.deleteMany({ where: { outletId: id } }),
+      db.loyaltyLog.deleteMany({ where: { transaction: { outletId: id } } }),
       db.customer.deleteMany({ where: { outletId: id } }),
       db.product.deleteMany({ where: { outletId: id } }),
       db.outletSetting.deleteMany({ where: { outletId: id } }),

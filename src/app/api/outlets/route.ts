@@ -33,19 +33,22 @@ export async function GET(request: NextRequest) {
           _count: { select: { users: true, products: true, transactions: true, customers: true } },
         },
       })
+      if (!outlet) {
+        return safeJsonError('Outlet tidak ditemukan', 404)
+      }
       return safeJson({
         outlets: [{
-          id: outlet!.id,
-          name: outlet!.name,
-          address: outlet!.address,
-          phone: outlet!.phone,
-          accountType: outlet!.accountType,
+          id: outlet.id,
+          name: outlet.name,
+          address: outlet.address,
+          phone: outlet.phone,
+          accountType: outlet.accountType,
           isPrimary: true,
-          createdAt: outlet!.createdAt,
-          userCount: outlet!._count.users,
-          productCount: outlet!._count.products,
-          transactionCount: outlet!._count.transactions,
-          customerCount: outlet!._count.customers,
+          createdAt: outlet.createdAt,
+          userCount: outlet._count.users,
+          productCount: outlet._count.products,
+          transactionCount: outlet._count.transactions,
+          customerCount: outlet._count.customers,
         }],
         canAddMore: false,
       })
@@ -55,7 +58,7 @@ export async function GET(request: NextRequest) {
     // We store the "owner email" as a way to link outlets
     const allUsers = await db.user.findMany({
       where: {
-        email: user.email,
+        email: user.email ?? '',
         role: 'OWNER',
       },
       include: {
@@ -68,19 +71,21 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'asc' },
     })
 
-    const outlets = allUsers.map((u) => ({
-      id: u.outlet.id,
-      name: u.outlet.name,
-      address: u.outlet.address,
-      phone: u.outlet.phone,
-      accountType: u.outlet.accountType,
-      isPrimary: u.outletId === user.outletId,
-      createdAt: u.outlet.createdAt,
-      userCount: u.outlet._count.users,
-      productCount: u.outlet._count.products,
-      transactionCount: u.outlet._count.transactions,
-      customerCount: u.outlet._count.customers,
-    }))
+    const outlets = allUsers
+      .filter((u): u is typeof u & { outlet: NonNullable<typeof u.outlet> } => u.outlet !== null)
+      .map((u) => ({
+        id: u.outlet.id,
+        name: u.outlet.name,
+        address: u.outlet.address,
+        phone: u.outlet.phone,
+        accountType: u.outlet.accountType,
+        isPrimary: u.outletId === user.outletId,
+        createdAt: u.outlet.createdAt,
+        userCount: u.outlet._count.users,
+        productCount: u.outlet._count.products,
+        transactionCount: u.outlet._count.transactions,
+        customerCount: u.outlet._count.customers,
+      }))
 
     return safeJson({
       outlets,
@@ -121,6 +126,14 @@ export async function POST(request: NextRequest) {
       return safeJsonError('Nama outlet minimal 2 karakter', 400)
     }
 
+    // Fetch the current user's full record to get the password hash
+    const currentUser = await db.user.findUnique({
+      where: { id: user.id },
+    })
+    if (!currentUser) {
+      return safeJsonError('User tidak ditemukan', 404)
+    }
+
     // Create the new outlet + create an owner entry with same credentials
     const result = await db.$transaction(async (tx) => {
       const newOutlet = await tx.outlet.create({
@@ -135,9 +148,9 @@ export async function POST(request: NextRequest) {
       // Create owner entry linked to this outlet (same email as current user)
       const newOwner = await tx.user.create({
         data: {
-          name: user.name,
-          email: user.email, // Same email as current user (login via email)
-          password: user.password, // Same password hash (login via password)
+          name: currentUser.name,
+          email: currentUser.email,
+          password: currentUser.password,
           role: 'OWNER',
           outletId: newOutlet.id,
         },

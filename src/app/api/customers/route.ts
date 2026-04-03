@@ -98,8 +98,8 @@ export async function POST(request: NextRequest) {
     // Prepare response first
     const response = safeJsonCreated(customer)
 
-    // Fire-and-forget: Send Telegram notification
-    notifyNewCustomer(outletId, { name, whatsapp })
+    // Fire-and-forget: Send Telegram notification (don't await — best-effort)
+    void notifyNewCustomer(outletId, { name, whatsapp })
 
     return response
   } catch (error) {
