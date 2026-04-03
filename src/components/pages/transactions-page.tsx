@@ -399,14 +399,14 @@ export default function TransactionsPage() {
 
           {/* Cashier filter */}
           {isPro && cashiers.length > 0 && (
-            <Select value={cashierId} onValueChange={setCashierId}>
+            <Select value={cashierId || '__all__'} onValueChange={(v) => setCashierId(v === '__all__' ? '' : v)}>
               <SelectTrigger className="w-[140px] h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
                 <Filter className="mr-1.5 h-3 w-3 text-zinc-500" />
                 <SelectValue placeholder="Kasir" />
               </SelectTrigger>
               <SelectContent className="bg-zinc-800 border-zinc-700">
-                <SelectItem value="" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Kasir</SelectItem>
-                {cashiers.map((c) => (
+                <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Kasir</SelectItem>
+                {cashiers.filter((c) => c.id).map((c) => (
                   <SelectItem key={c.id} value={c.id} className="text-zinc-200 focus:bg-zinc-700 text-xs">
                     {c.name}
                   </SelectItem>
@@ -417,13 +417,13 @@ export default function TransactionsPage() {
 
           {/* Payment method filter */}
           {isPro && (
-            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+            <Select value={paymentMethod || '__all__'} onValueChange={(v) => setPaymentMethod(v === '__all__' ? '' : v)}>
               <SelectTrigger className="w-[140px] h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
                 <Filter className="mr-1.5 h-3 w-3 text-zinc-500" />
                 <SelectValue placeholder="Pembayaran" />
               </SelectTrigger>
               <SelectContent className="bg-zinc-800 border-zinc-700">
-                <SelectItem value="" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Metode</SelectItem>
+                <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Metode</SelectItem>
                 <SelectItem value="CASH" className="text-zinc-200 focus:bg-zinc-700 text-xs">CASH</SelectItem>
                 <SelectItem value="QRIS" className="text-zinc-200 focus:bg-zinc-700 text-xs">QRIS</SelectItem>
                 <SelectItem value="DEBIT" className="text-zinc-200 focus:bg-zinc-700 text-xs">DEBIT</SelectItem>
@@ -432,12 +432,12 @@ export default function TransactionsPage() {
           )}
 
           {/* Void status filter */}
-          <Select value={voidFilter} onValueChange={setVoidFilter}>
+          <Select value={voidFilter || '__all__'} onValueChange={(v) => setVoidFilter(v === '__all__' ? '' : v)}>
             <SelectTrigger className="w-[120px] h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent className="bg-zinc-800 border-zinc-700">
-              <SelectItem value="" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua</SelectItem>
+              <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua</SelectItem>
               <SelectItem value="active" className="text-zinc-200 focus:bg-zinc-700 text-xs">Aktif</SelectItem>
               <SelectItem value="void" className="text-zinc-200 focus:bg-zinc-700 text-xs">Void</SelectItem>
             </SelectContent>

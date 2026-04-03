@@ -135,7 +135,7 @@ export default function PosPage() {
       }
     }
     fetchSettings()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])  
 
   // Customers
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -236,7 +236,7 @@ export default function PosPage() {
       }, 2000)
       return () => { clearTimeout(timer); syncingRef.current = false }
     }
-  }, [isOnline]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOnline])  
 
   // Auto-sync master data on mount (if online & not yet synced)
   useEffect(() => {
@@ -274,7 +274,7 @@ export default function PosPage() {
       }
       loadSyncTimes()
     }
-  }, [isOnline]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isOnline])  
 
   // Auto-focus search input on mount
   useEffect(() => {

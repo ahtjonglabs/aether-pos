@@ -1,6 +1,7 @@
 'use client'
 
 import { useSession, signOut } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { usePageStore, type PageType } from '@/hooks/use-page-store'
 import { usePlan } from '@/hooks/use-plan'
 import { getPlanBadgeClass } from '@/lib/plan-config'
@@ -22,6 +23,7 @@ import {
   ShieldAlert,
   ChevronLeft,
   ChevronRight,
+  UserCog,
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -39,6 +41,7 @@ const navItems: NavItem[] = [
   { label: 'POS', shortLabel: 'POS', icon: <ShoppingCart className="h-[18px] w-[18px]" />, page: 'pos' },
   { label: 'Transactions', shortLabel: 'Txn', icon: <Receipt className="h-[18px] w-[18px]" />, page: 'transactions' },
   { label: 'Audit Log', shortLabel: 'Log', icon: <ClipboardList className="h-[18px] w-[18px]" />, page: 'audit-log' },
+  { label: 'Kelola Crew', shortLabel: 'Crew', icon: <UserCog className="h-[18px] w-[18px]" />, page: 'crew' },
   { label: 'Pengaturan', shortLabel: 'Set', icon: <Settings className="h-[18px] w-[18px]" />, page: 'settings' },
 ]
 
@@ -50,6 +53,7 @@ function SidebarContent({ collapsed, onNavigate, onToggleCollapse }: {
   const { data: session } = useSession()
   const { currentPage, setCurrentPage } = usePageStore()
   const { plan, isSuspended } = usePlan()
+  const router = useRouter()
 
   const handleNav = (page: PageType) => {
     setCurrentPage(page)
@@ -166,7 +170,32 @@ function SidebarContent({ collapsed, onNavigate, onToggleCollapse }: {
         <Button
           variant="ghost"
           className={`w-full justify-${collapsed ? 'center' : 'start'} text-zinc-500 hover:text-red-400 hover:bg-red-500/10 h-8 text-xs gap-2`}
-          onClick={() => signOut()}
+          onClick={async () => {
+            try {
+              // Clear cookies manually first for reliability
+              document.cookie.split(';').forEach(c => {
+                const name = c.trim().split('=')[0]
+                if (name.startsWith('next-auth') || name.startsWith('__Secure-next-auth')) {
+                  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+                }
+              })
+              // Then call NextAuth signout
+              await signOut({ callbackUrl: '/', redirect: false })
+            } catch {
+              // Fallback: clear cookies manually
+              document.cookie.split(';').forEach(c => {
+                const name = c.trim().split('=')[0]
+                if (name.startsWith('next-auth') || name.startsWith('__Secure-next-auth')) {
+                  document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+                }
+              })
+            }
+            // Always navigate to home (shows login page)
+            router.push('/')
+            router.refresh()
+            // Force full page reload to ensure clean state
+            window.location.href = '/'
+          }}
         >
           <LogOut className="h-3.5 w-3.5" />
           {!collapsed && <span>Sign Out</span>}

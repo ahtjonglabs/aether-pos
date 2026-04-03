@@ -48,6 +48,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ProGate } from '@/components/shared/pro-gate'
 import {
   Banknote,
   QrCode,
@@ -199,7 +200,9 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         </TabsContent>
         {isOwner && (
           <TabsContent value="crew">
-            <CrewAccessTab />
+            <ProGate feature="crewPermissions" label="Hak Akses Crew" description="Kelola akses halaman per crew member" minHeight="200px">
+              <CrewAccessTab />
+            </ProGate>
           </TabsContent>
         )}
         <TabsContent value="loyalty">
