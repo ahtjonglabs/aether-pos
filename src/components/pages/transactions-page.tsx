@@ -1,0 +1,848 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useSession } from 'next-auth/react'
+import { toast } from 'sonner'
+import { formatCurrency, formatDate } from '@/lib/format'
+import { usePlan } from '@/hooks/use-plan'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Pagination } from '@/components/shared/pagination'
+import {
+  Search,
+  Eye,
+  Banknote,
+  QrCode,
+  CreditCard,
+  CalendarDays,
+  Download,
+  RotateCcw,
+  CheckCircle2,
+  Clock,
+  Ban,
+  Printer,
+  Lock,
+  Filter,
+  Loader2,
+} from 'lucide-react'
+
+interface TransactionItem {
+  id: string
+  productName: string
+  price: number
+  qty: number
+  subtotal: number
+}
+
+interface Transaction {
+  id: string
+  invoiceNumber: string
+  createdAt: string
+  customerName?: string | null
+  cashierName?: string | null
+  cashierId?: string | null
+  paymentMethod: string
+  total: number
+  _count?: { items: number }
+  items?: TransactionItem[]
+  voidStatus: 'active' | 'void'
+  voidReason?: string | null
+  syncStatus: 'synced' | 'pending'
+  subtotal?: number
+  discount?: number
+  paidAmount?: number
+  change?: number
+}
+
+interface TransactionListResponse {
+  transactions: Transaction[]
+  totalPages: number
+}
+
+interface CashierOption {
+  id: string
+  name: string
+}
+
+function getTodayISO(): string {
+  const d = new Date()
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+export default function TransactionsPage() {
+  const { data: session } = useSession()
+  const isOwner = session?.user?.role === 'OWNER'
+  const { plan } = usePlan()
+  const isPro = plan?.type === 'pro' || plan?.type === 'enterprise'
+
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState(getTodayISO)
+  const [dateTo, setDateTo] = useState(getTodayISO)
+  const [cashierId, setCashierId] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [voidFilter, setVoidFilter] = useState('')
+
+  // Cashier list
+  const [cashiers, setCashiers] = useState<CashierOption[]>([])
+
+  // Detail dialog
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailTransaction, setDetailTransaction] = useState<Transaction | null>(null)
+  const [detailItems, setDetailItems] = useState<TransactionItem[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailOutlet, setDetailOutlet] = useState<{ name: string; address: string; phone: string } | null>(null)
+  const [detailCashierName, setDetailCashierName] = useState<string | null>(null)
+  const [detailVoidInfo, setDetailVoidInfo] = useState<{ reason: string; voidedBy: string; voidedAt: string } | null>(null)
+
+  // Void dialog
+  const [voidOpen, setVoidOpen] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voidSubmitting, setVoidSubmitting] = useState(false)
+
+  const receiptRef = useRef<HTMLDivElement>(null)
+
+  // Fetch cashiers
+  const fetchCashiers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/outlet/crew')
+      if (res.ok) {
+        const data = await res.json()
+        setCashiers(data.crew || [])
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [])
+
+  // Fallback: fetch cashiers from users if crew endpoint doesn't exist
+  const fetchCashiersFallback = useCallback(async () => {
+    try {
+      const res = await fetch('/api/transactions?limit=1')
+      if (!res.ok) return
+      const data = await res.json()
+      // Extract unique cashiers from transactions
+      const uniqueCashiers = new Map<string, string>()
+      if (data.transactions) {
+        for (const t of data.transactions) {
+          if (t.cashierId && t.cashierName) {
+            uniqueCashiers.set(t.cashierId, t.cashierName)
+          }
+        }
+      }
+      if (uniqueCashiers.size > 0) {
+        setCashiers(Array.from(uniqueCashiers.entries()).map(([id, name]) => ({ id, name })))
+      }
+    } catch {
+      // Silently fail
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCashiers().catch(() => fetchCashiersFallback())
+  }, [fetchCashiers, fetchCashiersFallback])
+
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' })
+      if (search) params.set('search', search)
+      if (dateFrom) params.set('dateFrom', dateFrom)
+      if (dateTo) params.set('dateTo', dateTo)
+      if (cashierId) params.set('cashierId', cashierId)
+      if (paymentMethod) params.set('paymentMethod', paymentMethod)
+      if (voidFilter) params.set('voidStatus', voidFilter)
+      const res = await fetch(`/api/transactions?${params}`)
+      if (res.ok) {
+        const data: TransactionListResponse = await res.json()
+        setTransactions(data.transactions)
+        setTotalPages(data.totalPages)
+
+        // Update cashier list from response
+        const uniqueCashiers = new Map<string, string>()
+        for (const t of data.transactions) {
+          if (t.cashierId && t.cashierName && !uniqueCashiers.has(t.cashierId)) {
+            uniqueCashiers.set(t.cashierId, t.cashierName)
+          }
+        }
+        if (uniqueCashiers.size > 0 && cashiers.length === 0) {
+          setCashiers(Array.from(uniqueCashiers.entries()).map(([id, name]) => ({ id, name })))
+        }
+      } else {
+        toast.error('Failed to load transactions')
+      }
+    } catch {
+      toast.error('Failed to load transactions')
+    } finally {
+      setLoading(false)
+    }
+  }, [page, search, dateFrom, dateTo, cashierId, paymentMethod, voidFilter, cashiers.length])
+
+  useEffect(() => {
+    fetchTransactions()
+  }, [fetchTransactions])
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [dateFrom, dateTo, search, cashierId, paymentMethod, voidFilter])
+
+  const handleViewDetail = async (transaction: Transaction) => {
+    setDetailTransaction(transaction)
+    setDetailOpen(true)
+    setDetailLoading(true)
+    setDetailVoidInfo(null)
+    setDetailOutlet(null)
+    setDetailCashierName(null)
+    try {
+      const res = await fetch(`/api/transactions/${transaction.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setDetailItems(data.items || [])
+        setDetailVoidInfo(data.voidInfo || null)
+        setDetailOutlet(data.outlet || null)
+        setDetailCashierName(data.user?.name || null)
+      }
+    } catch {
+      toast.error('Failed to load transaction detail')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const handleSetToday = () => {
+    const today = getTodayISO()
+    setDateFrom(today)
+    setDateTo(today)
+  }
+
+  const handleClearDates = () => {
+    setDateFrom('')
+    setDateTo('')
+  }
+
+  const handleClearAllFilters = () => {
+    setDateFrom(getTodayISO)
+    setDateTo(getTodayISO)
+    setSearch('')
+    setCashierId('')
+    setPaymentMethod('')
+    setVoidFilter('')
+  }
+
+  const handleExport = () => {
+    if (!isPro) {
+      toast.error('Fitur export hanya tersedia untuk akun Pro')
+      return
+    }
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('dateFrom', dateFrom)
+    if (dateTo) params.set('dateTo', dateTo)
+    if (cashierId) params.set('cashierId', cashierId)
+    if (paymentMethod) params.set('paymentMethod', paymentMethod)
+    window.open(`/api/transactions/export?${params}`, '_blank')
+  }
+
+  const handleVoid = async () => {
+    if (!detailTransaction || !voidReason.trim()) return
+    setVoidSubmitting(true)
+    try {
+      const res = await fetch(`/api/transactions/${detailTransaction.id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: voidReason.trim() }),
+      })
+      if (res.ok) {
+        toast.success('Transaksi berhasil di-void')
+        setVoidOpen(false)
+        setVoidReason('')
+        setDetailVoidInfo({
+          reason: voidReason.trim(),
+          voidedBy: session?.user?.name || '',
+          voidedAt: new Date().toISOString(),
+        })
+        fetchTransactions()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Gagal void transaksi')
+      }
+    } catch {
+      toast.error('Gagal void transaksi')
+    } finally {
+      setVoidSubmitting(false)
+    }
+  }
+
+  const handlePrint = () => {
+    if (!receiptRef.current) return
+    const content = receiptRef.current.innerHTML
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(`
+      <html>
+        <head>
+          <title>Receipt - ${detailTransaction?.invoiceNumber || ''}</title>
+          <style>
+            body { font-family: 'Courier New', monospace; margin: 0; padding: 20px; font-size: 12px; }
+            .receipt { max-width: 300px; margin: 0 auto; }
+            .divider { border-top: 1px dashed #000; margin: 8px 0; }
+            .center { text-align: center; }
+            .right { text-align: right; }
+            table { width: 100%; border-collapse: collapse; }
+            td { padding: 2px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt">${content}</div>
+          <script>window.onload = function() { window.print(); window.close(); }</script>
+        </body>
+      </html>
+    `)
+    win.document.close()
+  }
+
+  const hasActiveFilters = search || dateFrom || dateTo || cashierId || paymentMethod || voidFilter
+
+  const getPaymentBadge = (method: string) => {
+    switch (method) {
+      case 'CASH':
+        return (
+          <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px]">
+            <Banknote className="mr-0.5 h-2.5 w-2.5" />CASH
+          </Badge>
+        )
+      case 'QRIS':
+        return (
+          <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
+            <QrCode className="mr-0.5 h-2.5 w-2.5" />QRIS
+          </Badge>
+        )
+      case 'DEBIT':
+        return (
+          <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px]">
+            <CreditCard className="mr-0.5 h-2.5 w-2.5" />DEBIT
+          </Badge>
+        )
+      default:
+        return <Badge className="text-[10px]">{method}</Badge>
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-lg font-semibold text-zinc-100">Transactions</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">View all sales transactions</p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:flex-wrap">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+            <Input
+              placeholder="Search invoice..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 w-[180px]"
+            />
+          </div>
+
+          {/* Date filters */}
+          <div className="flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-[140px] [color-scheme:dark]"
+            />
+            <span className="text-zinc-500 text-[11px]">—</span>
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-[140px] [color-scheme:dark]"
+            />
+          </div>
+
+          {/* Cashier filter */}
+          {isPro && cashiers.length > 0 && (
+            <Select value={cashierId || '__all__'} onValueChange={(v) => setCashierId(v === '__all__' ? '' : v)}>
+              <SelectTrigger className="w-[140px] h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+                <Filter className="mr-1.5 h-3 w-3 text-zinc-500" />
+                <SelectValue placeholder="Kasir" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-800 border-zinc-700">
+                <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Kasir</SelectItem>
+                {cashiers.filter((c) => c.id).map((c) => (
+                  <SelectItem key={c.id} value={c.id} className="text-zinc-200 focus:bg-zinc-700 text-xs">
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Payment method filter */}
+          {isPro && (
+            <Select value={paymentMethod || '__all__'} onValueChange={(v) => setPaymentMethod(v === '__all__' ? '' : v)}>
+              <SelectTrigger className="w-[140px] h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+                <Filter className="mr-1.5 h-3 w-3 text-zinc-500" />
+                <SelectValue placeholder="Pembayaran" />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-800 border-zinc-700">
+                <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Metode</SelectItem>
+                <SelectItem value="CASH" className="text-zinc-200 focus:bg-zinc-700 text-xs">CASH</SelectItem>
+                <SelectItem value="QRIS" className="text-zinc-200 focus:bg-zinc-700 text-xs">QRIS</SelectItem>
+                <SelectItem value="DEBIT" className="text-zinc-200 focus:bg-zinc-700 text-xs">DEBIT</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Void status filter */}
+          <Select value={voidFilter || '__all__'} onValueChange={(v) => setVoidFilter(v === '__all__' ? '' : v)}>
+            <SelectTrigger className="w-[120px] h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent className="bg-zinc-800 border-zinc-700">
+              <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua</SelectItem>
+              <SelectItem value="active" className="text-zinc-200 focus:bg-zinc-700 text-xs">Aktif</SelectItem>
+              <SelectItem value="void" className="text-zinc-200 focus:bg-zinc-700 text-xs">Void</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Quick actions */}
+          <div className="flex gap-0.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSetToday}
+              className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 text-[11px] h-8 px-2"
+            >
+              Hari Ini
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+              onClick={handleClearAllFilters}
+              title="Reset all filters"
+            >
+              <RotateCcw className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Export */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={!isPro}
+          className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs"
+        >
+          {isPro ? (
+            <>
+              <Download className="mr-1.5 h-3 w-3" />
+              Export
+            </>
+          ) : (
+            <>
+              <Lock className="mr-1.5 h-3 w-3" />
+              Export
+              <Badge className="ml-1.5 bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px] px-1 py-0">
+                PRO
+              </Badge>
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* Active filter badges */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap gap-1.5">
+          {search && (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setSearch('')}>
+              Search: {search} <span className="ml-1 text-zinc-500">×</span>
+            </Badge>
+          )}
+          {dateFrom && (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setDateFrom('')}>
+              Dari: {dateFrom} <span className="ml-1 text-zinc-500">×</span>
+            </Badge>
+          )}
+          {dateTo && (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setDateTo('')}>
+              Sampai: {dateTo} <span className="ml-1 text-zinc-500">×</span>
+            </Badge>
+          )}
+          {cashierId && (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setCashierId('')}>
+              Kasir: {cashiers.find(c => c.id === cashierId)?.name || cashierId} <span className="ml-1 text-zinc-500">×</span>
+            </Badge>
+          )}
+          {paymentMethod && (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setPaymentMethod('')}>
+              Pembayaran: {paymentMethod} <span className="ml-1 text-zinc-500">×</span>
+            </Badge>
+          )}
+          {voidFilter && (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setVoidFilter('')}>
+              Status: {voidFilter === 'active' ? 'Aktif' : 'Void'} <span className="ml-1 text-zinc-500">×</span>
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Content */}
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-10 bg-zinc-900 rounded" />
+          ))}
+        </div>
+      ) : transactions.length === 0 ? (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6 text-center">
+          <p className="text-xs text-zinc-500">No transactions found</p>
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClearAllFilters}
+              className="mt-2 text-zinc-500 hover:text-zinc-300 text-xs h-7"
+            >
+              Clear all filters
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-zinc-800 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableHead className="text-zinc-500 text-[11px] font-medium w-10"></TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium">Invoice #</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium">Date</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium">Customer</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Payment</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Items</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium text-center w-10">Sync</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-10">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {transactions.map((txn) => {
+                const isVoid = txn.voidStatus === 'void'
+                let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
+                if (isVoid) {
+                  rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
+                }
+
+                return (
+                  <TableRow key={txn.id} className={rowClass}>
+                    {/* Void badge */}
+                    <TableCell className="py-2.5 px-3">
+                      {isVoid && (
+                        <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                          <Ban className="mr-0.5 h-2.5 w-2.5" />
+                          VOID
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-emerald-400 font-mono font-medium py-2.5 px-3">
+                      {txn.invoiceNumber}
+                    </TableCell>
+                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{formatDate(txn.createdAt)}</TableCell>
+                    <TableCell className="text-xs text-zinc-300 py-2.5 px-3">{txn.customerName || 'Walk-in'}</TableCell>
+                    <TableCell className="text-center py-2.5 px-3">
+                      {getPaymentBadge(txn.paymentMethod)}
+                    </TableCell>
+                    <TableCell className={`text-xs font-semibold text-right py-2.5 px-3 ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                      {formatCurrency(txn.total)}
+                    </TableCell>
+                    <TableCell className="text-xs text-zinc-400 text-center py-2.5 px-3">
+                      {txn._count?.items || 0}
+                    </TableCell>
+                    <TableCell className="text-center py-2.5 px-3">
+                      {txn.syncStatus === 'synced' ? (
+                        <span className="inline-flex items-center justify-center text-emerald-400">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center justify-center text-amber-400">
+                          <Clock className="h-3.5 w-3.5" />
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right py-2.5 px-3">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                        onClick={() => handleViewDetail(txn)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+
+      {/* Detail Dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-2xl max-h-[90vh] overflow-y-auto p-4">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-zinc-100 text-sm font-semibold">
+                Transaction Detail
+              </DialogTitle>
+              {detailTransaction?.voidStatus === 'void' && (
+                <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">
+                  <Ban className="mr-0.5 h-2.5 w-2.5" />
+                  VOID
+                </Badge>
+              )}
+            </div>
+          </DialogHeader>
+
+          {detailTransaction && (
+            <div className="space-y-3 py-1">
+              {/* Receipt Preview */}
+              <div className="rounded-lg border border-zinc-700 p-1">
+                <div
+                  ref={receiptRef}
+                  className="bg-white rounded-md p-4 font-mono text-xs text-zinc-800 max-w-[300px] mx-auto"
+                >
+                  {/* Header */}
+                  <div className="text-center mb-3">
+                    <p className="font-bold text-sm text-zinc-900">{detailOutlet?.name || 'Aether POS'}</p>
+                    {detailOutlet?.address && (
+                      <p className="text-zinc-500 text-[10px]">{detailOutlet.address}</p>
+                    )}
+                    {detailOutlet?.phone && (
+                      <p className="text-zinc-500 text-[10px]">{detailOutlet.phone}</p>
+                    )}
+                  </div>
+
+                  <div className="border-t border-dashed border-zinc-300 my-2" />
+
+                  {/* Meta */}
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>No</span>
+                      <span className="font-semibold">{detailTransaction.invoiceNumber}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tanggal</span>
+                      <span>{formatDate(detailTransaction.createdAt)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Kasir</span>
+                      <span>{detailCashierName || '-'}</span>
+                    </div>
+                    {detailTransaction.customerName && detailTransaction.customerName !== 'Walk-in' && (
+                      <div className="flex justify-between">
+                        <span>Customer</span>
+                        <span>{detailTransaction.customerName}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Pembayaran</span>
+                      <span>{detailTransaction.paymentMethod}</span>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-dashed border-zinc-300 my-2" />
+
+                  {/* Items */}
+                  {detailLoading ? (
+                    <div className="space-y-2 py-2">
+                      <Skeleton className="h-4 bg-zinc-200 rounded" />
+                      <Skeleton className="h-4 bg-zinc-200 rounded" />
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <tbody>
+                        {detailItems.map((item) => (
+                          <tr key={item.id}>
+                            <td className="py-0.5 text-left">{item.productName}</td>
+                            <td className="py-0.5 text-right text-zinc-500">{item.qty}</td>
+                            <td className="py-0.5 text-right">{formatCurrency(item.subtotal)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+
+                  <div className="border-t border-dashed border-zinc-300 my-2" />
+
+                  {/* Totals */}
+                  <div className="space-y-0.5">
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(detailTransaction.subtotal)}</span>
+                    </div>
+                    {detailTransaction.discount > 0 && (
+                      <div className="flex justify-between text-zinc-500">
+                        <span>Diskon</span>
+                        <span>-{formatCurrency(detailTransaction.discount)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-sm border-t border-dashed border-zinc-300 pt-1">
+                      <span>TOTAL</span>
+                      <span>{formatCurrency(detailTransaction.total)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Dibayar</span>
+                      <span>{formatCurrency(detailTransaction.paidAmount)}</span>
+                    </div>
+                    {detailTransaction.change > 0 && (
+                      <div className="flex justify-between">
+                        <span>Kembalian</span>
+                        <span>{formatCurrency(detailTransaction.change)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-dashed border-zinc-300 my-2" />
+
+                  {/* Footer */}
+                  <div className="text-center text-zinc-400 text-[10px]">
+                    <p>Terima kasih atas kunjungan Anda!</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Print button */}
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrint}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs"
+                >
+                  <Printer className="mr-1.5 h-3 w-3" />
+                  Print Receipt
+                </Button>
+              </div>
+
+              {/* Void info */}
+              {detailVoidInfo && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
+                    <Ban className="h-3.5 w-3.5" />
+                    Transaksi di-void
+                  </p>
+                  <p className="text-[11px] text-red-300/70">
+                    Alasan: {detailVoidInfo.reason}
+                  </p>
+                  {detailVoidInfo.voidedBy && (
+                    <p className="text-[11px] text-red-300/70">
+                      Oleh: {detailVoidInfo.voidedBy}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Void button (OWNER only, only for active transactions) */}
+              {isOwner && detailTransaction.voidStatus !== 'void' && (
+                <div className="pt-2 border-t border-zinc-800">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVoidOpen(true)}
+                    className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 w-full h-8 text-xs"
+                  >
+                    <Ban className="mr-1.5 h-3.5 w-3.5" />
+                    Void Transaksi
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Void Confirmation Dialog */}
+      <Dialog open={voidOpen} onOpenChange={setVoidOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm p-4">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100 text-sm font-semibold">Void Transaksi</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              Transaksi <span className="text-emerald-400 font-mono">{detailTransaction?.invoiceNumber}</span> akan ditandai sebagai void. Data tetap tersimpan untuk audit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label className="text-zinc-300 text-xs">Alasan void <span className="text-red-400">*</span></Label>
+              <Textarea
+                placeholder="Masukkan alasan void..."
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                rows={3}
+                className="text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setVoidOpen(false)}
+              disabled={voidSubmitting}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleVoid}
+              disabled={voidSubmitting || !voidReason.trim()}
+              className="bg-red-500 hover:bg-red-600 text-white h-8 text-xs"
+            >
+              {voidSubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+              Void
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
