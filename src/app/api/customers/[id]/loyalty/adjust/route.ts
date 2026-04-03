@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function POST(
   request: NextRequest,
@@ -12,10 +13,7 @@ export async function POST(
       return unauthorized()
     }
     if (user.role !== 'OWNER') {
-      return NextResponse.json(
-        { error: 'Only OWNER can adjust loyalty points' },
-        { status: 403 }
-      )
+      return safeJsonError('Only OWNER can adjust loyalty points', 403)
     }
 
     const outletId = user.outletId
@@ -25,39 +23,27 @@ export async function POST(
       where: { id, outletId },
     })
     if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return safeJsonError('Customer not found', 404)
     }
 
     const body = await request.json()
     const { type, points, reason } = body
 
     if (!type || !['ADD', 'DEDUCT'].includes(type)) {
-      return NextResponse.json(
-        { error: 'Type must be ADD or DEDUCT' },
-        { status: 400 }
-      )
+      return safeJsonError('Type must be ADD or DEDUCT', 400)
     }
 
     if (!points || typeof points !== 'number' || points <= 0) {
-      return NextResponse.json(
-        { error: 'Points must be a positive number' },
-        { status: 400 }
-      )
+      return safeJsonError('Points must be a positive number', 400)
     }
 
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Reason is required' },
-        { status: 400 }
-      )
+      return safeJsonError('Reason is required', 400)
     }
 
     // If deducting, check customer has enough points
     if (type === 'DEDUCT' && customer.points < points) {
-      return NextResponse.json(
-        { error: `Customer only has ${customer.points} points` },
-        { status: 400 }
-      )
+      return safeJsonError(`Customer only has ${customer.points} points`, 400)
     }
 
     const pointsChange = type === 'ADD' ? points : -points
@@ -83,12 +69,9 @@ export async function POST(
       where: { id },
     })
 
-    return NextResponse.json(updated)
+    return safeJson(updated)
   } catch (error) {
     console.error('Loyalty adjust POST error:', error)
-    return NextResponse.json(
-      { error: 'Failed to adjust loyalty points' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to adjust loyalty points', 500)
   }
 }

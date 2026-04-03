@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(
   request: NextRequest,
@@ -20,7 +21,7 @@ export async function GET(
       where: { id, outletId },
     })
     if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return safeJsonError('Customer not found', 404)
     }
 
     const transactions = await db.transaction.findMany({
@@ -54,12 +55,9 @@ export async function GET(
       })),
     }))
 
-    return NextResponse.json({ purchases: mapped })
+    return safeJson({ purchases: mapped })
   } catch (error) {
     console.error('Customer purchases GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load purchase history' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load purchase history', 500)
   }
 }

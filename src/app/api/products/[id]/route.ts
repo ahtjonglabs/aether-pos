@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeAuditLog } from '@/lib/safe-audit'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function PUT(
   request: NextRequest,
@@ -19,7 +21,7 @@ export async function PUT(
       where: { id, outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return safeJsonError('Product not found', 404)
     }
 
     const body = await request.json()
@@ -31,10 +33,7 @@ export async function PUT(
         where: { name, outletId },
       })
       if (nameExists) {
-        return NextResponse.json(
-          { error: 'Product name already exists in this outlet' },
-          { status: 400 }
-        )
+        return safeJsonError('Product name already exists in this outlet', 400)
       }
     }
 
@@ -84,13 +83,10 @@ export async function PUT(
       return updated
     })
 
-    return NextResponse.json(product)
+    return safeJson(product)
   } catch (error) {
     console.error('Product PUT error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update product' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to update product')
   }
 }
 
@@ -112,36 +108,31 @@ export async function DELETE(
       where: { id, outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return safeJsonError('Product not found', 404)
     }
 
-    // Create audit log before deleting
-    await db.auditLog.create({
-      data: {
-        action: 'DELETE',
-        entityType: 'PRODUCT',
-        entityId: id,
-        details: JSON.stringify({
-          productName: existing.name,
-          price: existing.price,
-          stock: existing.stock,
-          sku: existing.sku,
-        }),
-        outletId,
-        userId,
-      },
+    // Create audit log before deleting (non-blocking)
+    await safeAuditLog({
+      action: 'DELETE',
+      entityType: 'PRODUCT',
+      entityId: id,
+      details: JSON.stringify({
+        productName: existing.name,
+        price: existing.price,
+        stock: existing.stock,
+        sku: existing.sku,
+      }),
+      outletId,
+      userId,
     })
 
     await db.product.delete({
       where: { id },
     })
 
-    return NextResponse.json({ success: true })
+    return safeJson({ success: true })
   } catch (error) {
     console.error('Product DELETE error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete product' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to delete product')
   }
 }

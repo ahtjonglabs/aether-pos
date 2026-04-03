@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 // PUT /api/categories/[id] — update a category
 export async function PUT(
@@ -20,7 +21,7 @@ export async function PUT(
       where: { id, outletId: user.outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+      return safeJsonError('Category not found', 404)
     }
 
     // Check unique name if changing
@@ -29,7 +30,7 @@ export async function PUT(
         where: { name: name.trim(), outletId: user.outletId },
       })
       if (duplicate) {
-        return NextResponse.json({ error: 'Category name already exists' }, { status: 400 })
+        return safeJsonError('Category name already exists', 400)
       }
     }
 
@@ -41,10 +42,10 @@ export async function PUT(
       },
     })
 
-    return NextResponse.json(updated)
+    return safeJson(updated)
   } catch (error) {
     console.error('Categories PUT error:', error)
-    return NextResponse.json({ error: 'Failed to update category' }, { status: 500 })
+    return safeJsonError('Failed to update category', 500)
   }
 }
 
@@ -63,20 +64,21 @@ export async function DELETE(
       where: { id, outletId: user.outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+      return safeJsonError('Category not found', 404)
     }
 
-    // Set products in this category to uncategorized (null categoryId)
-    await db.product.updateMany({
-      where: { categoryId: id },
-      data: { categoryId: null },
-    })
+    // Set products in this category to uncategorized (null categoryId) — atomic with delete
+    await db.$transaction([
+      db.product.updateMany({
+        where: { categoryId: id },
+        data: { categoryId: null },
+      }),
+      db.category.delete({ where: { id } }),
+    ])
 
-    await db.category.delete({ where: { id } })
-
-    return NextResponse.json({ success: true })
+    return safeJson({ success: true })
   } catch (error) {
     console.error('Categories DELETE error:', error)
-    return NextResponse.json({ error: 'Failed to delete category' }, { status: 500 })
+    return safeJsonError('Failed to delete category', 500)
   }
 }

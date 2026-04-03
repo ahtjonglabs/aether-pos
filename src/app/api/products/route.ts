@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
+import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 const PAGE_SIZE = 20
 
@@ -92,16 +93,13 @@ export async function GET(request: NextRequest) {
       total = count
     }
 
-    return NextResponse.json({
+    return safeJson({
       products,
       totalPages: Math.ceil(total / limit),
     })
   } catch (error) {
     console.error('Products GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load products' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load products')
   }
 }
 
@@ -118,10 +116,7 @@ export async function POST(request: NextRequest) {
     const { name, sku, hpp, price, bruto, netto, stock, lowStockAlert, image, categoryId, unit } = body
 
     if (!name || price === undefined || price === null) {
-      return NextResponse.json(
-        { error: 'Product name and price are required' },
-        { status: 400 }
-      )
+      return safeJsonError('Product name and price are required', 400)
     }
 
     // K3: Dynamic product limit based on plan
@@ -137,10 +132,7 @@ export async function POST(request: NextRequest) {
     if (!isUnlimited(features.maxProducts)) {
       const count = await db.product.count({ where: { outletId } })
       if (count >= features.maxProducts) {
-        return NextResponse.json(
-          { error: `Batas produk untuk paket ${accountType} sudah tercapai (${features.maxProducts}). Upgrade ke Pro untuk produk unlimited!` },
-          { status: 400 }
-        )
+        return safeJsonError(`Batas produk untuk paket ${accountType} sudah tercapai (${features.maxProducts}). Upgrade ke Pro untuk produk unlimited!`, 400)
       }
     }
 
@@ -149,10 +141,7 @@ export async function POST(request: NextRequest) {
       where: { name, outletId },
     })
     if (existing) {
-      return NextResponse.json(
-        { error: 'Product name already exists in this outlet' },
-        { status: 400 }
-      )
+      return safeJsonError('Product name already exists in this outlet', 400)
     }
 
     // Validate categoryId if provided
@@ -161,7 +150,7 @@ export async function POST(request: NextRequest) {
         where: { id: categoryId, outletId },
       })
       if (!category) {
-        return NextResponse.json({ error: 'Category not found' }, { status: 400 })
+        return safeJsonError('Category not found', 400)
       }
     }
 
@@ -201,12 +190,9 @@ export async function POST(request: NextRequest) {
       return newProduct
     })
 
-    return NextResponse.json(product, { status: 201 })
+    return safeJsonCreated(product)
   } catch (error) {
     console.error('Products POST error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create product' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to create product')
   }
 }

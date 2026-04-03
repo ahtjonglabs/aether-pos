@@ -151,6 +151,13 @@ export default function PosPage() {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const syncingRef = useRef(false)
   const receiptContentRef = useRef<HTMLDivElement>(null)
+  const initialSyncDone = useRef(false)
+
+  // Offline / Online state (MUST be declared before useEffects that depend on it)
+  const [isOnline, setIsOnline] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [dataSyncing, setDataSyncing] = useState(false)
+  const [lastSyncTimes, setLastSyncTimes] = useState<{ products: number | null; categories: number | null; customers: number | null; promos: number | null }>({ products: null, categories: null, customers: null, promos: null })
 
   // Products & Categories
   const [products, setProducts] = useState<Product[]>([])
@@ -305,13 +312,6 @@ export default function PosPage() {
   const [checkingOut, setCheckingOut] = useState(false)
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
-
-  // Offline / Online state
-  const [isOnline, setIsOnline] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [dataSyncing, setDataSyncing] = useState(false)
-  const [lastSyncTimes, setLastSyncTimes] = useState<{ products: number | null; categories: number | null; customers: number | null; promos: number | null }>({ products: null, categories: null, customers: null, promos: null })
-  const initialSyncDone = useRef(false)
 
   // Online/offline detection
   useEffect(() => {

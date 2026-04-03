@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import * as XLSX from 'xlsx'
+import { safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,9 +49,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Template download error:', error)
-    return NextResponse.json(
-      { error: 'Gagal mengunduh template' },
-      { status: 500 }
-    )
+    return safeJsonError('Gagal mengunduh template')
   }
 }

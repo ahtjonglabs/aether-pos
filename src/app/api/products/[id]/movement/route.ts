@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(
   request: NextRequest,
@@ -20,7 +21,7 @@ export async function GET(
       where: { id, outletId },
     })
     if (!product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return safeJsonError('Product not found', 404)
     }
 
     const { searchParams } = request.nextUrl
@@ -124,7 +125,7 @@ export async function GET(
       }
     })
 
-    return NextResponse.json({
+    return safeJson({
       product: {
         id: product.id,
         name: product.name,
@@ -150,9 +151,6 @@ export async function GET(
     })
   } catch (error) {
     console.error('Product movement GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load product movement' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load product movement')
   }
 }

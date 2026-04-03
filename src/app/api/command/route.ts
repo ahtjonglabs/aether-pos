@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { VALID_ACCOUNT_TYPES } from '@/lib/plan-config'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 /**
  * POST /api/command
@@ -40,36 +41,22 @@ export async function POST(request: NextRequest) {
     const secret = process.env.COMMAND_SECRET
 
     if (!secret) {
-      return NextResponse.json(
-        { error: 'COMMAND_SECRET not configured on server' },
-        { status: 500 }
-      )
+      return safeJsonError('COMMAND_SECRET not configured on server', 500)
     }
 
     if (!authHeader || authHeader !== `Bearer ${secret}`) {
-      return NextResponse.json(
-        { error: 'Unauthorized — invalid or missing command token' },
-        { status: 401 }
-      )
+      return safeJsonError('Unauthorized — invalid or missing command token', 401)
     }
 
     // ---- 2. Parse & Validate ----
     const body = (await request.json()) as CommandPayload
 
     if (!body.command || !body.outletId || !body.data) {
-      return NextResponse.json(
-        { error: 'Missing required fields: command, outletId, data' },
-        { status: 400 }
-      )
+      return safeJsonError('Missing required fields: command, outletId, data', 400)
     }
 
     if (!VALID_COMMANDS.includes(body.command)) {
-      return NextResponse.json(
-        {
-          error: `Invalid command. Valid: ${VALID_COMMANDS.join(', ')}`,
-        },
-        { status: 400 }
-      )
+      return safeJsonError(`Invalid command. Valid: ${VALID_COMMANDS.join(', ')}`, 400)
     }
 
     // ---- 3. Verify outlet exists ----
@@ -77,16 +64,13 @@ export async function POST(request: NextRequest) {
       where: { id: body.outletId },
     })
     if (!outlet) {
-      return NextResponse.json(
-        { error: `Outlet "${body.outletId}" not found` },
-        { status: 404 }
-      )
+      return safeJsonError(`Outlet "${body.outletId}" not found`, 404)
     }
 
     // ---- 4. Execute Command ----
     const result = await executeCommand(body, outlet.id)
 
-    return NextResponse.json({
+    return safeJson({
       success: true,
       command: body.command,
       outletId: body.outletId,
@@ -95,10 +79,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[/api/command] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return safeJsonError('Internal server error')
   }
 }
 
@@ -313,7 +294,7 @@ function handleBroadcast(data: Record<string, unknown>) {
 
 export async function GET() {
   // K6: Health check — minimal info, no command details exposed
-  return NextResponse.json({
+  return safeJson({
     status: 'ok',
     timestamp: new Date().toISOString(),
   })

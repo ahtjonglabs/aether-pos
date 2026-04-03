@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 /**
  * GET /api/settings/permissions/my
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
   try {
     // OWNER always has access to everything
     if (user.role === 'OWNER') {
-      return NextResponse.json({
+      return safeJson({
         role: 'OWNER',
         pages: 'dashboard,products,customers,pos,transactions,audit-log,crew,settings',
       })
@@ -27,12 +28,12 @@ export async function GET(request: NextRequest) {
       where: { userId: user.id },
     })
 
-    return NextResponse.json({
+    return safeJson({
       role: 'CREW',
       pages: crewPerm?.pages || 'pos',
     })
   } catch (error) {
     console.error('GET /api/settings/permissions/my error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error')
   }
 }

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { notifyNewCustomer } from '@/lib/notify'
+import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 const PAGE_SIZE = 20
 
@@ -38,16 +39,13 @@ export async function GET(request: NextRequest) {
       db.customer.count({ where }),
     ])
 
-    return NextResponse.json({
+    return safeJson({
       customers,
       totalPages: Math.ceil(total / limit),
     })
   } catch (error) {
     console.error('Customers GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load customers' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load customers', 500)
   }
 }
 
@@ -63,21 +61,15 @@ export async function POST(request: NextRequest) {
     const { name, whatsapp } = body
 
     if (!name || !whatsapp) {
-      return NextResponse.json(
-        { error: 'Name and WhatsApp number are required' },
-        { status: 400 }
-      )
+      return safeJsonError('Name and WhatsApp number are required', 400)
     }
 
-    // Check unique whatsapp
-    const existing = await db.customer.findUnique({
-      where: { whatsapp },
+    // Check unique whatsapp per outlet
+    const existing = await db.customer.findFirst({
+      where: { whatsapp, outletId },
     })
     if (existing) {
-      return NextResponse.json(
-        { error: 'WhatsApp number already registered' },
-        { status: 400 }
-      )
+      return safeJsonError('WhatsApp number already registered in this outlet', 400)
     }
 
     const customer = await db.$transaction(async (tx) => {
@@ -107,15 +99,15 @@ export async function POST(request: NextRequest) {
       return newCustomer
     })
 
+    // Prepare response first
+    const response = safeJsonCreated(customer)
+
     // Fire-and-forget: Send Telegram notification
     notifyNewCustomer(outletId, { name, whatsapp })
 
-    return NextResponse.json(customer, { status: 201 })
+    return response
   } catch (error) {
     console.error('Customers POST error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create customer' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to create customer', 500)
   }
 }

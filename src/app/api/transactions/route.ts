@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 const PAGE_SIZE = 20
 
@@ -166,15 +167,12 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({
+    return safeJson({
       transactions: mappedTransactions,
       totalPages: Math.ceil(total / limit),
     })
   } catch (error) {
     console.error('Transactions GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load transactions' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load transactions')
   }
 }

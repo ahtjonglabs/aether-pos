@@ -21,8 +21,6 @@ interface Product {
   sku: string | null
   hpp: number
   price: number
-  bruto: number
-  netto: number
   stock: number
   lowStockAlert: number
   image: string | null
@@ -58,8 +56,6 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
     sku: '',
     hpp: '',
     price: '',
-    bruto: '',
-    netto: '',
     stock: '',
     lowStockAlert: '10',
     image: '',
@@ -84,8 +80,6 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         sku: product.sku || '',
         hpp: String(product.hpp),
         price: String(product.price),
-        bruto: String(product.bruto),
-        netto: String(product.netto),
         stock: String(product.stock),
         lowStockAlert: String(product.lowStockAlert),
         image: product.image || '',
@@ -98,8 +92,6 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         sku: '',
         hpp: '',
         price: '',
-        bruto: '',
-        netto: '',
         stock: '',
         lowStockAlert: '10',
         image: '',
@@ -123,8 +115,6 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         sku: form.sku || null,
         hpp: isOwner ? Number(form.hpp) || 0 : 0,
         price: Number(form.price),
-        bruto: Number(form.bruto) || 0,
-        netto: Number(form.netto) || 0,
         stock: Number(form.stock) || 0,
         lowStockAlert: Number(form.lowStockAlert) || 10,
         image: form.image || null,
@@ -247,33 +237,6 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
                 </option>
               ))}
             </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-300">Bruto</Label>
-              <Input
-                type="number"
-                min="0"
-                step="any"
-                value={form.bruto}
-                onChange={(e) => updateField('bruto', e.target.value)}
-                placeholder="0"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-300">Netto</Label>
-              <Input
-                type="number"
-                min="0"
-                step="any"
-                value={form.netto}
-                onChange={(e) => updateField('netto', e.target.value)}
-                placeholder="0"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-              />
-            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

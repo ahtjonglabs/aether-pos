@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 import {
   notifyDailyReport,
   notifyWeeklyReport,
@@ -28,10 +29,7 @@ export async function POST(request: NextRequest) {
     const { type, outletId: bodyOutletId } = body as { type?: string; outletId?: string }
 
     if (!type || !['daily', 'weekly', 'monthly', 'summary'].includes(type)) {
-      return NextResponse.json(
-        { error: 'type harus salah satu: daily, weekly, monthly, summary' },
-        { status: 400 }
-      )
+      return safeJsonError('type harus salah satu: daily, weekly, monthly, summary', 400)
     }
 
     // Auth: check if it's an authenticated OWNER or a cron job with COMMAND_SECRET
@@ -48,19 +46,13 @@ export async function POST(request: NextRequest) {
       const user = await getAuthUser(request)
       if (!user) return unauthorized()
       if (user.role !== 'OWNER') {
-        return NextResponse.json(
-          { error: 'Hanya pemilik yang dapat mengirim laporan' },
-          { status: 403 }
-        )
+        return safeJsonError('Hanya pemilik yang dapat mengirim laporan', 403)
       }
       outletId = user.outletId
     }
 
     if (!outletId) {
-      return NextResponse.json(
-        { error: 'outletId diperlukan' },
-        { status: 400 }
-      )
+      return safeJsonError('outletId diperlukan', 400)
     }
 
     let result: { sent: boolean; error?: string }
@@ -79,10 +71,10 @@ export async function POST(request: NextRequest) {
         result = await notifyDailySummary(outletId)
         break
       default:
-        return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
+        return safeJsonError('Invalid type', 400)
     }
 
-    return NextResponse.json({
+    return safeJson({
       success: result.sent,
       type,
       outletId,
@@ -90,10 +82,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[/api/reports/send] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return safeJsonError('Internal server error')
   }
 }
 
@@ -111,10 +100,7 @@ export async function GET(request: NextRequest) {
     const commandSecret = process.env.COMMAND_SECRET
 
     if (!authHeader || !commandSecret || authHeader !== `Bearer ${commandSecret}`) {
-      return NextResponse.json(
-        { error: 'Unauthorized — COMMAND_SECRET required' },
-        { status: 401 }
-      )
+      return safeJsonError('Unauthorized — COMMAND_SECRET required', 401)
     }
 
     const { searchParams } = request.nextUrl
@@ -122,10 +108,7 @@ export async function GET(request: NextRequest) {
     const targetOutletId = searchParams.get('outletId')
 
     if (!['daily', 'weekly', 'monthly', 'summary'].includes(type)) {
-      return NextResponse.json(
-        { error: 'type harus salah satu: daily, weekly, monthly, summary' },
-        { status: 400 }
-      )
+      return safeJsonError('type harus salah satu: daily, weekly, monthly, summary', 400)
     }
 
     // Get outlets to send to
@@ -163,7 +146,7 @@ export async function GET(request: NextRequest) {
       results.push({ outletId: oid, ...result })
     }
 
-    return NextResponse.json({
+    return safeJson({
       success: true,
       type,
       mode: targetOutletId ? 'single' : 'broadcast',
@@ -174,9 +157,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[/api/reports/send GET] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return safeJsonError('Internal server error')
   }
 }

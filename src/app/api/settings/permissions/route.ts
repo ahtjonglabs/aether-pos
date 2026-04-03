@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 // GET /api/settings/permissions — list crew permissions
 export async function GET(request: NextRequest) {
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   // Only OWNER can manage permissions
   if (user.role !== 'OWNER') {
-    return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+    return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
   }
 
   try {
@@ -32,9 +33,9 @@ export async function GET(request: NextRequest) {
       pages: crew.crewPermission?.pages || 'pos',
     }))
 
-    return NextResponse.json({ permissions })
+    return safeJson({ permissions })
   } catch (error) {
     console.error('GET /api/settings/permissions error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }

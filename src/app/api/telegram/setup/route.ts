@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { sendTelegramMessage } from '@/lib/telegram'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 const TELEGRAM_API = 'https://api.telegram.org'
 
@@ -18,10 +19,7 @@ export async function POST(request: NextRequest) {
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json(
-        { error: 'Hanya pemilik yang dapat mengatur notifikasi' },
-        { status: 403 }
-      )
+      return safeJsonError('Hanya pemilik yang dapat mengatur notifikasi', 403)
     }
 
     const body = await request.json()
@@ -31,10 +29,7 @@ export async function POST(request: NextRequest) {
       const { botToken, chatId } = body as { botToken?: string; chatId?: string }
 
       if (!botToken || typeof botToken !== 'string') {
-        return NextResponse.json(
-          { error: 'Bot Token wajib diisi' },
-          { status: 400 }
-        )
+        return safeJsonError('Bot Token wajib diisi', 400)
       }
 
       // Step 1: Validate bot token by calling getMe
@@ -44,17 +39,11 @@ export async function POST(request: NextRequest) {
         const meData = await meRes.json() as { ok: boolean; result?: { id: number; first_name: string; username?: string }; description?: string }
 
         if (!meData.ok || !meData.result) {
-          return NextResponse.json(
-            { error: `Bot Token tidak valid: ${meData.description || 'Unknown error'}` },
-            { status: 400 }
-          )
+          return safeJsonError(`Bot Token tidak valid: ${meData.description || 'Unknown error'}`, 400)
         }
         botInfo = meData.result
       } catch (err) {
-        return NextResponse.json(
-          { error: `Gagal terhubung ke Telegram API: ${err instanceof Error ? err.message : 'Unknown error'}` },
-          { status: 400 }
-        )
+        return safeJsonError(`Gagal terhubung ke Telegram API: ${err instanceof Error ? err.message : 'Unknown error'}`, 400)
       }
 
       // Step 2: If chatId provided, send test message
@@ -75,20 +64,14 @@ export async function POST(request: NextRequest) {
           const sendData = await sendRes.json() as { ok: boolean; description?: string }
 
           if (!sendData.ok) {
-            return NextResponse.json(
-              { error: `Bot valid tapi gagal mengirim pesan ke Chat ID ${chatId}: ${sendData.description || 'Pastikan Chat ID benar dan bot telah di-start'}` },
-              { status: 400 }
-            )
+            return safeJsonError(`Bot valid tapi gagal mengirim pesan ke Chat ID ${chatId}: ${sendData.description || 'Pastikan Chat ID benar dan bot telah di-start'}`, 400)
           }
         } catch (err) {
-          return NextResponse.json(
-            { error: `Bot valid tapi gagal mengirim pesan: ${err instanceof Error ? err.message : 'Unknown error'}` },
-            { status: 400 }
-          )
+          return safeJsonError(`Bot valid tapi gagal mengirim pesan: ${err instanceof Error ? err.message : 'Unknown error'}`, 400)
         }
       }
 
-      return NextResponse.json({
+      return safeJson({
         success: true,
         message: chatId ? 'Koneksi berhasil! Pesan tes terkirim.' : 'Bot Token valid!',
         botInfo: {
@@ -103,10 +86,7 @@ export async function POST(request: NextRequest) {
     const { chatId } = body as { chatId?: string }
 
     if (!chatId || typeof chatId !== 'string') {
-      return NextResponse.json(
-        { error: 'chatId wajib diisi (string)' },
-        { status: 400 }
-      )
+      return safeJsonError('chatId wajib diisi (string)', 400)
     }
 
     // Validate by sending a test message
@@ -116,10 +96,7 @@ export async function POST(request: NextRequest) {
     )
 
     if (!testResult.ok) {
-      return NextResponse.json(
-        { error: `Gagal mengirim test message: ${testResult.error}` },
-        { status: 400 }
-      )
+      return safeJsonError(`Gagal mengirim test message: ${testResult.error}`, 400)
     }
 
     // Save chatId to outlet settings
@@ -129,7 +106,7 @@ export async function POST(request: NextRequest) {
       update: { telegramChatId: chatId },
     })
 
-    return NextResponse.json({
+    return safeJson({
       success: true,
       message: 'Telegram berhasil terhubung',
       chatId,
@@ -137,10 +114,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[/api/telegram/setup] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return safeJsonError('Internal server error')
   }
 }
 
@@ -155,10 +129,7 @@ export async function DELETE(request: NextRequest) {
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json(
-        { error: 'Hanya pemilik yang dapat mengatur notifikasi' },
-        { status: 403 }
-      )
+      return safeJsonError('Hanya pemilik yang dapat mengatur notifikasi', 403)
     }
 
     await db.outletSetting.update({
@@ -166,15 +137,12 @@ export async function DELETE(request: NextRequest) {
       data: { telegramChatId: null, telegramBotToken: null },
     })
 
-    return NextResponse.json({
+    return safeJson({
       success: true,
       message: 'Telegram notifikasi terputus',
     })
   } catch (error) {
     console.error('[/api/telegram/setup] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return safeJsonError('Internal server error')
   }
 }

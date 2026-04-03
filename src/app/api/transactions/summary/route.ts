@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getOutletPlan } from '@/lib/plan-config'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,10 +14,7 @@ export async function GET(request: NextRequest) {
     // Check plan feature gate
     const planData = await getOutletPlan(outletId, db)
     if (!planData || !planData.features.transactionSummary) {
-      return NextResponse.json(
-        { error: 'Fitur ringkasan transaksi hanya tersedia untuk akun Pro' },
-        { status: 403 }
-      )
+      return safeJsonError('Fitur ringkasan transaksi hanya tersedia untuk akun Pro', 403)
     }
 
     const { searchParams } = request.nextUrl
@@ -123,7 +121,7 @@ export async function GET(request: NextRequest) {
         revenue: p.revenue,
       }))
 
-    return NextResponse.json({
+    return safeJson({
       totalRevenue,
       totalTransactions,
       avgTransaction,
@@ -132,9 +130,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Transaction summary GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load transaction summary' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load transaction summary', 500)
   }
 }

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function POST(
   request: NextRequest,
@@ -19,17 +20,14 @@ export async function POST(
     const { quantity } = body
 
     if (!quantity || quantity <= 0) {
-      return NextResponse.json(
-        { error: 'Quantity must be greater than 0' },
-        { status: 400 }
-      )
+      return safeJsonError('Quantity must be greater than 0', 400)
     }
 
     const existing = await db.product.findFirst({
       where: { id, outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
+      return safeJsonError('Product not found', 404)
     }
 
     const product = await db.$transaction(async (tx) => {
@@ -57,12 +55,9 @@ export async function POST(
       return updated
     })
 
-    return NextResponse.json(product)
+    return safeJson(product)
   } catch (error) {
     console.error('Restock POST error:', error)
-    return NextResponse.json(
-      { error: 'Failed to restock product' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to restock product')
   }
 }

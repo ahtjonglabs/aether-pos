@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getPlanFeatures } from '@/lib/plan-config'
 import * as XLSX from 'xlsx'
+import { safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,10 +23,7 @@ export async function GET(request: NextRequest) {
       : (outlet?.accountType || 'free')
     const features = getPlanFeatures(accountType)
     if (!features.exportExcel) {
-      return NextResponse.json(
-        { error: 'Fitur export Excel hanya tersedia untuk paket Pro ke atas. Upgrade sekarang!' },
-        { status: 403 }
-      )
+      return safeJsonError('Fitur export Excel hanya tersedia untuk paket Pro ke atas. Upgrade sekarang!', 403)
     }
 
     const { searchParams } = request.nextUrl
@@ -158,9 +156,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Transactions export error:', error)
-    return NextResponse.json(
-      { error: 'Failed to export transactions' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to export transactions', 500)
   }
 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeAuditLog } from '@/lib/safe-audit'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 // PUT /api/settings/promos/[id] — update promo
 export async function PUT(
@@ -12,7 +14,7 @@ export async function PUT(
 
   // Only OWNER can manage promos
   if (user.role !== 'OWNER') {
-    return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+    return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
   }
 
   try {
@@ -21,7 +23,7 @@ export async function PUT(
     // Verify promo belongs to outlet
     const existing = await db.promo.findUnique({ where: { id } })
     if (!existing || existing.outletId !== user.outletId) {
-      return NextResponse.json({ error: 'Promo tidak ditemukan' }, { status: 404 })
+      return safeJsonError('Promo tidak ditemukan', 404)
     }
 
     const body = await request.json()
@@ -63,10 +65,10 @@ export async function PUT(
       return updated
     })
 
-    return NextResponse.json(promo)
+    return safeJson(promo)
   } catch (error) {
     console.error('PUT /api/settings/promos/[id] error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }
 
@@ -80,7 +82,7 @@ export async function DELETE(
 
   // Only OWNER can manage promos
   if (user.role !== 'OWNER') {
-    return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+    return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
   }
 
   try {
@@ -89,26 +91,24 @@ export async function DELETE(
     // Verify promo belongs to outlet
     const existing = await db.promo.findUnique({ where: { id } })
     if (!existing || existing.outletId !== user.outletId) {
-      return NextResponse.json({ error: 'Promo tidak ditemukan' }, { status: 404 })
+      return safeJsonError('Promo tidak ditemukan', 404)
     }
 
     // L4: Audit log before delete
-    await db.auditLog.create({
-      data: {
-        action: 'DELETE',
-        entityType: 'PROMO',
-        entityId: id,
-        details: JSON.stringify({ promoName: existing.name, type: existing.type, value: existing.value }),
-        outletId: user.outletId,
-        userId: user.id,
-      },
+    await safeAuditLog({
+      action: 'DELETE',
+      entityType: 'PROMO',
+      entityId: id,
+      details: JSON.stringify({ promoName: existing.name, type: existing.type, value: existing.value }),
+      outletId: user.outletId,
+      userId: user.id,
     })
 
     await db.promo.delete({ where: { id } })
 
-    return NextResponse.json({ success: true })
+    return safeJson({ success: true })
   } catch (error) {
     console.error('DELETE /api/settings/promos/[id] error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }

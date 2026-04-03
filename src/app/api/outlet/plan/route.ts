@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth-utils'
 import { db } from '@/lib/db'
 import { getPlanFeatures, getPlanLabel } from '@/lib/plan-config'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 /**
  * GET /api/outlet/plan
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!outlet) {
-      return NextResponse.json({ error: 'Outlet not found' }, { status: 404 })
+      return safeJsonError('Outlet not found', 404)
     }
 
     // Derive active status from accountType
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
       transactions: outlet._count.transactions,
     }
 
-    return NextResponse.json({
+    return safeJson({
       outletId: outlet.id,
       outletName: outlet.name,
       plan: {
@@ -75,9 +76,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (error instanceof Error && error.message.includes('Unauthorized')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return safeJsonError('Unauthorized', 401)
     }
     console.error('[/api/outlet/plan] Error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error')
   }
 }

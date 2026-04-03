@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { notifyNewTransaction } from '@/lib/notify'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 function generateInvoiceNumber(): string {
   const now = new Date()
@@ -37,10 +38,7 @@ export async function POST(request: NextRequest) {
 
     // Validate items
     if (!items || items.length === 0) {
-      return NextResponse.json(
-        { error: 'Cart is empty' },
-        { status: 400 }
-      )
+      return safeJsonError('Cart is empty', 400)
     }
 
     // K4: Monthly transaction limit check
@@ -62,10 +60,7 @@ export async function POST(request: NextRequest) {
         },
       })
       if (monthTxCount >= features.maxTransactionsPerMonth) {
-        return NextResponse.json(
-          { error: `Batas transaksi bulanan untuk paket ${accountType} sudah tercapai (${features.maxTransactionsPerMonth}). Upgrade ke Pro untuk unlimited!` },
-          { status: 400 }
-        )
+        return safeJsonError(`Batas transaksi bulanan untuk paket ${accountType} sudah tercapai (${features.maxTransactionsPerMonth}). Upgrade ke Pro untuk unlimited!`, 400)
       }
     }
 
@@ -78,10 +73,7 @@ export async function POST(request: NextRequest) {
       if (setting?.paymentMethods) {
         const allowedMethods = setting.paymentMethods.split(',').map((m) => m.trim().toUpperCase())
         if (!allowedMethods.includes(paymentMethod.toUpperCase())) {
-          return NextResponse.json(
-            { error: `Metode pembayaran "${paymentMethod}" tidak tersedia. Metode yang diizinkan: ${setting.paymentMethods}` },
-            { status: 400 }
-          )
+          return safeJsonError(`Metode pembayaran "${paymentMethod}" tidak tersedia. Metode yang diizinkan: ${setting.paymentMethods}`, 400)
         }
       }
     }
@@ -259,45 +251,53 @@ export async function POST(request: NextRequest) {
       return { invoiceNumber }
     })
 
-    // H4: Fire-and-forget: Send Telegram notification (don't await, don't block response)
-    const [cashierUser, outletData, customerData] = await Promise.all([
-      db.user.findUnique({ where: { id: userId }, select: { name: true } }),
-      db.outlet.findUnique({ where: { id: outletId }, select: { name: true } }),
-      customerId
-        ? db.customer.findUnique({ where: { id: customerId }, select: { name: true } }).catch(() => null)
-        : Promise.resolve(null),
-    ])
-    const cashierName = cashierUser?.name || userId
-    const outletName = outletData?.name || 'Outlet'
-    const customerName = customerData?.name || undefined
+    // H4: Post-transaction lookups for notification — wrapped in try/catch so a
+    //     lookup failure never causes a "checkout failed" response when data was already saved.
+    let cashierName = userId
+    let outletName = 'Outlet'
+    try {
+      const [cashierUser, outletData, customerData] = await Promise.all([
+        db.user.findUnique({ where: { id: userId }, select: { name: true } }),
+        db.outlet.findUnique({ where: { id: outletId }, select: { name: true } }),
+        customerId
+          ? db.customer.findUnique({ where: { id: customerId }, select: { name: true } })
+          : Promise.resolve(null),
+      ])
+      cashierName = cashierUser?.name || userId
+      outletName = outletData?.name || 'Outlet'
+      const customerName = customerData?.name || undefined
 
-    notifyNewTransaction(outletId, {
-      invoiceNumber: result.invoiceNumber,
-      items: items.map((item: { productId: string; productName: string; price: number; qty: number; subtotal: number }) => ({
-        productId: item.productId,
-        productName: item.productName,
-        price: item.price,
-        qty: item.qty,
-        subtotal: item.subtotal,
-      })),
-      subtotal,
-      discount: discount || 0,
-      total,
-      paymentMethod,
-      paidAmount: paidAmount || 0,
-      change: change || 0,
-      customerName: undefined,
-      cashierName,
-      outletName,
-    })
+      notifyNewTransaction(outletId, {
+        invoiceNumber: result.invoiceNumber,
+        items: items.map((item: { productId: string; productName: string; price: number; qty: number; subtotal: number }) => ({
+          productId: item.productId,
+          productName: item.productName,
+          price: item.price,
+          qty: item.qty,
+          subtotal: item.subtotal,
+        })),
+        subtotal,
+        discount: discount || 0,
+        total,
+        paymentMethod,
+        paidAmount: paidAmount || 0,
+        change: change || 0,
+        customerName,
+        cashierName,
+        outletName,
+      })
+    } catch (notifyError) {
+      // Notification lookups / sending are best-effort; never fail the checkout
+      console.error('Post-checkout notification error (non-fatal):', notifyError)
+    }
 
-    return NextResponse.json({
+    return safeJson({
       success: true,
       invoiceNumber: result.invoiceNumber,
     })
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Checkout failed'
     console.error('Checkout POST error:', error)
-    return NextResponse.json({ error: message }, { status: 400 })
+    return safeJsonError(message, 400)
   }
 }

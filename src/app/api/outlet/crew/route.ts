@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getOutletPlan } from '@/lib/plan-config'
+import { safeAuditLog } from '@/lib/safe-audit'
+import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 /**
  * GET /api/outlet/crew — List all crew (non-owner users) for the outlet
@@ -13,7 +15,7 @@ export async function GET(request: NextRequest) {
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+      return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
     }
 
     const crew = await db.user.findMany({
@@ -34,10 +36,10 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'asc' },
     })
 
-    return NextResponse.json({ crew })
+    return safeJson({ crew })
   } catch (error) {
     console.error('[/api/outlet/crew] GET error:', error)
-    return NextResponse.json({ error: 'Failed to load crew' }, { status: 500 })
+    return safeJsonError('Failed to load crew', 500)
   }
 }
 
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat menambah crew' }, { status: 403 })
+      return safeJsonError('Hanya pemilik yang dapat menambah crew', 403)
     }
 
     // Check plan limits
@@ -60,10 +62,7 @@ export async function POST(request: NextRequest) {
         where: { outletId: user.outletId, role: 'CREW' },
       })
       if (currentCount >= planData.features.maxCrew) {
-        return NextResponse.json(
-          { error: `Batas crew (${planData.features.maxCrew}) sudah tercapai. Upgrade ke Pro untuk unlimited crew.` },
-          { status: 403 }
-        )
+        return safeJsonError(`Batas crew (${planData.features.maxCrew}) sudah tercapai. Upgrade ke Pro untuk unlimited crew.`, 403)
       }
     }
 
@@ -71,17 +70,17 @@ export async function POST(request: NextRequest) {
     const { name, email, password } = body
 
     if (!name || !email || !password) {
-      return NextResponse.json({ error: 'Nama, email, dan password wajib diisi' }, { status: 400 })
+      return safeJsonError('Nama, email, dan password wajib diisi', 400)
     }
 
     if (password.length < 6) {
-      return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 })
+      return safeJsonError('Password minimal 6 karakter', 400)
     }
 
     // Check email uniqueness within outlet (email is part of compound unique [email, outletId])
-    const existingUser = await db.user.findFirst({ where: { email } })
+    const existingUser = await db.user.findFirst({ where: { email, outletId: user.outletId } })
     if (existingUser) {
-      return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 })
+      return safeJsonError('Email sudah terdaftar', 409)
     }
 
     const hashedPassword = await bcrypt.hash(password, 10)
@@ -104,20 +103,18 @@ export async function POST(request: NextRequest) {
     })
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        action: 'CREATE',
-        entityType: 'CREW',
-        entityId: newCrew.id,
-        details: JSON.stringify({ name, email }),
-        outletId: user.outletId,
-        userId: user.id,
-      },
+    await safeAuditLog({
+      action: 'CREATE',
+      entityType: 'CREW',
+      entityId: newCrew.id,
+      details: JSON.stringify({ name, email }),
+      outletId: user.outletId,
+      userId: user.id,
     })
 
-    return NextResponse.json({ crew: newCrew }, { status: 201 })
+    return safeJsonCreated({ crew: newCrew })
   } catch (error) {
     console.error('[/api/outlet/crew] POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }

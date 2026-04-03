@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 // GET /api/settings/promos — list all promos
 export async function GET(request: NextRequest) {
@@ -19,10 +20,10 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ promos })
+    return safeJson({ promos })
   } catch (error) {
     console.error('GET /api/settings/promos error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   // Only OWNER can manage promos
   if (user.role !== 'OWNER') {
-    return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+    return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
   }
 
   try {
@@ -41,10 +42,7 @@ export async function POST(request: NextRequest) {
     const { name, type, value, minPurchase, maxDiscount, active } = body
 
     if (!name || !type || value === undefined) {
-      return NextResponse.json(
-        { error: 'Nama, tipe, dan nilai diskon wajib diisi' },
-        { status: 400 }
-      )
+      return safeJsonError('Nama, tipe, dan nilai diskon wajib diisi', 400)
     }
 
     // L4: Create promo with audit log
@@ -75,9 +73,9 @@ export async function POST(request: NextRequest) {
       return newPromo
     })
 
-    return NextResponse.json(promo, { status: 201 })
+    return safeJsonCreated(promo)
   } catch (error) {
     console.error('POST /api/settings/promos error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }

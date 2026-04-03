@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,10 +10,7 @@ export async function POST(request: NextRequest) {
       return unauthorized()
     }
     if (user.role !== 'OWNER') {
-      return NextResponse.json(
-        { error: 'Only OWNER can bulk update products' },
-        { status: 403 }
-      )
+      return safeJsonError('Only OWNER can bulk update products', 403)
     }
     const outletId = user.outletId
     const userId = user.id
@@ -21,40 +19,25 @@ export async function POST(request: NextRequest) {
     const { productIds, priceAdjustment, stockAdjustment } = body
 
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-      return NextResponse.json(
-        { error: 'productIds is required and must be a non-empty array' },
-        { status: 400 }
-      )
+      return safeJsonError('productIds is required and must be a non-empty array', 400)
     }
 
     if (productIds.length > 200) {
-      return NextResponse.json(
-        { error: 'Maximum 200 products per bulk update' },
-        { status: 400 }
-      )
+      return safeJsonError('Maximum 200 products per bulk update', 400)
     }
 
     if (!priceAdjustment && !stockAdjustment) {
-      return NextResponse.json(
-        { error: 'At least one adjustment type (priceAdjustment or stockAdjustment) is required' },
-        { status: 400 }
-      )
+      return safeJsonError('At least one adjustment type (priceAdjustment or stockAdjustment) is required', 400)
     }
 
     // Validate price adjustment
     if (priceAdjustment) {
       const { type, value } = priceAdjustment
       if (!['percent', 'fixed'].includes(type)) {
-        return NextResponse.json(
-          { error: 'priceAdjustment.type must be "percent" or "fixed"' },
-          { status: 400 }
-        )
+        return safeJsonError('priceAdjustment.type must be "percent" or "fixed"', 400)
       }
       if (typeof value !== 'number' || value === 0) {
-        return NextResponse.json(
-          { error: 'priceAdjustment.value must be a non-zero number' },
-          { status: 400 }
-        )
+        return safeJsonError('priceAdjustment.value must be a non-zero number', 400)
       }
     }
 
@@ -62,16 +45,10 @@ export async function POST(request: NextRequest) {
     if (stockAdjustment) {
       const { type, value } = stockAdjustment
       if (!['add', 'subtract', 'set'].includes(type)) {
-        return NextResponse.json(
-          { error: 'stockAdjustment.type must be "add", "subtract", or "set"' },
-          { status: 400 }
-        )
+        return safeJsonError('stockAdjustment.type must be "add", "subtract", or "set"', 400)
       }
       if (typeof value !== 'number' || value < 0) {
-        return NextResponse.json(
-          { error: 'stockAdjustment.value must be a non-negative number' },
-          { status: 400 }
-        )
+        return safeJsonError('stockAdjustment.value must be a non-negative number', 400)
       }
     }
 
@@ -82,10 +59,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingProducts.length === 0) {
-      return NextResponse.json(
-        { error: 'No valid products found' },
-        { status: 404 }
-      )
+      return safeJsonError('No valid products found', 404)
     }
 
     // Process each product in a transaction
@@ -162,12 +136,9 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ updated: updatedCount })
+    return safeJson({ updated: updatedCount })
   } catch (error) {
     console.error('Products bulk update POST error:', error)
-    return NextResponse.json(
-      { error: 'Failed to bulk update products' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to bulk update products')
   }
 }

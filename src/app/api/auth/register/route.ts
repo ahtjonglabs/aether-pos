@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
+import { safeJsonCreated, safeJsonError } from '@/lib/safe-response';
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,26 +10,17 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!outletName || !ownerName || !email || !password) {
-      return NextResponse.json(
-        { error: 'All fields are required' },
-        { status: 400 }
-      );
+      return safeJsonError('All fields are required', 400);
     }
 
     if (password.length < 6) {
-      return NextResponse.json(
-        { error: 'Password must be at least 6 characters' },
-        { status: 400 }
-      );
+      return safeJsonError('Password must be at least 6 characters', 400);
     }
 
     // Check if email already exists (use findFirst since email is part of compound unique [email, outletId])
     const existingUser = await db.user.findFirst({ where: { email } });
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 409 }
-      );
+      return safeJsonError('Email already registered', 409);
     }
 
     // Hash password
@@ -76,20 +68,14 @@ export async function POST(request: NextRequest) {
       return { outlet, user };
     });
 
-    return NextResponse.json(
-      {
-        message: 'Registration successful',
-        outletId: result.outlet.id,
-        userId: result.user.id,
-        accountType: finalAccountType,
-      },
-      { status: 201 }
-    );
+    return safeJsonCreated({
+      message: 'Registration successful',
+      outletId: result.outlet.id,
+      userId: result.user.id,
+      accountType: finalAccountType,
+    });
   } catch (error) {
     console.error('Registration error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return safeJsonError('Internal server error');
   }
 }

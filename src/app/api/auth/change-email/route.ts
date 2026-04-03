@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 /**
  * POST /api/auth/change-email
@@ -18,19 +19,13 @@ export async function POST(request: NextRequest) {
     const { email, currentPassword } = body as { email?: string; currentPassword?: string }
 
     if (!email || !currentPassword) {
-      return NextResponse.json(
-        { error: 'Email dan password saat ini wajib diisi' },
-        { status: 400 }
-      )
+      return safeJsonError('Email dan password saat ini wajib diisi', 400)
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: 'Format email tidak valid' },
-        { status: 400 }
-      )
+      return safeJsonError('Format email tidak valid', 400)
     }
 
     // Fetch user with password
@@ -39,24 +34,18 @@ export async function POST(request: NextRequest) {
     })
 
     if (!dbUser) {
-      return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 })
+      return safeJsonError('User tidak ditemukan', 404)
     }
 
     // Verify current password
     const isPasswordValid = await bcrypt.compare(currentPassword, dbUser.password)
     if (!isPasswordValid) {
-      return NextResponse.json(
-        { error: 'Password saat ini salah' },
-        { status: 401 }
-      )
+      return safeJsonError('Password saat ini salah', 401)
     }
 
     // Check if email is same as current
     if (dbUser.email === email) {
-      return NextResponse.json(
-        { error: 'Email baru harus berbeda dari email saat ini' },
-        { status: 400 }
-      )
+      return safeJsonError('Email baru harus berbeda dari email saat ini', 400)
     }
 
     // Check email uniqueness within outlet
@@ -69,10 +58,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingEmail) {
-      return NextResponse.json(
-        { error: 'Email sudah digunakan oleh user lain di outlet ini' },
-        { status: 409 }
-      )
+      return safeJsonError('Email sudah digunakan oleh user lain di outlet ini', 409)
     }
 
     // Update email
@@ -81,13 +67,13 @@ export async function POST(request: NextRequest) {
       data: { email },
     })
 
-    return NextResponse.json({
+    return safeJson({
       success: true,
       message: 'Email berhasil diperbarui',
       newEmail: email,
     })
   } catch (error) {
     console.error('[/api/auth/change-email] Error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error')
   }
 }

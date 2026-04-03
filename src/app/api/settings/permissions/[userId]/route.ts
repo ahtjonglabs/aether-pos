@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 // PUT /api/settings/permissions/[userId] — update crew permissions
 export async function PUT(
@@ -12,7 +13,7 @@ export async function PUT(
 
   // Only OWNER can manage permissions
   if (user.role !== 'OWNER') {
-    return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+    return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
   }
 
   try {
@@ -23,14 +24,14 @@ export async function PUT(
       where: { id: userId },
     })
     if (!crew || crew.outletId !== user.outletId || crew.role !== 'CREW') {
-      return NextResponse.json({ error: 'Crew tidak ditemukan' }, { status: 404 })
+      return safeJsonError('Crew tidak ditemukan', 404)
     }
 
     const body = await request.json()
     const { pages } = body
 
     if (!pages || typeof pages !== 'string') {
-      return NextResponse.json({ error: 'Pages wajib diisi' }, { status: 400 })
+      return safeJsonError('Pages wajib diisi', 400)
     }
 
     // Upsert crew permission
@@ -46,12 +47,12 @@ export async function PUT(
       },
     })
 
-    return NextResponse.json({
+    return safeJson({
       userId: permission.userId,
       pages: permission.pages,
     })
   } catch (error) {
     console.error('PUT /api/settings/permissions/[userId] error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }

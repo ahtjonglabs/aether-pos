@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeAuditLog } from '@/lib/safe-audit'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 /**
  * PUT /api/outlet/crew/[id] — Update crew member info
@@ -15,7 +17,7 @@ export async function PUT(
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat mengubah data crew' }, { status: 403 })
+      return safeJsonError('Hanya pemilik yang dapat mengubah data crew', 403)
     }
 
     const { id } = await params
@@ -25,7 +27,7 @@ export async function PUT(
       where: { id },
     })
     if (!crew || crew.outletId !== user.outletId || crew.role !== 'CREW') {
-      return NextResponse.json({ error: 'Crew tidak ditemukan' }, { status: 404 })
+      return safeJsonError('Crew tidak ditemukan', 404)
     }
 
     const body = await request.json()
@@ -39,7 +41,7 @@ export async function PUT(
       if (email !== crew.email) {
         const existingUser = await db.user.findFirst({ where: { email } })
         if (existingUser) {
-          return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 })
+          return safeJsonError('Email sudah terdaftar', 409)
         }
         updateData.email = email
       }
@@ -47,7 +49,7 @@ export async function PUT(
 
     if (password !== undefined) {
       if (password.length < 6) {
-        return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 })
+        return safeJsonError('Password minimal 6 karakter', 400)
       }
       if (password) {
         const hashedPassword = await bcrypt.hash(password, 10)
@@ -56,7 +58,7 @@ export async function PUT(
     }
 
     if (Object.keys(updateData).length === 0) {
-      return NextResponse.json({ error: 'Tidak ada data yang diubah' }, { status: 400 })
+      return safeJsonError('Tidak ada data yang diubah', 400)
     }
 
     const updatedCrew = await db.user.update({
@@ -72,21 +74,19 @@ export async function PUT(
     })
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        action: 'UPDATE',
-        entityType: 'CREW',
-        entityId: id,
-        details: JSON.stringify({ changes: Object.keys(updateData) }),
-        outletId: user.outletId,
-        userId: user.id,
-      },
+    await safeAuditLog({
+      action: 'UPDATE',
+      entityType: 'CREW',
+      entityId: id,
+      details: JSON.stringify({ changes: Object.keys(updateData) }),
+      outletId: user.outletId,
+      userId: user.id,
     })
 
-    return NextResponse.json({ crew: updatedCrew })
+    return safeJson({ crew: updatedCrew })
   } catch (error) {
     console.error('[/api/outlet/crew/[id]] PUT error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error')
   }
 }
 
@@ -102,7 +102,7 @@ export async function DELETE(
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat menghapus crew' }, { status: 403 })
+      return safeJsonError('Hanya pemilik yang dapat menghapus crew', 403)
     }
 
     const { id } = await params
@@ -112,30 +112,28 @@ export async function DELETE(
       where: { id },
     })
     if (!crew || crew.outletId !== user.outletId || crew.role !== 'CREW') {
-      return NextResponse.json({ error: 'Crew tidak ditemukan' }, { status: 404 })
+      return safeJsonError('Crew tidak ditemukan', 404)
     }
 
-    // Delete crew permission first (foreign key)
-    await db.crewPermission.deleteMany({ where: { userId: id } })
-
-    // Delete crew
-    await db.user.delete({ where: { id } })
+    // Delete crew permission and user atomically
+    await db.$transaction([
+      db.crewPermission.deleteMany({ where: { userId: id } }),
+      db.user.delete({ where: { id } }),
+    ])
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        action: 'DELETE',
-        entityType: 'CREW',
-        entityId: id,
-        details: JSON.stringify({ name: crew.name, email: crew.email }),
-        outletId: user.outletId,
-        userId: user.id,
-      },
+    await safeAuditLog({
+      action: 'DELETE',
+      entityType: 'CREW',
+      entityId: id,
+      details: JSON.stringify({ name: crew.name, email: crew.email }),
+      outletId: user.outletId,
+      userId: user.id,
     })
 
-    return NextResponse.json({ success: true })
+    return safeJson({ success: true })
   } catch (error) {
     console.error('[/api/outlet/crew/[id]] DELETE error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error')
   }
 }

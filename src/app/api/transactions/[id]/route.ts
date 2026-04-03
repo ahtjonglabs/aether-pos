@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(
   request: NextRequest,
@@ -29,10 +30,7 @@ export async function GET(
     })
 
     if (!transaction) {
-      return NextResponse.json(
-        { error: 'Transaction not found' },
-        { status: 404 }
-      )
+      return safeJsonError('Transaction not found', 404)
     }
 
     // Check void status
@@ -65,7 +63,7 @@ export async function GET(
       select: { name: true, address: true, phone: true },
     })
 
-    return NextResponse.json({
+    return safeJson({
       ...transaction,
       voidStatus: voidInfo ? 'void' : 'active',
       voidInfo,
@@ -74,9 +72,6 @@ export async function GET(
     })
   } catch (error) {
     console.error('Transaction detail GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load transaction detail' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load transaction detail', 500)
   }
 }

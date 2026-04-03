@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeAuditLog } from '@/lib/safe-audit'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function PUT(
   request: NextRequest,
@@ -20,7 +22,7 @@ export async function PUT(
       where: { id, outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return safeJsonError('Customer not found', 404)
     }
 
     const body = await request.json()
@@ -32,10 +34,7 @@ export async function PUT(
         where: { whatsapp },
       })
       if (whatsappExists) {
-        return NextResponse.json(
-          { error: 'WhatsApp number already registered' },
-          { status: 400 }
-        )
+        return safeJsonError('WhatsApp number already registered', 400)
       }
     }
 
@@ -70,13 +69,10 @@ export async function PUT(
       return updated
     })
 
-    return NextResponse.json(customer)
+    return safeJson(customer)
   } catch (error) {
     console.error('Customer PUT error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update customer' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to update customer', 500)
   }
 }
 
@@ -98,34 +94,29 @@ export async function DELETE(
       where: { id, outletId },
     })
     if (!existing) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return safeJsonError('Customer not found', 404)
     }
 
     // L3: Audit log before delete
-    await db.auditLog.create({
-      data: {
-        action: 'DELETE',
-        entityType: 'CUSTOMER',
-        entityId: id,
-        details: JSON.stringify({
-          customerName: existing.name,
-          whatsapp: existing.whatsapp,
-        }),
-        outletId,
-        userId,
-      },
+    await safeAuditLog({
+      action: 'DELETE',
+      entityType: 'CUSTOMER',
+      entityId: id,
+      details: JSON.stringify({
+        customerName: existing.name,
+        whatsapp: existing.whatsapp,
+      }),
+      outletId,
+      userId,
     })
 
     await db.customer.delete({
       where: { id },
     })
 
-    return NextResponse.json({ success: true })
+    return safeJson({ success: true })
   } catch (error) {
     console.error('Customer DELETE error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete customer' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to delete customer', 500)
   }
 }

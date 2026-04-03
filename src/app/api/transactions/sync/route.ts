@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 function generateInvoiceNumber(): string {
   const now = new Date()
@@ -54,10 +55,7 @@ export async function POST(request: NextRequest) {
     const { transactions }: { transactions: SyncTransaction[] } = body
 
     if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
-      return NextResponse.json(
-        { error: 'No transactions to sync' },
-        { status: 400 }
-      )
+      return safeJsonError('No transactions to sync', 400)
     }
 
     // Limit batch size to 50
@@ -271,7 +269,7 @@ export async function POST(request: NextRequest) {
     const synced = results.filter((r) => r.success).length
     const failed = results.filter((r) => !r.success).length
 
-    return NextResponse.json({
+    return safeJson({
       synced,
       failed,
       total: batch.length,
@@ -279,9 +277,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Transactions sync error:', error)
-    return NextResponse.json(
-      { error: 'Sync failed' },
-      { status: 500 }
-    )
+    return safeJsonError('Sync failed', 500)
   }
 }

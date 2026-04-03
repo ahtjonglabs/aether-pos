@@ -1,8 +1,9 @@
 import * as XLSX from 'xlsx'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getPlanFeatures } from '@/lib/plan-config'
+import { safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,10 +21,7 @@ export async function GET(request: NextRequest) {
       : (outlet?.accountType || 'free')
     const features = getPlanFeatures(accountType)
     if (!features.exportExcel) {
-      return NextResponse.json(
-        { error: 'Fitur export Excel hanya tersedia untuk paket Pro ke atas. Upgrade sekarang!' },
-        { status: 403 }
-      )
+      return safeJsonError('Fitur export Excel hanya tersedia untuk paket Pro ke atas. Upgrade sekarang!', 403)
     }
 
     const { searchParams } = request.nextUrl
@@ -98,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     const filename = `audit-logs-${new Date().toISOString().slice(0, 10)}.xlsx`
 
-    return new NextResponse(buffer, {
+    return new Response(buffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -107,9 +105,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Audit logs export error:', error)
-    return NextResponse.json(
-      { error: 'Failed to export audit logs' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to export audit logs')
   }
 }

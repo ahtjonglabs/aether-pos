@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { safeAuditLog } from '@/lib/safe-audit'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 // GET /api/settings - fetch outlet settings + outlet info
 export async function GET(request: NextRequest) {
@@ -21,7 +23,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({
+    return safeJson({
       id: setting.id,
       outletId: setting.outletId,
       paymentMethods: setting.paymentMethods,
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('GET /api/settings error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }
 
@@ -63,7 +65,7 @@ export async function PUT(request: NextRequest) {
 
   // Only OWNER can update outlet settings
   if (user.role !== 'OWNER') {
-    return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+    return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
   }
 
   try {
@@ -125,15 +127,13 @@ export async function PUT(request: NextRequest) {
       if (body.outletAddress !== undefined) outletChanges.outletAddress = { from: setting.outlet?.address || '', to: body.outletAddress }
       if (body.outletPhone !== undefined) outletChanges.outletPhone = { from: setting.outlet?.phone || '', to: body.outletPhone }
       if (Object.keys(outletChanges).length > 0) {
-        await db.auditLog.create({
-          data: {
-            action: 'UPDATE',
-            entityType: 'OUTLET',
-            entityId: user.outletId,
-            details: JSON.stringify({ changes: outletChanges }),
-            outletId: user.outletId,
-            userId: user.id,
-          },
+        await safeAuditLog({
+          action: 'UPDATE',
+          entityType: 'OUTLET',
+          entityId: user.outletId,
+          details: JSON.stringify({ changes: outletChanges }),
+          outletId: user.outletId,
+          userId: user.id,
         })
       }
     }
@@ -152,56 +152,61 @@ export async function PUT(request: NextRequest) {
       }
     }
     if (Object.keys(settingsChanged).length > 0) {
-      await db.auditLog.create({
-        data: {
-          action: 'UPDATE',
-          entityType: 'SETTINGS',
-          entityId: setting.id,
-          details: JSON.stringify({ changes: settingsChanged }),
-          outletId: user.outletId,
-          userId: user.id,
-        },
+      await safeAuditLog({
+        action: 'UPDATE',
+        entityType: 'SETTINGS',
+        entityId: setting.id,
+        details: JSON.stringify({ changes: settingsChanged }),
+        outletId: user.outletId,
+        userId: user.id,
       })
     }
 
-    // Re-fetch with updated outlet
-    const updated = await db.outletSetting.findUnique({
-      where: { outletId: user.outletId },
-      include: { outlet: true },
-    })
+    // Re-fetch with updated outlet — fall back to the upsert result if re-fetch fails
+    let updated
+    try {
+      updated = await db.outletSetting.findUnique({
+        where: { outletId: user.outletId },
+        include: { outlet: true },
+      })
+    } catch {
+      updated = setting
+    }
 
-    return NextResponse.json({
-      id: updated!.id,
-      outletId: updated!.outletId,
-      paymentMethods: updated!.paymentMethods,
-      loyaltyEnabled: updated!.loyaltyEnabled,
-      loyaltyPointsPerAmount: updated!.loyaltyPointsPerAmount,
-      loyaltyPointValue: updated!.loyaltyPointValue,
-      receiptBusinessName: updated!.receiptBusinessName,
-      receiptAddress: updated!.receiptAddress,
-      receiptPhone: updated!.receiptPhone,
-      receiptFooter: updated!.receiptFooter,
-      receiptLogo: updated!.receiptLogo,
-      themePrimaryColor: updated!.themePrimaryColor,
-      telegramChatId: updated!.telegramChatId,
-      telegramBotToken: updated!.telegramBotToken ? '••••••' : null,
-      notifyOnTransaction: updated!.notifyOnTransaction,
-      notifyOnCustomer: updated!.notifyOnCustomer,
-      notifyDailyReport: updated!.notifyDailyReport,
-      notifyWeeklyReport: updated!.notifyWeeklyReport,
-      notifyMonthlyReport: updated!.notifyMonthlyReport,
-      outlet: updated!.outlet
+    const response = updated ?? setting
+
+    return safeJson({
+      id: response.id,
+      outletId: response.outletId,
+      paymentMethods: response.paymentMethods,
+      loyaltyEnabled: response.loyaltyEnabled,
+      loyaltyPointsPerAmount: response.loyaltyPointsPerAmount,
+      loyaltyPointValue: response.loyaltyPointValue,
+      receiptBusinessName: response.receiptBusinessName,
+      receiptAddress: response.receiptAddress,
+      receiptPhone: response.receiptPhone,
+      receiptFooter: response.receiptFooter,
+      receiptLogo: response.receiptLogo,
+      themePrimaryColor: response.themePrimaryColor,
+      telegramChatId: response.telegramChatId,
+      telegramBotToken: response.telegramBotToken ? '••••••' : null,
+      notifyOnTransaction: response.notifyOnTransaction,
+      notifyOnCustomer: response.notifyOnCustomer,
+      notifyDailyReport: response.notifyDailyReport,
+      notifyWeeklyReport: response.notifyWeeklyReport,
+      notifyMonthlyReport: response.notifyMonthlyReport,
+      outlet: response.outlet
         ? {
-            id: updated!.outlet.id,
-            name: updated!.outlet.name,
-            address: updated!.outlet.address,
-            phone: updated!.outlet.phone,
+            id: response.outlet.id,
+            name: response.outlet.name,
+            address: response.outlet.address,
+            phone: response.outlet.phone,
           }
         : null,
     })
   } catch (error) {
     console.error('PUT /api/settings error:', error)
     const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: 'Internal server error', details: message }, { status: 500 })
+    return safeJsonError('Internal server error', 500)
   }
 }

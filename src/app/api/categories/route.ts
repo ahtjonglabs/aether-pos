@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 // GET /api/categories — list all categories for the outlet
 export async function GET(request: NextRequest) {
@@ -16,10 +17,10 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ categories })
+    return safeJson({ categories })
   } catch (error) {
     console.error('Categories GET error:', error)
-    return NextResponse.json({ error: 'Failed to load categories' }, { status: 500 })
+    return safeJsonError('Failed to load categories')
   }
 }
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     const { name, color } = body
 
     if (!name || !name.trim()) {
-      return NextResponse.json({ error: 'Category name is required' }, { status: 400 })
+      return safeJsonError('Category name is required', 400)
     }
 
     // Check unique name per outlet
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       where: { name: name.trim(), outletId: user.outletId },
     })
     if (existing) {
-      return NextResponse.json({ error: 'Category name already exists' }, { status: 400 })
+      return safeJsonError('Category name already exists', 400)
     }
 
     const category = await db.category.create({
@@ -52,9 +53,9 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(category, { status: 201 })
+    return safeJsonCreated(category)
   } catch (error) {
     console.error('Categories POST error:', error)
-    return NextResponse.json({ error: 'Failed to create category' }, { status: 500 })
+    return safeJsonError('Failed to create category')
   }
 }

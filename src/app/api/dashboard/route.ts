@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 interface HourBucket {
   hour: number
@@ -129,7 +130,7 @@ export async function GET(request: NextRequest) {
       aiInsight = 'AI insight requires Z.AI GLM 5 integration'
     }
 
-    return NextResponse.json({
+    return safeJson({
       // All-time
       totalRevenue,
       totalTransactions,
@@ -157,9 +158,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Dashboard error:', error)
-    return NextResponse.json(
-      { error: 'Failed to load dashboard stats' },
-      { status: 500 }
-    )
+    return safeJsonError('Failed to load dashboard stats')
   }
 }

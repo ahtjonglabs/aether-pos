@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 /**
  * GET /api/outlets — List all outlets owned by the current user's owner
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 })
+      return safeJsonError('Hanya pemilik yang dapat mengakses', 403)
     }
 
     // Get the owner's primary outlet accountType
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
           _count: { select: { users: true, products: true, transactions: true, customers: true } },
         },
       })
-      return NextResponse.json({
+      return safeJson({
         outlets: [{
           id: outlet!.id,
           name: outlet!.name,
@@ -80,13 +81,13 @@ export async function GET(request: NextRequest) {
       customerCount: u.outlet._count.customers,
     }))
 
-    return NextResponse.json({
+    return safeJson({
       outlets,
       canAddMore: true,
     })
   } catch (error) {
     console.error('[/api/outlets] GET error:', error)
-    return NextResponse.json({ error: 'Failed to load outlets' }, { status: 500 })
+    return safeJsonError('Failed to load outlets')
   }
 }
 
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
     if (!user) return unauthorized()
 
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat menambah outlet cabang' }, { status: 403 })
+      return safeJsonError('Hanya pemilik yang dapat menambah outlet cabang', 403)
     }
 
     // Check enterprise plan
@@ -109,17 +110,14 @@ export async function POST(request: NextRequest) {
     })
 
     if (primaryOutlet?.accountType !== 'enterprise') {
-      return NextResponse.json(
-        { error: 'Multi-outlet hanya tersedia untuk akun Enterprise. Upgrade untuk mengakses fitur ini.' },
-        { status: 403 }
-      )
+      return safeJsonError('Multi-outlet hanya tersedia untuk akun Enterprise. Upgrade untuk mengakses fitur ini.', 403)
     }
 
     const body = await request.json()
     const { name, address, phone } = body
 
     if (!name || name.trim().length < 2) {
-      return NextResponse.json({ error: 'Nama outlet minimal 2 karakter' }, { status: 400 })
+      return safeJsonError('Nama outlet minimal 2 karakter', 400)
     }
 
     // Create the new outlet + create an owner entry with same credentials
@@ -175,7 +173,7 @@ export async function POST(request: NextRequest) {
       return { outlet: newOutlet, owner: newOwner }
     })
 
-    return NextResponse.json({
+    return safeJsonCreated({
       outlet: {
         id: result.outlet.id,
         name: result.outlet.name,
@@ -191,9 +189,9 @@ export async function POST(request: NextRequest) {
         name: result.owner.name,
       },
       message: `Outlet "${result.outlet.name}" berhasil ditambahkan. Login dengan email ${result.owner.email} dan password yang sama untuk mengakses outlet cabang.`,
-    }, { status: 201 })
+    })
   } catch (error) {
     console.error('[/api/outlets] POST error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return safeJsonError('Internal server error')
   }
 }

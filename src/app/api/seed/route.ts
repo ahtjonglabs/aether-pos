@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { seedDatabase } from '@/lib/seed';
 import { getAuthUser, unauthorized } from '@/lib/get-auth';
+import { safeJson } from '@/lib/safe-response';
 
 export async function POST(request: NextRequest) {
   // Allow seed without auth when using ?force=true (for initial setup)
@@ -12,18 +13,18 @@ export async function POST(request: NextRequest) {
     user = await getAuthUser(request);
     if (!user) return unauthorized();
     if (user.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Hanya pemilik yang dapat mengakses' }, { status: 403 });
+      return safeJson({ error: 'Hanya pemilik yang dapat mengakses' }, 403);
     }
   }
 
   try {
     const result = await seedDatabase();
-    return NextResponse.json(result);
+    return safeJson(result);
   } catch (error) {
     console.error('Seed error:', error);
-    return NextResponse.json(
+    return safeJson(
       { error: 'Failed to seed database', details: String(error) },
-      { status: 500 }
+      500
     );
   }
 }
