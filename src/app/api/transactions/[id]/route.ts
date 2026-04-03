@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { parseVoidDetails } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(
@@ -13,7 +14,6 @@ export async function GET(
       return unauthorized()
     }
     const outletId = user.outletId
-
     const { id } = await params
 
     const transaction = await db.transaction.findFirst({
@@ -42,20 +42,7 @@ export async function GET(
         outletId,
       },
     })
-
-    let voidInfo: { reason: string; voidedBy: string; voidedAt: string } | null = null
-    if (voidLog) {
-      try {
-        const details = JSON.parse(voidLog.details || '{}')
-        voidInfo = {
-          reason: details.reason || '',
-          voidedBy: details.voidedBy || '',
-          voidedAt: details.voidedAt || '',
-        }
-      } catch {
-        voidInfo = { reason: '', voidedBy: '', voidedAt: '' }
-      }
-    }
+    const voidInfo = parseVoidDetails(voidLog?.details ?? null)
 
     // Get outlet info for receipt
     const outlet = await db.outlet.findUnique({

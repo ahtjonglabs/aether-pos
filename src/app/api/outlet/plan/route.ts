@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { resolvePlanType } from '@/lib/api-helpers'
 import { requireAuth } from '@/lib/auth-utils'
 import { db } from '@/lib/db'
 import { getPlanFeatures, getPlanLabel } from '@/lib/plan-config'
@@ -45,12 +46,9 @@ export async function GET(request: NextRequest) {
       return safeJsonError('Outlet not found', 404)
     }
 
-    // Derive active status from accountType
+    // Derive plan type (handles suspended: prefix)
+    const rawPlan = resolvePlanType(outlet.accountType)
     const isSuspended = outlet.accountType.startsWith('suspended:')
-    const rawPlan = isSuspended
-      ? outlet.accountType.replace('suspended:', '')
-      : outlet.accountType
-
     const features = getPlanFeatures(rawPlan)
 
     // Calculate usage vs limits

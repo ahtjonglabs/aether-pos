@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import * as XLSX from 'xlsx'
 import { safeJsonError } from '@/lib/safe-response'
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
 
     // Return as downloadable file
-    return new NextResponse(buffer, {
+    return new Response(buffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

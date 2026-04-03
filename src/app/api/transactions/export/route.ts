@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { buildDateFilter, resolvePlanType } from '@/lib/api-helpers'
 import { getPlanFeatures } from '@/lib/plan-config'
+import { formatCurrency, formatDate } from '@/lib/format'
 import * as XLSX from 'xlsx'
 import { safeJsonError } from '@/lib/safe-response'
 
@@ -18,9 +20,7 @@ export async function GET(request: NextRequest) {
       where: { id: outletId },
       select: { accountType: true },
     })
-    const accountType = outlet?.accountType?.startsWith('suspended:')
-      ? outlet.accountType.replace('suspended:', '')
-      : (outlet?.accountType || 'free')
+    const accountType = resolvePlanType(outlet?.accountType)
     const features = getPlanFeatures(accountType)
     if (!features.exportExcel) {
       return safeJsonError('Fitur export Excel hanya tersedia untuk paket Pro ke atas. Upgrade sekarang!', 403)
@@ -33,20 +33,12 @@ export async function GET(request: NextRequest) {
     const paymentMethod = searchParams.get('paymentMethod') || ''
 
     const where: Record<string, unknown> = { outletId }
-    if (dateFrom || dateTo) {
-      const dateFilter: Record<string, unknown> = {}
-      if (dateFrom) {
-        const start = new Date(dateFrom)
-        start.setHours(0, 0, 0, 0)
-        dateFilter.gte = start
-      }
-      if (dateTo) {
-        const end = new Date(dateTo)
-        end.setHours(23, 59, 59, 999)
-        dateFilter.lte = end
-      }
+
+    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
+    if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter
     }
+
     if (cashierId) {
       where.userId = cashierId
     }
@@ -58,6 +50,7 @@ export async function GET(request: NextRequest) {
       where,
       orderBy: { createdAt: 'desc' },
       select: {
+        id: true,
         invoiceNumber: true,
         subtotal: true,
         discount: true,
@@ -83,20 +76,6 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    const formatCurrency = (amount: number) =>
-      new Intl.NumberFormat('id-ID', {
-        style: 'currency',
-        currency: 'IDR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(amount)
-
-    const formatDateCell = (date: Date) =>
-      new Intl.DateTimeFormat('id-ID', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(date))
-
     // Check void status for each transaction
     const transactionIds = transactions.map((t) => t.id)
     const voidLogs = transactionIds.length > 0
@@ -107,7 +86,7 @@ export async function GET(request: NextRequest) {
             action: 'VOID',
             outletId,
           },
-          select: { entityId: true, details: true },
+          select: { entityId: true },
         })
       : []
 
@@ -116,7 +95,7 @@ export async function GET(request: NextRequest) {
     // Build export rows: one row per transaction
     const rows = transactions.map((t) => ({
       'Invoice #': t.invoiceNumber,
-      'Tanggal': formatDateCell(t.createdAt),
+      'Tanggal': formatDate(t.createdAt),
       'Kasir': t.user?.name || '-',
       'Customer': t.customer?.name || 'Walk-in',
       'Metode Pembayaran': t.paymentMethod,

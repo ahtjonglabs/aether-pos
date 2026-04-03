@@ -95,7 +95,7 @@ model Product {
 model Customer {
   id          String   @id @default(cuid())
   name        String
-  whatsapp    String   @unique     // WhatsApp number as unique ID
+  whatsapp    String               // WhatsApp number
   totalSpend  Float    @default(0) // Running total
   points      Int      @default(0) // Current loyalty points
   outletId    String
@@ -105,6 +105,8 @@ model Customer {
   outlet       Outlet       @relation(fields: [outletId], references: [id])
   transactions Transaction[]
   loyaltyLogs  LoyaltyLog[]
+
+  @@unique([whatsapp, outletId])
 }
 
 // ==================== TRANSACTION ====================

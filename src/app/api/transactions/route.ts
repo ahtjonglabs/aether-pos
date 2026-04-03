@@ -1,9 +1,8 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { parsePagination, buildDateFilter, buildVoidMap, getVoidedTxIds } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
-
-const PAGE_SIZE = 20
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,16 +13,13 @@ export async function GET(request: NextRequest) {
     const outletId = user.outletId
 
     const { searchParams } = request.nextUrl
-    const page = Math.max(1, Number(searchParams.get('page')) || 1)
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || PAGE_SIZE))
+    const { page, limit, skip } = parsePagination(searchParams, { limit: 20 })
     const search = searchParams.get('search') || ''
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
     const cashierId = searchParams.get('cashierId') || ''
     const paymentMethod = searchParams.get('paymentMethod') || ''
     const voidStatus = searchParams.get('voidStatus') || '' // 'void' or 'active'
-
-    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = { outletId }
     if (search) {
@@ -32,20 +28,12 @@ export async function GET(request: NextRequest) {
         { customer: { name: { contains: search } } },
       ]
     }
-    if (dateFrom || dateTo) {
-      const dateFilter: Record<string, unknown> = {}
-      if (dateFrom) {
-        const start = new Date(dateFrom)
-        start.setHours(0, 0, 0, 0)
-        dateFilter.gte = start
-      }
-      if (dateTo) {
-        const end = new Date(dateTo)
-        end.setHours(23, 59, 59, 999)
-        dateFilter.lte = end
-      }
+
+    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
+    if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter
     }
+
     if (cashierId) {
       where.userId = cashierId
     }
@@ -54,26 +42,12 @@ export async function GET(request: NextRequest) {
     }
 
     // H3: If voidStatus filter, apply at DB level for accurate pagination
-    // We need to find transaction IDs that have/haven't been voided
     if (voidStatus === 'void' || voidStatus === 'active') {
-      // Get all voided transaction IDs for this outlet
-      const voidedTxIds = await db.auditLog.findMany({
-        where: {
-          entityType: 'TRANSACTION',
-          action: 'VOID',
-          outletId,
-        },
-        select: { entityId: true },
-      })
-      const voidedIdSet = new Set(voidedTxIds.map((v) => v.entityId))
+      const voidedIdSet = await getVoidedTxIds(db, outletId)
       if (voidStatus === 'void') {
         where.id = { in: Array.from(voidedIdSet) as string[] }
-      } else {
-        // active = all transactions NOT in voided set
-        // For Prisma, we use a NOT IN approach
-        if (voidedIdSet.size > 0) {
-          where.id = { notIn: Array.from(voidedIdSet) as string[] }
-        }
+      } else if (voidedIdSet.size > 0) {
+        where.id = { notIn: Array.from(voidedIdSet) as string[] }
       }
     }
 
@@ -114,34 +88,9 @@ export async function GET(request: NextRequest) {
       db.transaction.count({ where }),
     ])
 
-    // Fetch all void logs for these transactions in bulk
+    // Fetch void info for these transactions in bulk
     const transactionIds = transactions.map((t) => t.id)
-    const voidLogs = transactionIds.length > 0
-      ? await db.auditLog.findMany({
-          where: {
-            entityType: 'TRANSACTION',
-            entityId: { in: transactionIds },
-            action: 'VOID',
-            outletId,
-          },
-          select: { entityId: true, details: true },
-        })
-      : []
-
-    // Map void status for display
-    const voidMap = new Map<string, { reason: string; voidedBy: string; voidedAt: string }>()
-    for (const log of voidLogs) {
-      try {
-        const details = JSON.parse(log.details || '{}')
-        voidMap.set(log.entityId!, {
-          reason: details.reason || '',
-          voidedBy: details.voidedBy || '',
-          voidedAt: details.voidedAt || '',
-        })
-      } catch {
-        voidMap.set(log.entityId!, { reason: '', voidedBy: '', voidedAt: '' })
-      }
-    }
+    const voidMap = await buildVoidMap(db, transactionIds, outletId)
 
     // H3: Map transactions with void info (no client-side filter needed now)
     const mappedTransactions = transactions.map((t) => {

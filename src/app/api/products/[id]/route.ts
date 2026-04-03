@@ -25,7 +25,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, sku, hpp, price, bruto, netto, lowStockAlert, image, unit, categoryId } = body
+    const { name, sku, hpp, price, lowStockAlert, image, unit, categoryId } = body
 
     // Check unique name if changed
     if (name && name !== existing.name) {
@@ -43,8 +43,6 @@ export async function PUT(
       if (name !== undefined && name !== existing.name) changes.name = { from: existing.name, to: name }
       if (hpp !== undefined && hpp !== existing.hpp) changes.hpp = { from: existing.hpp, to: hpp }
       if (price !== undefined && price !== existing.price) changes.price = { from: existing.price, to: price }
-      if (bruto !== undefined && bruto !== existing.bruto) changes.bruto = { from: existing.bruto, to: bruto }
-      if (netto !== undefined && netto !== existing.netto) changes.netto = { from: existing.netto, to: netto }
       if (lowStockAlert !== undefined && lowStockAlert !== existing.lowStockAlert) changes.lowStockAlert = { from: existing.lowStockAlert, to: lowStockAlert }
       if (image !== undefined && image !== existing.image) changes.image = { from: existing.image, to: image }
       if (unit !== undefined && unit !== existing.unit) changes.unit = { from: existing.unit, to: unit }
@@ -54,8 +52,6 @@ export async function PUT(
       if (sku !== undefined) updateData.sku = sku || null
       if (hpp !== undefined) updateData.hpp = hpp
       if (price !== undefined) updateData.price = price
-      if (bruto !== undefined) updateData.bruto = bruto
-      if (netto !== undefined) updateData.netto = netto
       if (lowStockAlert !== undefined) updateData.lowStockAlert = lowStockAlert
       if (image !== undefined) updateData.image = image || null
       if (unit !== undefined) updateData.unit = unit || 'pcs'

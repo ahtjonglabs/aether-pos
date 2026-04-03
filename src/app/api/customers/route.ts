@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { parsePagination } from '@/lib/api-helpers'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { notifyNewCustomer } from '@/lib/notify'
 import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
-
-const PAGE_SIZE = 20
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,11 +14,8 @@ export async function GET(request: NextRequest) {
     const outletId = user.outletId
 
     const { searchParams } = request.nextUrl
-    const page = Math.max(1, Number(searchParams.get('page')) || 1)
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || PAGE_SIZE))
+    const { skip, limit } = parsePagination(searchParams)
     const search = searchParams.get('search') || ''
-
-    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = { outletId }
     if (search) {
@@ -41,7 +37,7 @@ export async function GET(request: NextRequest) {
 
     return safeJson({
       customers,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / limit) || 1,
     })
   } catch (error) {
     console.error('Customers GET error:', error)

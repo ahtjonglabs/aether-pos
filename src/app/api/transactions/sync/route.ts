@@ -1,16 +1,8 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { generateInvoiceNumber } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
-
-function generateInvoiceNumber(): string {
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  const random = String(Math.floor(Math.random() * 100000)).padStart(5, '0')
-  return `INV-${yyyy}${mm}${dd}-${random}`
-}
 
 interface SyncTransaction {
   id?: number

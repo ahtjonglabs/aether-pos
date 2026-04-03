@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { parsePagination } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(
@@ -24,10 +25,7 @@ export async function GET(
       return safeJsonError('Product not found', 404)
     }
 
-    const { searchParams } = request.nextUrl
-    const page = Math.max(1, Number(searchParams.get('page')) || 1)
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 20))
-    const skip = (page - 1) * limit
+    const { limit, skip } = parsePagination(request.nextUrl.searchParams)
 
     // Fetch summary stats and movement logs in parallel
     const [auditLogs, totalLogs, totalSoldResult, lastRestockLog] =
@@ -73,7 +71,7 @@ export async function GET(
         }),
       ])
 
-    // M3: Get restock total via aggregate instead of fetching all logs
+    // Get restock total via aggregate instead of fetching all logs
     const restockTotalResult = await db.auditLog.aggregate({
       where: {
         entityId: id,
@@ -135,8 +133,6 @@ export async function GET(
         stock: product.stock,
         lowStockAlert: product.lowStockAlert,
         image: product.image,
-        bruto: product.bruto,
-        netto: product.netto,
       },
       summary: {
         totalSold,

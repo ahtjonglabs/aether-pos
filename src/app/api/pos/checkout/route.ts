@@ -1,18 +1,10 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { generateInvoiceNumber, resolvePlanType } from '@/lib/api-helpers'
 import { notifyNewTransaction } from '@/lib/notify'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
-
-function generateInvoiceNumber(): string {
-  const now = new Date()
-  const yyyy = now.getFullYear()
-  const mm = String(now.getMonth() + 1).padStart(2, '0')
-  const dd = String(now.getDate()).padStart(2, '0')
-  const random = String(Math.floor(Math.random() * 100000)).padStart(5, '0')
-  return `INV-${yyyy}${mm}${dd}-${random}`
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,9 +38,7 @@ export async function POST(request: NextRequest) {
       where: { id: outletId },
       select: { accountType: true },
     })
-    const accountType = outlet?.accountType?.startsWith('suspended:')
-      ? outlet.accountType.replace('suspended:', '')
-      : (outlet?.accountType || 'free')
+    const accountType = resolvePlanType(outlet?.accountType)
     const features = getPlanFeatures(accountType)
     if (!isUnlimited(features.maxTransactionsPerMonth)) {
       const now = new Date()

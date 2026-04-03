@@ -10,7 +10,9 @@ export async function POST(
 ) {
   try {
     const user = await getAuthUser(request)
-    if (!user) return unauthorized()
+    if (!user) {
+      return unauthorized()
+    }
     if (user.role !== 'OWNER') {
       return safeJsonError('Only OWNER can void transactions', 403)
     }

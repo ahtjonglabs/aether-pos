@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { parsePagination, resolvePlanType } from '@/lib/api-helpers'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
 import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
-
-const PAGE_SIZE = 20
 
 type SortOption = 'newest' | 'best-selling' | 'low-stock' | 'most-stock'
 
@@ -17,13 +16,10 @@ export async function GET(request: NextRequest) {
     const outletId = user.outletId
 
     const { searchParams } = request.nextUrl
-    const page = Math.max(1, Number(searchParams.get('page')) || 1)
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || PAGE_SIZE))
+    const { page, limit, skip } = parsePagination(searchParams)
     const search = searchParams.get('search') || ''
     const sort: SortOption = (searchParams.get('sort') as SortOption) || 'newest'
     const categoryId = searchParams.get('categoryId') || ''
-
-    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = { outletId }
     if (search) {
@@ -41,7 +37,6 @@ export async function GET(request: NextRequest) {
     let total: number
 
     if (sort === 'best-selling') {
-      // Use Prisma-level aggregation — works with PostgreSQL and SQLite
       const allProducts = await db.product.findMany({
         where,
         include: {
@@ -52,7 +47,6 @@ export async function GET(request: NextRequest) {
         },
       })
 
-      // Calculate totalSold for each product and sort
       const withSold = allProducts.map((p: Record<string, unknown>) => ({
         ...p,
         totalSold: Array.isArray(p.transactionItems)
@@ -62,7 +56,6 @@ export async function GET(request: NextRequest) {
       withSold.sort((a: { totalSold: number }, b: { totalSold: number }) => b.totalSold - a.totalSold)
 
       total = withSold.length
-      // Remove transactionItems from response, strip totalSold
       products = withSold
         .slice(skip, skip + limit)
         .map(({ totalSold: _ts, transactionItems: _ti, ...rest }: Record<string, unknown>) => rest)
@@ -74,7 +67,6 @@ export async function GET(request: NextRequest) {
       } else if (sort === 'most-stock') {
         orderBy = { stock: 'desc' }
       }
-      // sort === 'newest' uses default createdAt: 'desc'
 
       const [result, count] = await Promise.all([
         db.product.findMany({
@@ -113,20 +105,18 @@ export async function POST(request: NextRequest) {
     const outletId = user.outletId
 
     const body = await request.json()
-    const { name, sku, hpp, price, bruto, netto, stock, lowStockAlert, image, categoryId, unit } = body
+    const { name, sku, hpp, price, stock, lowStockAlert, image, categoryId, unit } = body
 
     if (!name || price === undefined || price === null) {
       return safeJsonError('Product name and price are required', 400)
     }
 
-    // K3: Dynamic product limit based on plan
+    // Dynamic product limit based on plan
     const outlet = await db.outlet.findUnique({
       where: { id: outletId },
       select: { accountType: true },
     })
-    const accountType = outlet?.accountType?.startsWith('suspended:')
-      ? outlet.accountType.replace('suspended:', '')
-      : (outlet?.accountType || 'free')
+    const accountType = resolvePlanType(outlet?.accountType)
     const features = getPlanFeatures(accountType)
 
     if (!isUnlimited(features.maxProducts)) {
@@ -161,8 +151,6 @@ export async function POST(request: NextRequest) {
           sku: sku || null,
           hpp: hpp || 0,
           price,
-          bruto: bruto || 0,
-          netto: netto || 0,
           stock: stock || 0,
           lowStockAlert: lowStockAlert || 10,
           image: image || null,

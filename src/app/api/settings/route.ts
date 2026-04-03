@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import { safeAuditLog } from '@/lib/safe-audit'
@@ -206,7 +206,6 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error) {
     console.error('PUT /api/settings error:', error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
     return safeJsonError('Internal server error', 500)
   }
 }

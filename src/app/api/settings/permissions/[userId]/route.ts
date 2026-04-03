@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import { safeJson, safeJsonError } from '@/lib/safe-response'

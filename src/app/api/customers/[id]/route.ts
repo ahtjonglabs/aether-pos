@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { safeAuditLog } from '@/lib/safe-audit'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 

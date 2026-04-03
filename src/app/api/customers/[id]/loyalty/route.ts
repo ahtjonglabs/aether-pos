@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
+import { parsePagination } from '@/lib/api-helpers'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
@@ -24,9 +25,7 @@ export async function GET(
     }
 
     const { searchParams } = request.nextUrl
-    const page = Math.max(1, Number(searchParams.get('page')) || 1)
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || 20))
-    const skip = (page - 1) * limit
+    const { skip, limit } = parsePagination(searchParams)
 
     const [loyaltyLogs, total] = await Promise.all([
       db.loyaltyLog.findMany({
@@ -38,7 +37,7 @@ export async function GET(
       db.loyaltyLog.count({ where: { customerId: id } }),
     ])
 
-    return safeJson({ logs: loyaltyLogs, totalPages: Math.ceil(total / limit) })
+    return safeJson({ logs: loyaltyLogs, totalPages: Math.ceil(total / limit) || 1 })
   } catch (error) {
     console.error('Loyalty GET error:', error)
     return safeJsonError('Failed to load loyalty history', 500)

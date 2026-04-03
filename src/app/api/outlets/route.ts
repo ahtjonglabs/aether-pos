@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { resolvePlanType } from '@/lib/api-helpers'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
       select: { accountType: true },
     })
 
-    const isEnterprise = primaryOutlet?.accountType === 'enterprise'
+    const isEnterprise = resolvePlanType(primaryOutlet?.accountType) === 'enterprise'
 
     if (!isEnterprise) {
       // Non-enterprise: only return primary outlet
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       select: { accountType: true },
     })
 
-    if (primaryOutlet?.accountType !== 'enterprise') {
+    if (resolvePlanType(primaryOutlet?.accountType) !== 'enterprise') {
       return safeJsonError('Multi-outlet hanya tersedia untuk akun Enterprise. Upgrade untuk mengakses fitur ini.', 403)
     }
 

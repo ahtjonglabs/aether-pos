@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getPlanFeatures } from '@/lib/plan-config'
+import { buildDateFilter, resolvePlanType } from '@/lib/api-helpers'
 import { safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
@@ -16,9 +17,7 @@ export async function GET(request: NextRequest) {
       where: { id: outletId },
       select: { accountType: true },
     })
-    const accountType = outlet?.accountType?.startsWith('suspended:')
-      ? outlet.accountType.replace('suspended:', '')
-      : (outlet?.accountType || 'free')
+    const accountType = resolvePlanType(outlet?.accountType)
     const features = getPlanFeatures(accountType)
     if (!features.exportExcel) {
       return safeJsonError('Fitur export Excel hanya tersedia untuk paket Pro ke atas. Upgrade sekarang!', 403)
@@ -35,16 +34,9 @@ export async function GET(request: NextRequest) {
     if (action && action !== 'ALL') {
       where.action = action
     }
-    if (dateFrom || dateTo) {
-      where.createdAt = {}
-      if (dateFrom) {
-        (where.createdAt as Record<string, unknown>).gte = new Date(dateFrom)
-      }
-      if (dateTo) {
-        const toDate = new Date(dateTo)
-        toDate.setHours(23, 59, 59, 999)
-        (where.createdAt as Record<string, unknown>).lte = toDate
-      }
+    const dateFilter = buildDateFilter(dateFrom, dateTo)
+    if (Object.keys(dateFilter).length > 0) {
+      where.createdAt = dateFilter
     }
     if (search) {
       where.OR = [

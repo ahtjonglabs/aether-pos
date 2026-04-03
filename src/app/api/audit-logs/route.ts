@@ -1,9 +1,8 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { parsePagination, buildDateFilter } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
-
-const PAGE_SIZE = 20
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,31 +13,20 @@ export async function GET(request: NextRequest) {
     const outletId = user.outletId
 
     const { searchParams } = request.nextUrl
-    const page = Math.max(1, Number(searchParams.get('page')) || 1)
-    const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || PAGE_SIZE))
+    const { page, limit, skip } = parsePagination(searchParams)
     const action = searchParams.get('action') || ''
     const dateFrom = searchParams.get('from') || ''
     const dateTo = searchParams.get('to') || ''
     const search = searchParams.get('search') || ''
-
-    const skip = (page - 1) * limit
 
     const where: Record<string, unknown> = { outletId }
 
     if (action && action !== 'ALL') {
       where.action = action
     }
-    if (dateFrom || dateTo) {
-      where.createdAt = {}
-      if (dateFrom) {
-        (where.createdAt as Record<string, unknown>).gte = new Date(dateFrom)
-      }
-      if (dateTo) {
-        // Set to end of day
-        const toDate = new Date(dateTo)
-        toDate.setHours(23, 59, 59, 999)
-        (where.createdAt as Record<string, unknown>).lte = toDate
-      }
+    const dateFilter = buildDateFilter(dateFrom, dateTo)
+    if (Object.keys(dateFilter).length > 0) {
+      where.createdAt = dateFilter
     }
     if (search) {
       where.OR = [

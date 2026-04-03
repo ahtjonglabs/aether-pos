@@ -1,13 +1,16 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { buildDateFilter, getVoidedTxIds } from '@/lib/api-helpers'
 import { getOutletPlan } from '@/lib/plan-config'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
-    if (!user) return unauthorized()
+    if (!user) {
+      return unauthorized()
+    }
 
     const outletId = user.outletId
 
@@ -23,17 +26,7 @@ export async function GET(request: NextRequest) {
     const filterOutletId = searchParams.get('outletId') || outletId
 
     // Build date filter
-    const dateFilter: Record<string, unknown> = {}
-    if (dateFrom) {
-      const start = new Date(dateFrom)
-      start.setHours(0, 0, 0, 0)
-      dateFilter.gte = start
-    }
-    if (dateTo) {
-      const end = new Date(dateTo)
-      end.setHours(23, 59, 59, 999)
-      dateFilter.lte = end
-    }
+    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
 
     // Build base where clause
     const baseWhere: Record<string, unknown> = { outletId: filterOutletId }
@@ -42,15 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all voided transaction IDs for this outlet
-    const voidedTxIds = await db.auditLog.findMany({
-      where: {
-        entityType: 'TRANSACTION',
-        action: 'VOID',
-        outletId: filterOutletId,
-      },
-      select: { entityId: true },
-    })
-    const voidedIdSet = new Set(voidedTxIds.map((v) => v.entityId))
+    const voidedIdSet = await getVoidedTxIds(db, filterOutletId)
 
     // Exclude voided transactions
     const activeWhere = { ...baseWhere }
