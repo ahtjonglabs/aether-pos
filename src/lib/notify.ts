@@ -112,7 +112,7 @@ export async function notifyNewCustomer(
       outletName: config.outletName,
     })
 
-    sendTelegramMessage(config.chatId, message)
+    sendTelegramMessage(config.chatId, message).catch(() => {})
   })
 }
 

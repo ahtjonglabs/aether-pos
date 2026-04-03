@@ -78,10 +78,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Password minimal 6 karakter' }, { status: 400 })
     }
 
-    // Check email uniqueness within outlet
-    const existingUser = await db.user.findUnique({
-      where: { email },
-    })
+    // Check email uniqueness within outlet (email is part of compound unique [email, outletId])
+    const existingUser = await db.user.findFirst({ where: { email } })
     if (existingUser) {
       return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 })
     }

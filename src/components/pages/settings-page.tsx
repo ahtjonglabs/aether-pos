@@ -1934,8 +1934,87 @@ function AccountTab() {
 
 function MultiOutletTab() {
   const { settings, loading } = useSettings()
+  const [outlets, setOutlets] = useState<Array<{
+    id: string; name: string; address: string | null; phone: string | null;
+    accountType: string; isPrimary: boolean; createdAt: string;
+    userCount: number; productCount: number; transactionCount: number; customerCount: number;
+  }>>([])
+  const [outletsLoading, setOutletsLoading] = useState(true)
+  const [canAddMore, setCanAddMore] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [formData, setFormData] = useState({ name: '', address: '', phone: '' })
+  const [saving, setSaving] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
-  if (loading) {
+  const fetchOutlets = useCallback(async () => {
+    setOutletsLoading(true)
+    try {
+      const res = await fetch('/api/outlets')
+      if (res.ok) {
+        const data = await res.json()
+        setOutlets(data.outlets || [])
+        setCanAddMore(data.canAddMore || false)
+      }
+    } catch {
+      toast.error('Gagal memuat outlet')
+    } finally {
+      setOutletsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchOutlets() }, [fetchOutlets])
+
+  const handleCreate = async () => {
+    if (!formData.name.trim()) {
+      toast.error('Nama outlet wajib diisi')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/outlets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        toast.success(`Outlet "${data.outlet.name}" berhasil ditambahkan`)
+        setDialogOpen(false)
+        setFormData({ name: '', address: '', phone: '' })
+        fetchOutlets()
+      } else {
+        const err = await res.json()
+        toast.error(err.error || 'Gagal menambah outlet')
+      }
+    } catch {
+      toast.error('Gagal menambah outlet')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteId) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/outlets/${deleteId}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Outlet berhasil dihapus')
+        setDeleteId(null)
+        fetchOutlets()
+      } else {
+        const err = await res.json()
+        toast.error(err.error || 'Gagal menghapus outlet')
+      }
+    } catch {
+      toast.error('Gagal menghapus outlet')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (loading || outletsLoading) {
     return (
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-3">
@@ -1946,8 +2025,10 @@ function MultiOutletTab() {
     )
   }
 
-  return (
-    <div className="space-y-4">
+  const isEnterprise = settings?.outlet?.accountType === 'enterprise' || canAddMore
+
+  if (!isEnterprise) {
+    return (
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">
           <div>
@@ -1955,7 +2036,6 @@ function MultiOutletTab() {
             <p className="text-xs text-zinc-400 mt-0.5">Kelola beberapa outlet dalam satu akun</p>
           </div>
 
-          {/* Current outlet info */}
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-emerald-400" />
@@ -1966,30 +2046,6 @@ function MultiOutletTab() {
             </div>
           </div>
 
-          {/* Placeholder for future outlets */}
-          <div className="space-y-2">
-            {Array.from({ length: 2 }).map((_, i) => (
-              <div
-                key={i}
-                className="rounded-lg border border-dashed border-zinc-800 p-4 flex items-center justify-center opacity-40"
-              >
-                <div className="text-center">
-                  <Building2 className="h-5 w-5 text-zinc-600 mx-auto mb-1" />
-                  <p className="text-xs text-zinc-600">Outlet cabang {i + 1}</p>
-                  <p className="text-[10px] text-zinc-700">Segera hadir</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <Button
-            disabled
-            className="w-full border-zinc-700 text-zinc-500 bg-zinc-800/50 h-9 text-xs"
-          >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Tambah Cabang
-          </Button>
-
           <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3">
             <p className="text-[11px] text-zinc-500 text-center">
               Multi-outlet tersedia untuk akun <span className="text-amber-400 font-medium">Enterprise</span>. Upgrade untuk mengakses fitur ini.
@@ -1997,6 +2053,153 @@ function MultiOutletTab() {
           </div>
         </CardContent>
       </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Outlet Cabang</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {outlets.length} outlet terdaftar
+              </p>
+            </div>
+            {canAddMore && (
+              <Button onClick={() => { setFormData({ name: '', address: '', phone: '' }); setDialogOpen(true) }}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Tambah Cabang
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {outlets.map((outlet) => (
+              <div key={outlet.id}
+                className={`rounded-lg border p-3 space-y-1.5 transition-colors ${
+                  outlet.isPrimary
+                    ? 'border-emerald-500/20 bg-emerald-500/5'
+                    : 'border-zinc-800 bg-zinc-800/30 hover:border-zinc-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Building2 className={`h-4 w-4 shrink-0 ${outlet.isPrimary ? 'text-emerald-400' : 'text-zinc-500'}`} />
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold truncate ${outlet.isPrimary ? 'text-emerald-400' : 'text-zinc-200'}`}>
+                        {outlet.name}
+                        {outlet.isPrimary && <span className="ml-1.5 text-[10px] font-normal text-emerald-300">(Utama)</span>}
+                      </p>
+                      {outlet.address && <p className="text-[11px] text-zinc-500 truncate">{outlet.address}</p>}
+                    </div>
+                  </div>
+                  {!outlet.isPrimary && (
+                    <Button variant="ghost" size="icon"
+                      className="h-7 w-7 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 shrink-0"
+                      onClick={() => setDeleteId(outlet.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+                <div className="flex gap-3 text-[10px] text-zinc-500">
+                  {outlet.userCount > 0 && <span>{outlet.userCount} crew</span>}
+                  {outlet.productCount > 0 && <span>{outlet.productCount} produk</span>}
+                  {outlet.customerCount > 0 && <span>{outlet.customerCount} customer</span>}
+                  <span>{outlet.transactionCount} transaksi</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {outlets.length === 0 && (
+            <div className="py-6 text-center">
+              <Building2 className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
+              <p className="text-sm text-zinc-500">Belum ada outlet cabang</p>
+              <p className="text-[11px] text-zinc-600">Tambahkan outlet cabang untuk memperluas bisnis Anda</p>
+            </div>
+          )}
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-2.5">
+            <p className="text-[10px] text-zinc-500 text-center">
+              💡 Gunakan email & password yang sama untuk login ke outlet cabang.
+              Setiap outlet cabang memiliki data & transaksi terpisah.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Add Outlet Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 p-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-semibold text-zinc-100">Tambah Outlet Cabang</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-300">Nama Outlet *</Label>
+              <Input
+                value={formData.name}
+                onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                placeholder="Contoh: Toko Cabang Pondok Indah"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-300">Alamat</Label>
+              <Input
+                value={formData.address}
+                onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
+                placeholder="Jl. Merdeka No. 10"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-zinc-300">Telepon</Label>
+              <Input
+                value={formData.phone}
+                onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="081234567890"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs">
+              Batal
+            </Button>
+            <Button onClick={handleCreate} disabled={saving || !formData.name.trim()}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs">
+              {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Tambah Outlet
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm font-semibold text-zinc-100">Hapus Outlet</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-zinc-400">
+              Apakah Anda yakin ingin menghapus outlet ini? Semua data (produk, customer, transaksi, crew) akan dihapus permanen.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs" />
+            <AlertDialogAction onClick={handleDelete} disabled={deleting}
+              className="bg-red-500 hover:bg-red-600 text-white h-8 text-xs">
+              {deleting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

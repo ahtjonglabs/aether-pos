@@ -87,7 +87,6 @@ model Product {
   outlet           Outlet         @relation(fields: [outletId], references: [id])
   category        Category?      @relation(fields: [categoryId], references: [id])
   transactionItems TransactionItem[]
-  auditLogs        AuditLog[]
 
   @@unique([name, outletId])
 }
@@ -164,9 +163,9 @@ model LoyaltyLog {
 // ==================== AUDIT LOG ====================
 model AuditLog {
   id          String   @id @default(cuid())
-  action      String               // CREATE, RESTOCK, SALE, ADJUSTMENT
-  entityType  String               // PRODUCT, STOCK
-  entityId    String?
+  action      String               // CREATE, RESTOCK, SALE, ADJUSTMENT, UPDATE
+  entityType  String               // PRODUCT, STOCK, OUTLET, SETTINGS, TRANSACTION
+  entityId    String?              // ID of the referenced entity (any type)
   details     String?              // JSON string with change details
   outletId    String
   userId      String
@@ -174,7 +173,6 @@ model AuditLog {
 
   outlet  Outlet  @relation(fields: [outletId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
-  product Product? @relation(fields: [entityId], references: [id])
 }
 
 // ==================== OUTLET SETTING ====================
