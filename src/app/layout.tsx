@@ -14,8 +14,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aether POS",
-  description: "High-performance POS for MSME",
+  title: "Aether POS — Point of Sale System",
+  description: "High-performance POS for MSME. Modern, fast, and reliable point-of-sale system for small and medium businesses.",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/logo.png",
+  },
+  openGraph: {
+    title: "Aether POS",
+    description: "High-performance POS for MSME",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

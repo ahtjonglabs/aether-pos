@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       receiptLogo: setting.receiptLogo,
       themePrimaryColor: setting.themePrimaryColor,
       telegramChatId: setting.telegramChatId,
+      telegramBotToken: setting.telegramBotToken ? '••••••' : null,
       notifyOnTransaction: setting.notifyOnTransaction,
       notifyOnCustomer: setting.notifyOnCustomer,
       notifyDailyReport: setting.notifyDailyReport,
@@ -78,46 +79,32 @@ export async function PUT(request: NextRequest) {
     const notifyWeeklyReport = typeof body.notifyWeeklyReport === 'boolean' ? body.notifyWeeklyReport : undefined
     const notifyMonthlyReport = typeof body.notifyMonthlyReport === 'boolean' ? body.notifyMonthlyReport : undefined
 
+    const settingsData = {
+      outletId: user.outletId,
+      ...(body.paymentMethods !== undefined && { paymentMethods: String(body.paymentMethods) }),
+      ...(loyaltyEnabled !== undefined && { loyaltyEnabled }),
+      ...(loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount }),
+      ...(loyaltyPointValue !== undefined && { loyaltyPointValue }),
+      ...(body.receiptBusinessName !== undefined && { receiptBusinessName: String(body.receiptBusinessName ?? '') }),
+      ...(body.receiptAddress !== undefined && { receiptAddress: String(body.receiptAddress ?? '') }),
+      ...(body.receiptPhone !== undefined && { receiptPhone: String(body.receiptPhone ?? '') }),
+      ...(body.receiptFooter !== undefined && { receiptFooter: String(body.receiptFooter ?? '') }),
+      ...(body.receiptLogo !== undefined && { receiptLogo: String(body.receiptLogo ?? '') }),
+      ...(body.themePrimaryColor !== undefined && { themePrimaryColor: String(body.themePrimaryColor) }),
+      ...(body.telegramBotToken !== undefined && { telegramBotToken: body.telegramBotToken ? String(body.telegramBotToken) : null }),
+      ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId ? String(body.telegramChatId) : null }),
+      ...(notifyOnTransaction !== undefined && { notifyOnTransaction }),
+      ...(notifyOnCustomer !== undefined && { notifyOnCustomer }),
+      ...(notifyDailyReport !== undefined && { notifyDailyReport }),
+      ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
+      ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
+    }
+
     // Upsert settings
     const setting = await db.outletSetting.upsert({
       where: { outletId: user.outletId },
-      create: {
-        outletId: user.outletId,
-        ...(body.paymentMethods !== undefined && { paymentMethods: String(body.paymentMethods) }),
-        ...(loyaltyEnabled !== undefined && { loyaltyEnabled }),
-        ...(loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount }),
-        ...(loyaltyPointValue !== undefined && { loyaltyPointValue }),
-        ...(body.receiptBusinessName !== undefined && { receiptBusinessName: String(body.receiptBusinessName ?? '') }),
-        ...(body.receiptAddress !== undefined && { receiptAddress: String(body.receiptAddress ?? '') }),
-        ...(body.receiptPhone !== undefined && { receiptPhone: String(body.receiptPhone ?? '') }),
-        ...(body.receiptFooter !== undefined && { receiptFooter: String(body.receiptFooter ?? '') }),
-        ...(body.receiptLogo !== undefined && { receiptLogo: String(body.receiptLogo ?? '') }),
-        ...(body.themePrimaryColor !== undefined && { themePrimaryColor: String(body.themePrimaryColor) }),
-        ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId ? String(body.telegramChatId) : null }),
-        ...(notifyOnTransaction !== undefined && { notifyOnTransaction }),
-        ...(notifyOnCustomer !== undefined && { notifyOnCustomer }),
-        ...(notifyDailyReport !== undefined && { notifyDailyReport }),
-        ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
-        ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
-      },
-      update: {
-        ...(body.paymentMethods !== undefined && { paymentMethods: String(body.paymentMethods) }),
-        ...(loyaltyEnabled !== undefined && { loyaltyEnabled }),
-        ...(loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount }),
-        ...(loyaltyPointValue !== undefined && { loyaltyPointValue }),
-        ...(body.receiptBusinessName !== undefined && { receiptBusinessName: String(body.receiptBusinessName ?? '') }),
-        ...(body.receiptAddress !== undefined && { receiptAddress: String(body.receiptAddress ?? '') }),
-        ...(body.receiptPhone !== undefined && { receiptPhone: String(body.receiptPhone ?? '') }),
-        ...(body.receiptFooter !== undefined && { receiptFooter: String(body.receiptFooter ?? '') }),
-        ...(body.receiptLogo !== undefined && { receiptLogo: String(body.receiptLogo ?? '') }),
-        ...(body.themePrimaryColor !== undefined && { themePrimaryColor: String(body.themePrimaryColor) }),
-        ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId ? String(body.telegramChatId) : null }),
-        ...(notifyOnTransaction !== undefined && { notifyOnTransaction }),
-        ...(notifyOnCustomer !== undefined && { notifyOnCustomer }),
-        ...(notifyDailyReport !== undefined && { notifyDailyReport }),
-        ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
-        ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
-      },
+      create: settingsData,
+      update: settingsData,
       include: { outlet: true },
     })
 
@@ -155,7 +142,7 @@ export async function PUT(request: NextRequest) {
     const SETTINGS_KEYS = [
       'paymentMethods', 'loyaltyEnabled', 'loyaltyPointsPerAmount', 'loyaltyPointValue',
       'receiptBusinessName', 'receiptAddress', 'receiptPhone', 'receiptFooter', 'receiptLogo',
-      'themePrimaryColor', 'telegramChatId',
+      'themePrimaryColor', 'telegramBotToken', 'telegramChatId',
       'notifyOnTransaction', 'notifyOnCustomer', 'notifyDailyReport', 'notifyWeeklyReport', 'notifyMonthlyReport',
     ] as const
     const settingsChanged: Record<string, unknown> = {}
@@ -197,6 +184,7 @@ export async function PUT(request: NextRequest) {
       receiptLogo: updated!.receiptLogo,
       themePrimaryColor: updated!.themePrimaryColor,
       telegramChatId: updated!.telegramChatId,
+      telegramBotToken: updated!.telegramBotToken ? '••••••' : null,
       notifyOnTransaction: updated!.notifyOnTransaction,
       notifyOnCustomer: updated!.notifyOnCustomer,
       notifyDailyReport: updated!.notifyDailyReport,

@@ -41,7 +41,9 @@ export interface PlanFeatures {
 
   // Advanced
   offlineMode: boolean           // Offline POS (IndexedDB)
-  multiOutlet: boolean           // Multiple outlets (future)
+  multiOutlet: boolean           // Multiple outlets
+  bulkUpload: boolean            // Bulk upload products via Excel
+  transactionSummary: boolean    // Transaction summary per outlet
   apiAccess: boolean             // Command Center API access
   prioritySupport: boolean
 }
@@ -74,6 +76,8 @@ export const PLANS: Record<AccountType, PlanFeatures> = {
 
     offlineMode: true,
     multiOutlet: false,
+    bulkUpload: false,
+    transactionSummary: false,
     apiAccess: false,
     prioritySupport: false,
   },
@@ -101,6 +105,8 @@ export const PLANS: Record<AccountType, PlanFeatures> = {
 
     offlineMode: true,
     multiOutlet: false,
+    bulkUpload: true,
+    transactionSummary: true,
     apiAccess: true,
     prioritySupport: true,
   },
@@ -128,6 +134,8 @@ export const PLANS: Record<AccountType, PlanFeatures> = {
 
     offlineMode: true,
     multiOutlet: true,
+    bulkUpload: true,
+    transactionSummary: true,
     apiAccess: true,
     prioritySupport: true,
   },

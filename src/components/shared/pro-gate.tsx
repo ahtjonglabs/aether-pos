@@ -107,6 +107,7 @@ function getFeatureLabel(feature: string): string {
   const labels: Record<string, string> = {
     productImage: 'Upload Foto Produk',
     crewPermissions: 'Hak Akses Crew',
+    bulkUpload: 'Upload Excel',
     exportExcel: 'Export Excel',
     offlineMode: 'Mode Offline',
     multiOutlet: 'Multi Outlet',
@@ -116,6 +117,7 @@ function getFeatureLabel(feature: string): string {
     dashboardAnalytics: 'Analytics Dashboard',
     stockMovement: 'Pergerakan Stok',
     auditLog: 'Audit Log',
+    transactionSummary: 'Ringkasan Transaksi',
   }
   return labels[feature] || 'Fitur Pro'
 }

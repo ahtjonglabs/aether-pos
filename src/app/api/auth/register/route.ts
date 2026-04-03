@@ -22,8 +22,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if email already exists
-    const existingUser = await db.user.findUnique({ where: { email } });
+    // Check if email already exists (use findFirst since email is part of compound unique [email, outletId])
+    const existingUser = await db.user.findFirst({ where: { email } });
     if (existingUser) {
       return NextResponse.json(
         { error: 'Email already registered' },

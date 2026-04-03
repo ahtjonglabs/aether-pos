@@ -50,7 +50,7 @@ import {
 } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { localDB, type CachedProduct, type CachedCategory, type CachedCustomer } from '@/lib/local-db'
-import { syncAllData, getAllSyncTimes } from '@/lib/sync-service'
+import { syncAllData, getAllSyncTimes, syncSettingsFromServer, getCachedSettings } from '@/lib/sync-service'
 
 // ==================== TYPES ====================
 
@@ -158,30 +158,51 @@ export default function PosPage() {
     return settings.paymentMethods.split(',').map(m => m.trim().toUpperCase()).filter(Boolean) as Array<'CASH' | 'QRIS' | 'DEBIT'>
   }, [settings.paymentMethods])
 
-  // Fetch settings
+  // Fetch settings (online: from API + cache to IndexedDB, offline: from IndexedDB cache)
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch('/api/settings')
-        if (res.ok) {
-          const data = await res.json()
-          setSettings({
-            paymentMethods: data.paymentMethods || 'CASH,QRIS',
-            loyaltyEnabled: data.loyaltyEnabled ?? true,
-            loyaltyPointsPerAmount: data.loyaltyPointsPerAmount || 10000,
-            loyaltyPointValue: data.loyaltyPointValue || 100,
-            receiptBusinessName: data.receiptBusinessName || 'Aether POS',
-            receiptAddress: data.receiptAddress || '',
-            receiptPhone: data.receiptPhone || '',
-            receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
-            receiptLogo: data.receiptLogo || '',
-            themePrimaryColor: data.themePrimaryColor || 'emerald',
-          })
+        if (isOnline) {
+          const res = await fetch('/api/settings')
+          if (res.ok) {
+            const data = await res.json()
+            setSettings({
+              paymentMethods: data.paymentMethods || 'CASH,QRIS',
+              loyaltyEnabled: data.loyaltyEnabled ?? true,
+              loyaltyPointsPerAmount: data.loyaltyPointsPerAmount || 10000,
+              loyaltyPointValue: data.loyaltyPointValue || 100,
+              receiptBusinessName: data.receiptBusinessName || 'Aether POS',
+              receiptAddress: data.receiptAddress || '',
+              receiptPhone: data.receiptPhone || '',
+              receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
+              receiptLogo: data.receiptLogo || '',
+              themePrimaryColor: data.themePrimaryColor || 'emerald',
+            })
+            // Cache settings for offline use
+            syncSettingsFromServer()
+          }
+        } else {
+          // Offline: load from IndexedDB cache
+          const cached = await getCachedSettings()
+          if (cached) {
+            setSettings({
+              paymentMethods: (cached.paymentMethods as string) || 'CASH,QRIS',
+              loyaltyEnabled: (cached.loyaltyEnabled as boolean) ?? true,
+              loyaltyPointsPerAmount: (cached.loyaltyPointsPerAmount as number) || 10000,
+              loyaltyPointValue: (cached.loyaltyPointValue as number) || 100,
+              receiptBusinessName: (cached.receiptBusinessName as string) || 'Aether POS',
+              receiptAddress: (cached.receiptAddress as string) || '',
+              receiptPhone: (cached.receiptPhone as string) || '',
+              receiptFooter: (cached.receiptFooter as string) || 'Terima kasih atas kunjungan Anda!',
+              receiptLogo: (cached.receiptLogo as string) || '',
+              themePrimaryColor: (cached.themePrimaryColor as string) || 'emerald',
+            })
+          }
         }
       } catch { /* use defaults */ }
     }
     fetchSettings()
-  }, [])
+  }, [isOnline])
 
   // Customers
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -270,6 +291,7 @@ export default function PosPage() {
 
           setDataSyncing(true)
           const result = await syncAllData()
+          syncSettingsFromServer() // cache settings for offline (fire-and-forget)
           fetchProducts(productSearch, productPage, selectedCategoryId)
           loadCategoriesFromCache()
           loadCustomersFromCache()
@@ -294,6 +316,7 @@ export default function PosPage() {
         setDataSyncing(true)
         try {
           const result = await syncAllData()
+          syncSettingsFromServer() // cache settings for offline (fire-and-forget)
           fetchProducts(productSearch, productPage, selectedCategoryId)
           loadCategoriesFromCache()
           loadCustomersFromCache()
@@ -566,6 +589,17 @@ export default function PosPage() {
         createdAt: Date.now(),
         retryCount: 0,
       })
+
+      // STEP 1b: Decrement stock locally in IndexedDB to prevent overselling while offline
+      for (const item of cart) {
+        await localDB.products
+          .where('id')
+          .equals(item.product.id)
+          .modify((p) => {
+            p.stock = Math.max(0, (p.stock || 0) - item.qty)
+            p.updatedAt = new Date().toISOString()
+          })
+      }
 
       // STEP 2: If online, sync immediately
       if (isOnline) {
@@ -1097,13 +1131,13 @@ export default function PosPage() {
                       <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(item.product.price * item.qty)}</p>
                     </div>
                     <div className="flex items-center gap-0.5">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3 w-3" /></Button>
-                      <span className="text-xs text-zinc-200 w-5 text-center font-bold">{item.qty}</span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3 w-3" /></Button>
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3 w-3" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
+                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
+                      <span className="text-xs text-zinc-200 w-6 text-center font-bold">{item.qty}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
+                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
+                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
                 ))}
@@ -1243,15 +1277,15 @@ export default function PosPage() {
                     <p className="text-[11px] text-zinc-500">{formatCurrency(item.product.price)} × {item.qty}</p>
                   </div>
                   <div className="flex items-center gap-0.5">
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md"
-                      onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3 w-3" /></Button>
-                    <span className="text-[11px] w-4 text-center text-zinc-200 font-bold">{item.qty}</span>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md"
-                      onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3 w-3" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md min-w-[44px]"
+                      onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-4 w-4" /></Button>
+                    <span className="text-xs w-6 text-center text-zinc-200 font-bold">{item.qty}</span>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md min-w-[44px]"
+                      onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-4 w-4" /></Button>
                   </div>
                   <p className="text-xs text-emerald-400 font-bold min-w-[70px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-600 hover:text-red-400 rounded-md"
-                    onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 rounded-md min-w-[44px]"
+                    onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-4 w-4" /></Button>
                 </div>
               ))}
             </div>
@@ -1285,7 +1319,7 @@ export default function PosPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {getQuickNominals.map((nom) => (
                       <button key={nom} onClick={() => setPaidAmount(String(nom))}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-medium border transition-all ${
+                        className={`px-3 py-1.5 min-h-[36px] rounded-lg text-[11px] font-medium border transition-all ${
                           Number(paidAmount) === nom ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
                         }`}>
                         {nom >= 1000 ? `${nom / 1000}K` : nom}
@@ -1296,7 +1330,7 @@ export default function PosPage() {
               )}
 
               <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
-                className={`w-full h-10 font-bold text-sm rounded-xl ${cart.length > 0 ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
+                className={`w-full h-11 font-bold text-sm rounded-xl ${cart.length > 0 ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
                 <Check className="mr-2 h-4 w-4" /> Proses Pembayaran
               </Button>
             </div>

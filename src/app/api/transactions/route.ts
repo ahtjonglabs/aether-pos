@@ -76,6 +76,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get outlet name for display
+    const outlet = await db.outlet.findUnique({
+      where: { id: outletId },
+      select: { name: true },
+    })
+    const outletName = outlet?.name || 'Outlet Saat Ini'
+
     const [transactions, total] = await Promise.all([
       db.transaction.findMany({
         where,
@@ -150,6 +157,7 @@ export async function GET(request: NextRequest) {
         customerName: t.customer?.name ?? null,
         cashierName: t.user?.name ?? null,
         cashierId: t.user?.id ?? null,
+        outletName,
         createdAt: t.createdAt,
         _count: { items: t.items.length },
         voidStatus: voidInfo ? 'void' : 'active',

@@ -78,8 +78,24 @@ import {
   X,
   AlertTriangle,
   PackageX,
+  ChevronDown,
+  ChevronRight,
+  Tags,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
+import { ProGate } from '@/components/shared/pro-gate'
 import ProductFormDialog from './product-form-dialog'
+
+interface Category {
+  id: string
+  name: string
+  color: string
+  _count?: { products: number }
+}
 
 interface Product {
   id: string
@@ -92,6 +108,9 @@ interface Product {
   stock: number
   lowStockAlert: number
   image: string | null
+  categoryId: string | null
+  category?: { id: string; name: string; color: string } | null
+  unit: string
 }
 
 interface ProductListResponse {
@@ -136,6 +155,42 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: 'low-stock', label: 'Stock Menipis' },
   { value: 'most-stock', label: 'Stock Terbanyak' },
 ]
+
+const CATEGORY_COLORS = [
+  'zinc', 'emerald', 'amber', 'rose', 'violet', 'sky',
+  'cyan', 'orange', 'lime', 'teal', 'fuchsia', 'pink', 'indigo',
+] as const
+
+type CategoryColor = (typeof CATEGORY_COLORS)[number]
+
+function getColorClasses(color: string) {
+  const map: Record<string, { bg: string; text: string; border: string; dot: string; chipBg: string }> = {
+    zinc: { bg: 'bg-zinc-500/10', text: 'text-zinc-300', border: 'border-zinc-500/20', dot: 'bg-zinc-400', chipBg: 'bg-zinc-500/5 border-zinc-500/20 hover:bg-zinc-500/10' },
+    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', dot: 'bg-emerald-400', chipBg: 'bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10' },
+    amber: { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', dot: 'bg-amber-400', chipBg: 'bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10' },
+    rose: { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', dot: 'bg-rose-400', chipBg: 'bg-rose-500/5 border-rose-500/20 hover:bg-rose-500/10' },
+    violet: { bg: 'bg-violet-500/10', text: 'text-violet-400', border: 'border-violet-500/20', dot: 'bg-violet-400', chipBg: 'bg-violet-500/5 border-violet-500/20 hover:bg-violet-500/10' },
+    sky: { bg: 'bg-sky-500/10', text: 'text-sky-400', border: 'border-sky-500/20', dot: 'bg-sky-400', chipBg: 'bg-sky-500/5 border-sky-500/20 hover:bg-sky-500/10' },
+    cyan: { bg: 'bg-cyan-500/10', text: 'text-cyan-400', border: 'border-cyan-500/20', dot: 'bg-cyan-400', chipBg: 'bg-cyan-500/5 border-cyan-500/20 hover:bg-cyan-500/10' },
+    orange: { bg: 'bg-orange-500/10', text: 'text-orange-400', border: 'border-orange-500/20', dot: 'bg-orange-400', chipBg: 'bg-orange-500/5 border-orange-500/20 hover:bg-orange-500/10' },
+    lime: { bg: 'bg-lime-500/10', text: 'text-lime-400', border: 'border-lime-500/20', dot: 'bg-lime-400', chipBg: 'bg-lime-500/5 border-lime-500/20 hover:bg-lime-500/10' },
+    teal: { bg: 'bg-teal-500/10', text: 'text-teal-400', border: 'border-teal-500/20', dot: 'bg-teal-400', chipBg: 'bg-teal-500/5 border-teal-500/20 hover:bg-teal-500/10' },
+    fuchsia: { bg: 'bg-fuchsia-500/10', text: 'text-fuchsia-400', border: 'border-fuchsia-500/20', dot: 'bg-fuchsia-400', chipBg: 'bg-fuchsia-500/5 border-fuchsia-500/20 hover:bg-fuchsia-500/10' },
+    pink: { bg: 'bg-pink-500/10', text: 'text-pink-400', border: 'border-pink-500/20', dot: 'bg-pink-400', chipBg: 'bg-pink-500/5 border-pink-500/20 hover:bg-pink-500/10' },
+    indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-400', border: 'border-indigo-500/20', dot: 'bg-indigo-400', chipBg: 'bg-indigo-500/5 border-indigo-500/20 hover:bg-indigo-500/10' },
+  }
+  return map[color] || map['zinc']
+}
+
+function getColorDotClasses(color: string): string {
+  const map: Record<string, string> = {
+    zinc: 'bg-zinc-400', emerald: 'bg-emerald-400', amber: 'bg-amber-400', rose: 'bg-rose-400',
+    violet: 'bg-violet-400', sky: 'bg-sky-400', cyan: 'bg-cyan-400', orange: 'bg-orange-400',
+    lime: 'bg-lime-400', teal: 'bg-teal-400', fuchsia: 'bg-fuchsia-400', pink: 'bg-pink-400',
+    indigo: 'bg-indigo-400',
+  }
+  return map[color] || 'bg-zinc-400'
+}
 
 function getActionBadge(action: string) {
   switch (action) {
@@ -235,12 +290,56 @@ export default function ProductsPage() {
   const [bulkStockValue, setBulkStockValue] = useState('')
   const [bulkStockSubmitting, setBulkStockSubmitting] = useState(false)
 
+  // Bulk upload Excel state
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadResult, setUploadResult] = useState<{
+    created: number
+    skipped: number
+    errors: string[]
+  } | null>(null)
+  const [uploadDragOver, setUploadDragOver] = useState(false)
+
+  // Category management state
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
+  const [categorySectionOpen, setCategorySectionOpen] = useState(true)
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [editCategory, setEditCategory] = useState<Category | null>(null)
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryColor, setCategoryColor] = useState<string>('zinc')
+  const [categorySaving, setCategorySaving] = useState(false)
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null)
+  const [deleteCategoryProductCount, setDeleteCategoryProductCount] = useState(0)
+  const [categoryDeleting, setCategoryDeleting] = useState(false)
+
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/categories')
+      if (res.ok) {
+        const data = await res.json()
+        setCategories(data.categories || [])
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchCategories()
+  }, [fetchCategories])
+
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' })
       if (search) params.set('search', search)
       if (sort !== 'newest') params.set('sort', sort)
+      if (activeCategoryId) params.set('categoryId', activeCategoryId)
       const res = await fetch(`/api/products?${params}`)
       if (res.ok) {
         const data: ProductListResponse = await res.json()
@@ -254,7 +353,7 @@ export default function ProductsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, search, sort])
+  }, [page, search, sort, activeCategoryId])
 
   useEffect(() => {
     fetchProducts()
@@ -265,7 +364,7 @@ export default function ProductsPage() {
       setPage(1)
     }, 300)
     return () => clearTimeout(timer)
-  }, [search, sort])
+  }, [search, sort, activeCategoryId])
 
   const fetchDetail = useCallback(async (product: Product, pageNum: number) => {
     setDetailLoading(true)
@@ -445,6 +544,71 @@ export default function ProductsPage() {
     }
   }
 
+  // Category CRUD handlers
+  const openCategoryDialog = (cat: Category | null = null) => {
+    setEditCategory(cat)
+    setCategoryName(cat ? cat.name : '')
+    setCategoryColor(cat ? cat.color : 'zinc')
+    setCategoryDialogOpen(true)
+  }
+
+  const handleCategorySave = async () => {
+    if (!categoryName.trim()) {
+      toast.error('Nama kategori wajib diisi')
+      return
+    }
+    setCategorySaving(true)
+    try {
+      const url = editCategory ? `/api/categories/${editCategory.id}` : '/api/categories'
+      const method = editCategory ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: categoryName.trim(), color: categoryColor }),
+      })
+      if (res.ok) {
+        toast.success(editCategory ? 'Kategori diperbarui' : 'Kategori ditambahkan')
+        setCategoryDialogOpen(false)
+        fetchCategories()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Gagal menyimpan kategori')
+      }
+    } catch {
+      toast.error('Gagal menyimpan kategori')
+    } finally {
+      setCategorySaving(false)
+    }
+  }
+
+  const handleCategoryDelete = async () => {
+    if (!deleteCategoryId) return
+    setCategoryDeleting(true)
+    try {
+      const res = await fetch(`/api/categories/${deleteCategoryId}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Kategori dihapus')
+        if (activeCategoryId === deleteCategoryId) {
+          setActiveCategoryId(null)
+        }
+        fetchCategories()
+        fetchProducts()
+      } else {
+        toast.error('Gagal menghapus kategori')
+      }
+    } catch {
+      toast.error('Gagal menghapus kategori')
+    } finally {
+      setCategoryDeleting(false)
+      setDeleteCategoryId(null)
+    }
+  }
+
+  const openDeleteCategory = (cat: Category) => {
+    setDeleteCategoryId(cat.id)
+    setDeleteCategoryProductCount(cat._count?.products || 0)
+  }
+
   // Filtered movements
   const filteredMovements = useMemo(() => {
     if (!detailData) return []
@@ -492,11 +656,119 @@ export default function ProductsPage() {
               {bulkMode ? 'Edit Massal Aktif' : 'Edit Massal'}
             </Button>
           )}
+          <ProGate feature="bulkUpload" label="Upload Excel" description="Upload produk massal via file Excel" minHeight="40px">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUploadOpen(true)
+                setUploadFile(null)
+                setUploadResult(null)
+              }}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs"
+            >
+              <Upload className="mr-1.5 h-3.5 w-3.5" />
+              Upload Excel
+            </Button>
+          </ProGate>
           <Button onClick={handleAdd} className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs">
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Product
           </Button>
         </div>
+      </div>
+
+      {/* Category Management Section */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+        <button
+          onClick={() => setCategorySectionOpen(!categorySectionOpen)}
+          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Tags className="h-3.5 w-3.5 text-emerald-400" />
+            <span className="text-xs font-semibold text-zinc-200">Kategori</span>
+            {!categoriesLoading && categories.length > 0 && (
+              <span className="text-[11px] text-zinc-500">({categories.length})</span>
+            )}
+            {activeCategoryId && (
+              <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0 ml-1">
+                Filter aktif
+                <button
+                  onClick={(e) => { e.stopPropagation(); setActiveCategoryId(null) }}
+                  className="ml-1 hover:text-emerald-300"
+                >
+                  <X className="h-2.5 w-2.5 inline" />
+                </button>
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); openCategoryDialog(null) }}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-6 text-[11px] px-2"
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Tambah
+            </Button>
+            {categorySectionOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
+            )}
+          </div>
+        </button>
+
+        {categorySectionOpen && (
+          <div className="px-4 pb-3">
+            {categoriesLoading ? (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-28 bg-zinc-800 rounded-full flex-shrink-0" />
+                ))}
+              </div>
+            ) : categories.length === 0 ? (
+              <p className="text-[11px] text-zinc-500 py-2">Belum ada kategori. Klik "Tambah" untuk membuat kategori baru.</p>
+            ) : (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                {categories.map((cat) => {
+                  const colors = getColorClasses(cat.color)
+                  const isActive = activeCategoryId === cat.id
+                  return (
+                    <div
+                      key={cat.id}
+                      className={`group flex items-center gap-1.5 rounded-full border px-2.5 py-1 flex-shrink-0 cursor-pointer transition-all ${
+                        isActive
+                          ? `${colors.chipBg} ${colors.text} ring-1 ${colors.border}`
+                          : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600'
+                      }`}
+                      onClick={() => setActiveCategoryId(isActive ? null : cat.id)}
+                    >
+                      <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${getColorDotClasses(cat.color)}`} />
+                      <span className="text-[11px] font-medium whitespace-nowrap">{cat.name}</span>
+                      <span className="text-[10px] opacity-60">{cat._count?.products || 0}</span>
+                      <div className="flex items-center gap-0 ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openCategoryDialog(cat) }}
+                          className="hover:text-emerald-400 text-zinc-500 hover:bg-zinc-700 rounded p-0.5"
+                          title="Edit"
+                        >
+                          <Edit className="h-2.5 w-2.5" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openDeleteCategory(cat) }}
+                          className="hover:text-red-400 text-zinc-500 hover:bg-zinc-700 rounded p-0.5"
+                          title="Hapus"
+                        >
+                          <Trash2 className="h-2.5 w-2.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Search & Sort */}
@@ -555,7 +827,9 @@ export default function ProductsPage() {
                   </TableHead>
                 )}
                 <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium">Kategori</TableHead>
                 <TableHead className="text-zinc-500 text-[11px] font-medium">SKU</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium">Satuan</TableHead>
                 {isOwner && (
                   <TableHead className="text-zinc-500 text-[11px] font-medium text-right">HPP</TableHead>
                 )}
@@ -607,7 +881,24 @@ export default function ProductsPage() {
                         {product.name}
                       </div>
                     </TableCell>
+                    <TableCell className="text-xs py-2.5 px-3">
+                      {product.category ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
+                          <span className={`text-[11px] font-medium ${getColorClasses(product.category.color).text}`}>
+                            {product.category.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-zinc-600">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{product.sku || '-'}</TableCell>
+                    <TableCell className="text-xs py-2.5 px-3">
+                      <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0">
+                        {product.unit || 'pcs'}
+                      </Badge>
+                    </TableCell>
                     {isOwner && (
                       <TableCell className="text-xs text-zinc-300 text-right py-2.5 px-3">{formatCurrency(product.hpp)}</TableCell>
                     )}
@@ -734,8 +1025,106 @@ export default function ProductsPage() {
         open={formOpen}
         onOpenChange={setFormOpen}
         product={editProduct}
-        onSaved={fetchProducts}
+        onSaved={() => { fetchProducts(); fetchCategories() }}
       />
+
+      {/* Category Create/Edit Dialog */}
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100 text-sm font-semibold">
+              {editCategory ? 'Edit Kategori' : 'Tambah Kategori'}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              {editCategory ? 'Ubah nama dan warna kategori' : 'Buat kategori baru untuk mengelompokkan produk'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label className="text-zinc-300 text-xs">Nama Kategori *</Label>
+              <Input
+                value={categoryName}
+                onChange={(e) => setCategoryName(e.target.value)}
+                placeholder="Contoh: Minuman, Makanan, Snack"
+                className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCategorySave() }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-zinc-300 text-xs">Warna</Label>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {CATEGORY_COLORS.map((color) => {
+                  const isSelected = categoryColor === color
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setCategoryColor(color)}
+                      className={`h-7 w-7 rounded-full ${getColorDotClasses(color)} transition-all ${
+                        isSelected ? 'ring-2 ring-offset-2 ring-offset-zinc-900 ring-white/50 scale-110' : 'hover:scale-105 opacity-70 hover:opacity-100'
+                      }`}
+                      title={color}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setCategoryDialogOpen(false)}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleCategorySave}
+              disabled={categorySaving || !categoryName.trim()}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+            >
+              {categorySaving && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+              {editCategory ? 'Simpan' : 'Tambah'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Delete Confirmation */}
+      <AlertDialog open={!!deleteCategoryId} onOpenChange={(open) => !open && setDeleteCategoryId(null)}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100 text-sm font-semibold">Hapus Kategori</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400 text-xs">
+              {deleteCategoryProductCount > 0 ? (
+                <>
+                  <span className="flex items-center gap-1.5 text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Perhatian!
+                  </span>
+                  <br />
+                  Kategori ini memiliki <span className="text-zinc-200 font-medium">{deleteCategoryProductCount} produk</span>. Produk akan dikembalikan ke status tanpa kategori.
+                </>
+              ) : (
+                'Apakah Anda yakin ingin menghapus kategori ini? Tindakan ini tidak dapat dibatalkan.'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleCategoryDelete}
+              disabled={categoryDeleting}
+              className="bg-red-500 hover:bg-red-600 text-white h-8 text-xs"
+            >
+              {categoryDeleting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
@@ -981,6 +1370,197 @@ export default function ProductsPage() {
               {bulkStockSubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               Terapkan
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Excel Dialog */}
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-zinc-100 text-sm font-semibold">Upload Produk Excel</DialogTitle>
+            <DialogDescription className="text-zinc-400 text-xs">
+              Upload file Excel (.xlsx) untuk menambahkan produk secara massal (maks. 500 baris)
+            </DialogDescription>
+          </DialogHeader>
+
+          {!uploadResult ? (
+            <div className="space-y-3 py-1">
+              {/* Download template */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  window.open('/api/products/bulk-upload/template', '_blank')
+                }}
+                className="w-full bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-9 text-xs"
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" />
+                Download Template Excel
+              </Button>
+
+              {/* Drag and drop area */}
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setUploadDragOver(true)
+                }}
+                onDragLeave={() => setUploadDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  setUploadDragOver(false)
+                  const file = e.dataTransfer.files[0]
+                  if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+                    setUploadFile(file)
+                  } else {
+                    toast.error('Format file tidak didukung. Gunakan .xlsx atau .xls')
+                  }
+                }}
+                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                  uploadDragOver
+                    ? 'border-emerald-500 bg-emerald-500/5'
+                    : uploadFile
+                    ? 'border-emerald-500/50 bg-emerald-500/5'
+                    : 'border-zinc-700 hover:border-zinc-600'
+                }`}
+              >
+                {uploadFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+                    <span className="text-xs text-zinc-200">{uploadFile.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setUploadFile(null)}
+                      className="h-6 w-6 p-0 text-zinc-500 hover:text-red-400"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 mx-auto mb-2 text-zinc-600" />
+                    <p className="text-xs text-zinc-400">Drag & drop file Excel di sini</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">atau</p>
+                  </>
+                )}
+              </div>
+
+              {!uploadFile && (
+                <label className="block">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) setUploadFile(file)
+                    }}
+                    className="hidden"
+                  />
+                  <div className="w-full text-center py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 cursor-pointer text-xs">
+                    Pilih File
+                  </div>
+                </label>
+              )}
+
+              <div className="space-y-1">
+                <p className="text-[11px] text-zinc-500 font-medium">Kolom yang dibutuhkan:</p>
+                <p className="text-[11px] text-zinc-400">Nama* (wajib), Harga Jual* (wajib), SKU, HPP, Stok, Satuan, Kategori</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 py-1">
+              {/* Result summary */}
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 space-y-2">
+                <h3 className="text-xs font-semibold text-zinc-300">Hasil Upload</h3>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-zinc-300">
+                      <span className="font-semibold text-emerald-400">{uploadResult.created}</span> produk berhasil ditambahkan
+                    </span>
+                  </div>
+                  {uploadResult.skipped > 0 && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="text-zinc-300">
+                        <span className="font-semibold text-amber-400">{uploadResult.skipped}</span> produk dilewati (sudah ada)
+                      </span>
+                    </div>
+                  )}
+                  {uploadResult.errors.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                        <span className="text-red-400 font-medium">{uploadResult.errors.length} error</span>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto space-y-0.5">
+                        {uploadResult.errors.map((err, i) => (
+                          <p key={i} className="text-[11px] text-zinc-500 pl-5">• {err}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            {!uploadResult ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setUploadOpen(false)}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="button"
+                  onClick={async () => {
+                    if (!uploadFile) return
+                    setUploading(true)
+                    try {
+                      const formData = new FormData()
+                      formData.append('file', uploadFile)
+                      const res = await fetch('/api/products/bulk-upload', {
+                        method: 'POST',
+                        body: formData,
+                      })
+                      if (res.ok) {
+                        const data = await res.json()
+                        setUploadResult(data)
+                        fetchProducts()
+                        toast.success(`${data.created} produk berhasil ditambahkan`)
+                      } else {
+                        const data = await res.json()
+                        toast.error(data.error || 'Gagal upload file')
+                      }
+                    } catch {
+                      toast.error('Gagal upload file')
+                    } finally {
+                      setUploading(false)
+                    }
+                  }}
+                  disabled={uploading || !uploadFile}
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+                >
+                  {uploading && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+                  Upload
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+              >
+                Selesai
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

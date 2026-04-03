@@ -37,7 +37,7 @@ export async function PUT(
     if (email !== undefined) {
       // Check email uniqueness (excluding current crew)
       if (email !== crew.email) {
-        const existingUser = await db.user.findUnique({ where: { email } })
+        const existingUser = await db.user.findFirst({ where: { email } })
         if (existingUser) {
           return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 })
         }

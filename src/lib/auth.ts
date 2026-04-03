@@ -19,7 +19,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Email and password are required');
         }
 
-        const user = await db.user.findUnique({
+        const user = await db.user.findFirst({
           where: { email: credentials.email },
           include: { outlet: true },
         });

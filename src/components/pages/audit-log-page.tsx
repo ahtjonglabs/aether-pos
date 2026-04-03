@@ -130,7 +130,7 @@ export default function AuditLogPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-zinc-100">Audit Log</h1>
           <p className="text-xs text-zinc-400 mt-0.5">Track all system activities and changes</p>
@@ -138,7 +138,7 @@ export default function AuditLogPage() {
         <Button
           onClick={handleExport}
           variant="outline"
-          className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 gap-1.5"
+          className="h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 gap-1.5"
         >
           <Download className="h-3.5 w-3.5" />
           Export

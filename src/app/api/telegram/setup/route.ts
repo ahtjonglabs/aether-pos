@@ -3,13 +3,14 @@ import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { sendTelegramMessage } from '@/lib/telegram'
 
+const TELEGRAM_API = 'https://api.telegram.org'
+
 /**
  * POST /api/telegram/setup
  *
- * Step 1: Owner sends /start to the Aether POS bot on Telegram.
- * Step 2: Owner copies their chat_id from the bot's response.
- * Step 3: Owner calls this API with { chatId } to link their Telegram.
- * Step 4: A test message is sent to confirm.
+ * Accepts:
+ * - { chatId } — link Telegram (legacy flow)
+ * - { action: "test", botToken, chatId } — test connection with custom bot token
  */
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +25,81 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+
+    // Test connection mode
+    if (body.action === 'test') {
+      const { botToken, chatId } = body as { botToken?: string; chatId?: string }
+
+      if (!botToken || typeof botToken !== 'string') {
+        return NextResponse.json(
+          { error: 'Bot Token wajib diisi' },
+          { status: 400 }
+        )
+      }
+
+      // Step 1: Validate bot token by calling getMe
+      let botInfo: { id: number; first_name: string; username?: string } | null = null
+      try {
+        const meRes = await fetch(`${TELEGRAM_API}/bot${botToken}/getMe`)
+        const meData = await meRes.json() as { ok: boolean; result?: { id: number; first_name: string; username?: string }; description?: string }
+
+        if (!meData.ok || !meData.result) {
+          return NextResponse.json(
+            { error: `Bot Token tidak valid: ${meData.description || 'Unknown error'}` },
+            { status: 400 }
+          )
+        }
+        botInfo = meData.result
+      } catch (err) {
+        return NextResponse.json(
+          { error: `Gagal terhubung ke Telegram API: ${err instanceof Error ? err.message : 'Unknown error'}` },
+          { status: 400 }
+        )
+      }
+
+      // Step 2: If chatId provided, send test message
+      if (chatId && typeof chatId === 'string') {
+        const testText = `✅ <b>Telegram Notifikasi Terhubung!</b>\n\n🏪 Aether POS\n🤖 Bot: @${botInfo.username || botInfo.first_name}\n👋 Halo ${user.name}, notifikasi akan dikirim ke chat ini.\n\nKamu akan menerima:\n• Notifikasi transaksi baru\n• Notifikasi customer baru\n• Laporan harian & bulanan\n\n⚙️ Atur jenis notifikasi di halaman Pengaturan.`
+
+        try {
+          const sendRes = await fetch(`${TELEGRAM_API}/bot${botToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: testText,
+              parse_mode: 'HTML',
+              disable_web_page_preview: true,
+            }),
+          })
+          const sendData = await sendRes.json() as { ok: boolean; description?: string }
+
+          if (!sendData.ok) {
+            return NextResponse.json(
+              { error: `Bot valid tapi gagal mengirim pesan ke Chat ID ${chatId}: ${sendData.description || 'Pastikan Chat ID benar dan bot telah di-start'}` },
+              { status: 400 }
+            )
+          }
+        } catch (err) {
+          return NextResponse.json(
+            { error: `Bot valid tapi gagal mengirim pesan: ${err instanceof Error ? err.message : 'Unknown error'}` },
+            { status: 400 }
+          )
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: chatId ? 'Koneksi berhasil! Pesan tes terkirim.' : 'Bot Token valid!',
+        botInfo: {
+          id: botInfo.id,
+          name: botInfo.first_name,
+          username: botInfo.username || null,
+        },
+      })
+    }
+
+    // Legacy flow: link chatId only
     const { chatId } = body as { chatId?: string }
 
     if (!chatId || typeof chatId !== 'string') {
@@ -87,7 +163,7 @@ export async function DELETE(request: NextRequest) {
 
     await db.outletSetting.update({
       where: { outletId: user.outletId },
-      data: { telegramChatId: null },
+      data: { telegramChatId: null, telegramBotToken: null },
     })
 
     return NextResponse.json({

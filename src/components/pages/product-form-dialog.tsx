@@ -27,6 +27,7 @@ interface Product {
   lowStockAlert: number
   image: string | null
   categoryId: string | null
+  unit: string
 }
 
 interface Category {
@@ -50,6 +51,8 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
 
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
+  const UNITS = ['pcs', 'ml', 'lt', 'gr', 'kg', 'box', 'pack', 'botol', 'gelas', 'mangkuk', 'porsi', 'bungkus', 'sachet', 'dus', 'rim', 'lembar', 'meter', 'cm', 'ons']
+
   const [form, setForm] = useState({
     name: '',
     sku: '',
@@ -61,6 +64,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
     lowStockAlert: '10',
     image: '',
     categoryId: '',
+    unit: 'pcs',
   })
 
   useEffect(() => {
@@ -86,6 +90,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         lowStockAlert: String(product.lowStockAlert),
         image: product.image || '',
         categoryId: product.categoryId || '',
+        unit: product.unit || 'pcs',
       })
     } else {
       setForm({
@@ -99,6 +104,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         lowStockAlert: '10',
         image: '',
         categoryId: '',
+        unit: 'pcs',
       })
     }
   }, [product, open])
@@ -123,6 +129,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         lowStockAlert: Number(form.lowStockAlert) || 10,
         image: form.image || null,
         categoryId: form.categoryId || null,
+        unit: form.unit || 'pcs',
       }
 
       const url = isEdit ? `/api/products/${product.id}` : '/api/products'
@@ -225,6 +232,21 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
               required
               className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-zinc-300">Satuan</Label>
+            <select
+              value={form.unit}
+              onChange={(e) => updateField('unit', e.target.value)}
+              className="w-full h-9 text-sm bg-zinc-800 border border-zinc-700 text-zinc-100 rounded-md px-3 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

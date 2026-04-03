@@ -351,13 +351,13 @@ export default function CustomersPage() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
+      <div className="relative w-full sm:max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
         <Input
           placeholder="Search customers..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+          className="pl-9 h-9 sm:h-10 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
         />
       </div>
 
@@ -378,7 +378,7 @@ export default function CustomersPage() {
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
                 <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">WhatsApp</TableHead>
+                <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">WhatsApp</TableHead>
                 <TableHead className="text-zinc-500 text-[11px] font-medium">Tier</TableHead>
                 <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total Spend</TableHead>
                 <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Points</TableHead>
@@ -395,7 +395,7 @@ export default function CustomersPage() {
                     onClick={() => handleViewPurchases(customer)}
                   >
                     <TableCell className="text-xs text-zinc-200 font-medium py-2.5 px-3">{customer.name}</TableCell>
-                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{customer.whatsapp}</TableCell>
+                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3 hidden sm:table-cell">{customer.whatsapp}</TableCell>
                     <TableCell className="py-2.5 px-3">
                       <Badge className={`${getTierBadgeClass(tier)} text-[10px] font-medium border px-1.5 py-0`}>
                         {tier === 'VIP' && <Crown className="mr-0.5 h-2.5 w-2.5" />}

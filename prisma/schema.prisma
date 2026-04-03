@@ -77,6 +77,7 @@ model Product {
   netto         Float    @default(0)    // Net weight
   stock         Int      @default(0)    // Current stock
   lowStockAlert Int      @default(10)   // Alert threshold
+  unit          String   @default("pcs") // Unit: pcs, ml, lt, gr, kg, box, etc.
   image         String?                 // Snapshot image URL
   categoryId    String?
   outletId      String
@@ -200,6 +201,7 @@ model OutletSetting {
   themePrimaryColor String @default("emerald") // tailwind color name: emerald, blue, violet, rose, amber
 
   // Telegram notifications
+  telegramBotToken  String?                // Telegram Bot Token (from @BotFather)
   telegramChatId   String?                // Owner's Telegram chat ID for notifications
   notifyOnTransaction Boolean @default(true) // Notify on every new transaction
   notifyOnCustomer   Boolean @default(true) // Notify on new customer registration

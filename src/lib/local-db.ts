@@ -68,6 +68,12 @@ export interface SyncMeta {
   value: number
 }
 
+export interface CachedSettings {
+  key: string // always 'outlet-settings'
+  data: Record<string, unknown>
+  updatedAt: string
+}
+
 // ============================================================
 // Database
 // ============================================================
@@ -79,17 +85,19 @@ class AetherDB extends Dexie {
   promos!: EntityTable<CachedPromo, 'id'>
   transactions!: EntityTable<OfflineTransaction, 'id'>
   syncMeta!: EntityTable<SyncMeta, 'key'>
+  settings!: EntityTable<CachedSettings, 'key'>
 
   constructor() {
     super('aether-pos-local')
 
-    this.version(2).stores({
+    this.version(3).stores({
       products: 'id, name, sku, barcode, categoryId, updatedAt',
       categories: 'id, name, updatedAt',
       customers: 'id, name, whatsapp, updatedAt',
       promos: 'id, name, type, active, updatedAt',
       transactions: '++id, isSynced, createdAt',
       syncMeta: 'key',
+      settings: 'key',
     })
   }
 }

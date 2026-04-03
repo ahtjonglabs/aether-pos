@@ -277,3 +277,39 @@ export async function hasCachedData(): Promise<boolean> {
   const productCount = await localDB.products.count()
   return productCount > 0
 }
+
+// ==================== SETTINGS SYNC ====================
+
+/**
+ * Sync outlet settings from server and cache in IndexedDB for offline use.
+ */
+export async function syncSettingsFromServer(): Promise<{
+  success: boolean
+  error?: string
+}> {
+  try {
+    const res = await fetch('/api/settings')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+    const data = await res.json()
+
+    await localDB.settings.put({
+      key: 'outlet-settings',
+      data,
+      updatedAt: new Date().toISOString(),
+    })
+
+    return { success: true }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Get cached outlet settings from IndexedDB.
+ */
+export async function getCachedSettings(): Promise<Record<string, unknown> | null> {
+  const cached = await localDB.settings.get('outlet-settings')
+  return cached ? cached.data : null
+}

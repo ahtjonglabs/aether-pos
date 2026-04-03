@@ -66,6 +66,15 @@ import {
   Loader2,
   Check,
   Shield,
+  Send,
+  KeyRound,
+  Building2,
+  Eye,
+  EyeOff,
+  Wifi,
+  WifiOff,
+  Link2,
+  Unlink2,
 } from 'lucide-react'
 
 // ==================== TYPES ====================
@@ -83,6 +92,13 @@ interface SettingsData {
   receiptFooter: string
   receiptLogo: string
   themePrimaryColor: string
+  telegramChatId: string | null
+  telegramBotToken: string | null
+  notifyOnTransaction: boolean
+  notifyOnCustomer: boolean
+  notifyDailyReport: boolean
+  notifyWeeklyReport: boolean
+  notifyMonthlyReport: boolean
   outlet?: { id: string; name: string; address: string | null; phone: string | null }
 }
 
@@ -171,6 +187,9 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
     { value: 'loyalty', label: 'Loyalty', icon: <Star className="h-4 w-4" /> },
     ...(isOwner ? [{ value: 'promo', label: 'Promo', icon: <Tag className="h-4 w-4" /> }] : []),
     { value: 'theme', label: 'Tema & Struk', icon: <Palette className="h-4 w-4" /> },
+    ...(isOwner ? [{ value: 'telegram', label: 'Telegram', icon: <Send className="h-4 w-4" /> }] : []),
+    { value: 'account', label: 'Akun', icon: <KeyRound className="h-4 w-4" /> },
+    ...(isOwner ? [{ value: 'multi-outlet', label: 'Outlet Cabang', icon: <Building2 className="h-4 w-4" /> }] : []),
   ]
 
   return (
@@ -216,6 +235,23 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         <TabsContent value="theme">
           <ThemeReceiptTab />
         </TabsContent>
+        {isOwner && (
+          <TabsContent value="telegram">
+            <ProGate feature="apiAccess" label="Telegram Notifikasi" description="Kirim notifikasi otomatis via Telegram" minHeight="200px">
+              <TelegramTab />
+            </ProGate>
+          </TabsContent>
+        )}
+        <TabsContent value="account">
+          <AccountTab />
+        </TabsContent>
+        {isOwner && (
+          <TabsContent value="multi-outlet">
+            <ProGate feature="multiOutlet" label="Multi-Outlet" description="Kelola beberapa outlet dalam satu akun" minHeight="200px">
+              <MultiOutletTab />
+            </ProGate>
+          </TabsContent>
+        )}
       </div>
     </Tabs>
   )
@@ -1366,6 +1402,601 @@ function ThemeReceiptTab() {
           Simpan Semua
         </Button>
       </div>
+    </div>
+  )
+}
+
+// ==================== TAB 7: TELEGRAM NOTIFICATION ====================
+
+function TelegramTab() {
+  const { settings, loading, saving, saveSettings } = useSettings()
+  const [botToken, setBotToken] = useState('')
+  const [chatId, setChatId] = useState('')
+  const [showToken, setShowToken] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string; botName?: string } | null>(null)
+  const [dirty, setDirty] = useState(false)
+
+  const isConnected = !!settings?.telegramChatId
+
+  useEffect(() => {
+    if (settings) {
+      setChatId(settings.telegramChatId || '')
+      setBotToken(settings.telegramBotToken && settings.telegramBotToken !== '••••••' ? '' : '')
+    }
+  }, [settings])
+
+  const handleTestConnection = async () => {
+    if (!botToken) {
+      toast.error('Bot Token wajib diisi untuk test koneksi')
+      return
+    }
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch('/api/telegram/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test',
+          botToken,
+          chatId: chatId || undefined,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setTestResult({
+          ok: true,
+          message: data.message || 'Koneksi berhasil',
+          botName: data.botInfo?.username ? `@${data.botInfo.username}` : data.botInfo?.name,
+        })
+        toast.success('Koneksi bot berhasil!')
+      } else {
+        setTestResult({ ok: false, message: data.error || 'Gagal terhubung' })
+        toast.error(data.error || 'Gagal terhubung ke Telegram')
+      }
+    } catch {
+      setTestResult({ ok: false, message: 'Gagal terhubung — periksa koneksi internet' })
+      toast.error('Gagal terhubung — periksa koneksi internet')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleSave = async () => {
+    const ok = await saveSettings({
+      telegramBotToken: botToken || null,
+      telegramChatId: chatId || null,
+      notifyOnTransaction: settings?.notifyOnTransaction ?? true,
+      notifyOnCustomer: settings?.notifyOnCustomer ?? true,
+      notifyDailyReport: settings?.notifyDailyReport ?? true,
+      notifyWeeklyReport: settings?.notifyWeeklyReport ?? false,
+      notifyMonthlyReport: settings?.notifyMonthlyReport ?? true,
+    })
+    if (ok) {
+      setDirty(false)
+      setBotToken('')
+    }
+  }
+
+  const handleToggle = (key: keyof Pick<SettingsData, 'notifyOnTransaction' | 'notifyOnCustomer' | 'notifyDailyReport' | 'notifyWeeklyReport' | 'notifyMonthlyReport'>, value: boolean) => {
+    if (settings) {
+      setSettings({ ...settings, [key]: value })
+      setDirty(true)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    try {
+      const res = await fetch('/api/telegram/setup', { method: 'DELETE' })
+      if (res.ok) {
+        toast.success('Telegram terputus')
+        setChatId('')
+        setBotToken('')
+        if (settings) {
+          setSettings({
+            ...settings,
+            telegramChatId: null,
+            telegramBotToken: null,
+          })
+        }
+        setDirty(false)
+      } else {
+        toast.error('Gagal memutuskan koneksi')
+      }
+    } catch {
+      toast.error('Gagal memutuskan koneksi')
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <Skeleton className="h-5 w-36 bg-zinc-800" />
+          <Skeleton className="h-9 bg-zinc-800" />
+          <Skeleton className="h-9 bg-zinc-800" />
+          <Skeleton className="h-12 bg-zinc-800 rounded-lg" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const notificationToggles = [
+    { key: 'notifyOnTransaction' as const, label: 'Transaksi Baru', desc: 'Setiap ada transaksi masuk' },
+    { key: 'notifyOnCustomer' as const, label: 'Customer Baru', desc: 'Saat ada pelanggan terdaftar' },
+    { key: 'notifyDailyReport' as const, label: 'Laporan Harian', desc: 'Ringkasan pendapatan harian' },
+    { key: 'notifyWeeklyReport' as const, label: 'Laporan Mingguan', desc: 'Ringkasan pendapatan mingguan' },
+    { key: 'notifyMonthlyReport' as const, label: 'Laporan Bulanan', desc: 'Ringkasan pendapatan bulanan' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {/* Connection Card */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Koneksi Telegram</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Hubungkan bot untuk notifikasi otomatis</p>
+            </div>
+            <Badge
+              className={`text-[11px] ${
+                isConnected
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                  : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+              }`}
+            >
+              {isConnected ? (
+                <span className="flex items-center gap-1"><Wifi className="h-3 w-3" /> Terhubung</span>
+              ) : (
+                <span className="flex items-center gap-1"><WifiOff className="h-3 w-3" /> Tidak Terhubung</span>
+              )}
+            </Badge>
+          </div>
+
+          <div className="space-y-3">
+            {/* Bot Token */}
+            <div className="space-y-1.5">
+              <Label htmlFor="bot-token" className="text-xs text-zinc-300">Bot Token</Label>
+              <div className="relative">
+                <Input
+                  id="bot-token"
+                  type={showToken ? 'text' : 'password'}
+                  value={botToken}
+                  onChange={(e) => { setBotToken(e.target.value); setDirty(true) }}
+                  placeholder={settings?.telegramBotToken === '••••••' ? 'Token tersimpan (kosongkan untuk mengganti)' : 'Masukkan token dari @BotFather'}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Chat ID */}
+            <div className="space-y-1.5">
+              <Label htmlFor="chat-id" className="text-xs text-zinc-300">Chat ID</Label>
+              <Input
+                id="chat-id"
+                value={chatId}
+                onChange={(e) => { setChatId(e.target.value); setDirty(true) }}
+                placeholder="Contoh: 123456789"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+
+            {/* Test Connection Button */}
+            <Button
+              onClick={handleTestConnection}
+              disabled={testing || !botToken}
+              variant="outline"
+              className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 h-9 text-xs"
+            >
+              {testing ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Test Koneksi
+            </Button>
+
+            {/* Test Result */}
+            {testResult && (
+              <div className={`rounded-lg border p-3 ${
+                testResult.ok
+                  ? 'bg-emerald-500/5 border-emerald-500/20'
+                  : 'bg-red-500/5 border-red-500/20'
+              }`}>
+                <div className="flex items-center gap-1.5">
+                  {testResult.ok ? (
+                    <Check className="h-4 w-4 text-emerald-400" />
+                  ) : (
+                    <Unlink2 className="h-4 w-4 text-red-400" />
+                  )}
+                  <p className={`text-xs font-medium ${testResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {testResult.message}
+                  </p>
+                </div>
+                {testResult.botName && (
+                  <p className="text-[11px] text-zinc-400 mt-1 ml-5.5">Bot: {testResult.botName}</p>
+                )}
+              </div>
+            )}
+
+            {/* Status info */}
+            {isConnected && (
+              <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                <Link2 className="h-3.5 w-3.5" />
+                <span>Chat ID: {settings?.telegramChatId}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            {isConnected && (
+              <Button
+                onClick={handleDisconnect}
+                variant="outline"
+                className="border-red-500/20 text-red-400 hover:bg-red-500/10 h-9 text-xs"
+              >
+                <Unlink2 className="mr-1.5 h-3.5 w-3.5" />
+                Putuskan
+              </Button>
+            )}
+            <Button
+              onClick={handleSave}
+              disabled={saving || !dirty}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            >
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+              Simpan
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Notification Toggles */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Jenis Notifikasi</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Pilih event yang ingin dikirim via Telegram</p>
+          </div>
+
+          <div className="space-y-2">
+            {notificationToggles.map((item) => (
+              <div
+                key={item.key}
+                className="flex items-center justify-between p-2.5 rounded-lg border border-zinc-800 bg-zinc-800/30"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-zinc-200">{item.label}</p>
+                  <p className="text-[11px] text-zinc-500">{item.desc}</p>
+                </div>
+                <Switch
+                  checked={!!settings?.[item.key]}
+                  onCheckedChange={(v) => handleToggle(item.key, v)}
+                  className="data-[state=checked]:bg-emerald-500"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={saving || !dirty}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            >
+              {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+              Simpan Notifikasi
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ==================== TAB 8: ACCOUNT SECURITY ====================
+
+function AccountTab() {
+  const { data: session } = useSession()
+
+  const [newEmail, setNewEmail] = useState('')
+  const [emailPassword, setEmailPassword] = useState('')
+  const [changingEmail, setChangingEmail] = useState(false)
+
+  const [currentPwd, setCurrentPwd] = useState('')
+  const [newPwd, setNewPwd] = useState('')
+  const [confirmPwd, setConfirmPwd] = useState('')
+  const [changingPwd, setChangingPwd] = useState(false)
+
+  const handleChangeEmail = async () => {
+    if (!newEmail || !emailPassword) {
+      toast.error('Email baru dan password wajib diisi')
+      return
+    }
+    if (!newEmail.includes('@')) {
+      toast.error('Format email tidak valid')
+      return
+    }
+    setChangingEmail(true)
+    try {
+      const res = await fetch('/api/auth/change-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail, currentPassword: emailPassword }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Email berhasil diperbarui')
+        setNewEmail('')
+        setEmailPassword('')
+      } else {
+        toast.error(data.error || 'Gagal mengganti email')
+      }
+    } catch {
+      toast.error('Gagal mengganti email')
+    } finally {
+      setChangingEmail(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!currentPwd || !newPwd || !confirmPwd) {
+      toast.error('Semua field wajib diisi')
+      return
+    }
+    if (newPwd.length < 6) {
+      toast.error('Password baru minimal 6 karakter')
+      return
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error('Konfirmasi password tidak cocok')
+      return
+    }
+    setChangingPwd(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: currentPwd, newPassword: newPwd }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Password berhasil diperbarui')
+        setCurrentPwd('')
+        setNewPwd('')
+        setConfirmPwd('')
+      } else {
+        toast.error(data.error || 'Gagal mengganti password')
+      }
+    } catch {
+      toast.error('Gagal mengganti password')
+    } finally {
+      setChangingPwd(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Current Account Info */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Informasi Akun</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Detail akun yang sedang digunakan</p>
+          </div>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Nama</span>
+              <span className="text-xs font-medium text-zinc-200">{session?.user?.name || '-'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Email</span>
+              <span className="text-xs font-medium text-zinc-200">{session?.user?.email || '-'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-400">Peran</span>
+              <Badge
+                variant="outline"
+                className={`text-[11px] px-1.5 py-0 ${
+                  session?.user?.role === 'OWNER'
+                    ? 'bg-amber-500/10 border-amber-500/15 text-amber-400'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                }`}
+              >
+                {session?.user?.role === 'OWNER' ? 'Owner' : 'Crew'}
+              </Badge>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Change Email */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Ganti Email</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Ubah email akun Anda</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="new-email" className="text-xs text-zinc-300">Email Baru</Label>
+              <Input
+                id="new-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="email@contoh.com"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="email-password" className="text-xs text-zinc-300">Konfirmasi Password</Label>
+              <Input
+                id="email-password"
+                type="password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+                placeholder="Masukkan password saat ini"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={handleChangeEmail}
+            disabled={changingEmail || !newEmail || !emailPassword}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+          >
+            {changingEmail ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Ganti Email
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Change Password */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Ganti Password</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Ubah password akun Anda</p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="current-password" className="text-xs text-zinc-300">Password Saat Ini</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPwd}
+                onChange={(e) => setCurrentPwd(e.target.value)}
+                placeholder="Masukkan password saat ini"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-password" className="text-xs text-zinc-300">Password Baru</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPwd}
+                onChange={(e) => setNewPwd(e.target.value)}
+                placeholder="Minimal 6 karakter"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-password" className="text-xs text-zinc-300">Konfirmasi Password Baru</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPwd}
+                onChange={(e) => setConfirmPwd(e.target.value)}
+                placeholder="Ulangi password baru"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          <Button
+            onClick={handleChangePassword}
+            disabled={changingPwd || !currentPwd || !newPwd || !confirmPwd || newPwd !== confirmPwd || newPwd.length < 6}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+          >
+            {changingPwd ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            Ganti Password
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ==================== TAB 9: MULTI-OUTLET (PLACEHOLDER) ====================
+
+function MultiOutletTab() {
+  const { settings, loading } = useSettings()
+
+  if (loading) {
+    return (
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <Skeleton className="h-5 w-36 bg-zinc-800" />
+          <Skeleton className="h-20 bg-zinc-800 rounded-lg" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Outlet Cabang</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Kelola beberapa outlet dalam satu akun</p>
+          </div>
+
+          {/* Current outlet info */}
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-emerald-400" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-emerald-400">Outlet Utama (Aktif)</p>
+                <p className="text-[11px] text-zinc-400">{settings?.outlet?.name || '-'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Placeholder for future outlets */}
+          <div className="space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-lg border border-dashed border-zinc-800 p-4 flex items-center justify-center opacity-40"
+              >
+                <div className="text-center">
+                  <Building2 className="h-5 w-5 text-zinc-600 mx-auto mb-1" />
+                  <p className="text-xs text-zinc-600">Outlet cabang {i + 1}</p>
+                  <p className="text-[10px] text-zinc-700">Segera hadir</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Button
+            disabled
+            className="w-full border-zinc-700 text-zinc-500 bg-zinc-800/50 h-9 text-xs"
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Tambah Cabang
+          </Button>
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3">
+            <p className="text-[11px] text-zinc-500 text-center">
+              Multi-outlet tersedia untuk akun <span className="text-amber-400 font-medium">Enterprise</span>. Upgrade untuk mengakses fitur ini.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -23,7 +23,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, sku, hpp, price, bruto, netto, lowStockAlert, image } = body
+    const { name, sku, hpp, price, bruto, netto, lowStockAlert, image, unit, categoryId } = body
 
     // Check unique name if changed
     if (name && name !== existing.name) {
@@ -48,6 +48,7 @@ export async function PUT(
       if (netto !== undefined && netto !== existing.netto) changes.netto = { from: existing.netto, to: netto }
       if (lowStockAlert !== undefined && lowStockAlert !== existing.lowStockAlert) changes.lowStockAlert = { from: existing.lowStockAlert, to: lowStockAlert }
       if (image !== undefined && image !== existing.image) changes.image = { from: existing.image, to: image }
+      if (unit !== undefined && unit !== existing.unit) changes.unit = { from: existing.unit, to: unit }
 
       const updateData: Record<string, unknown> = {}
       if (name !== undefined) updateData.name = name
@@ -58,6 +59,8 @@ export async function PUT(
       if (netto !== undefined) updateData.netto = netto
       if (lowStockAlert !== undefined) updateData.lowStockAlert = lowStockAlert
       if (image !== undefined) updateData.image = image || null
+      if (unit !== undefined) updateData.unit = unit || 'pcs'
+      if (categoryId !== undefined) updateData.categoryId = categoryId || null
 
       const updated = await tx.product.update({
         where: { id },

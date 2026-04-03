@@ -270,7 +270,7 @@ function CrewManagement() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-zinc-100">Kelola Crew</h1>
           <p className="text-xs text-zinc-400 mt-0.5">Tambah dan kelola akun kasir untuk outlet Anda</p>
@@ -288,13 +288,13 @@ function CrewManagement() {
       </div>
 
       {/* Search */}
-      <div className="relative">
+      <div className="relative w-full sm:max-w-xs">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
         <Input
           placeholder="Cari nama atau email crew..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 h-8 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 max-w-xs"
+          className="pl-9 h-9 sm:h-10 text-xs bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 w-full"
         />
       </div>
 
@@ -330,10 +330,10 @@ function CrewManagement() {
                 <TableHeader>
                   <TableRow className="border-zinc-800 hover:bg-transparent">
                     <TableHead className="text-zinc-500 text-[11px] font-medium">Crew</TableHead>
-                    <TableHead className="text-zinc-500 text-[11px] font-medium">Email</TableHead>
+                    <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">Email</TableHead>
                     <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Role</TableHead>
                     <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Halaman Akses</TableHead>
-                    <TableHead className="text-zinc-500 text-[11px] font-medium">Bergabung</TableHead>
+                    <TableHead className="text-zinc-500 text-[11px] font-medium hidden lg:table-cell">Bergabung</TableHead>
                     <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -352,7 +352,7 @@ function CrewManagement() {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="py-2.5 px-3">
+                        <TableCell className="py-2.5 px-3 hidden sm:table-cell">
                           <div className="flex items-center gap-1.5">
                             <Mail className="h-3 w-3 text-zinc-500 shrink-0" />
                             <span className="text-xs text-zinc-400 truncate">{member.email}</span>
@@ -382,7 +382,7 @@ function CrewManagement() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="py-2.5 px-3">
+                        <TableCell className="py-2.5 px-3 hidden lg:table-cell">
                           <div className="flex items-center gap-1.5">
                             <Calendar className="h-3 w-3 text-zinc-500" />
                             <span className="text-xs text-zinc-400">{formatDate(member.createdAt)}</span>

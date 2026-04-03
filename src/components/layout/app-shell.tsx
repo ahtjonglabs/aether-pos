@@ -2,6 +2,7 @@
 
 import { SessionProvider, useSession } from 'next-auth/react'
 import { usePageStore } from '@/hooks/use-page-store'
+import { useSidebarStore } from '@/components/layout/sidebar'
 import Sidebar from '@/components/layout/sidebar'
 import AuthView from '@/components/auth/auth-view'
 import DashboardPage from '@/components/pages/dashboard-page'
@@ -17,6 +18,7 @@ import { Loader2 } from 'lucide-react'
 function AppContent() {
   const { data: session, status } = useSession()
   const { currentPage } = usePageStore()
+  const { collapsed } = useSidebarStore()
 
   if (status === 'loading') {
     return (
@@ -56,8 +58,12 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-zinc-950">
       <Sidebar />
-      <main className="md:ml-52 lg:ml-52 min-h-screen">
-        <div className="pt-12 md:pt-0 px-3 py-3 md:px-4 md:py-4 lg:px-5 lg:py-4">
+      <main
+        className={`min-h-screen transition-all duration-300 ease-in-out ${
+          collapsed ? 'md:ml-[68px]' : 'md:ml-64'
+        }`}
+      >
+        <div className="pt-12 md:pt-0 px-2 sm:px-3 md:px-4 py-2 md:py-4 lg:px-5 lg:py-4">
           {renderPage()}
         </div>
       </main>

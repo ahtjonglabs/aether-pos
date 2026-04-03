@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(100, Math.max(1, Number(searchParams.get('limit')) || PAGE_SIZE))
     const search = searchParams.get('search') || ''
     const sort: SortOption = (searchParams.get('sort') as SortOption) || 'newest'
+    const categoryId = searchParams.get('categoryId') || ''
 
     const skip = (page - 1) * limit
 
@@ -30,6 +31,9 @@ export async function GET(request: NextRequest) {
         { sku: { contains: search } },
         { barcode: { contains: search } },
       ]
+    }
+    if (categoryId) {
+      where.categoryId = categoryId
     }
 
     let products: unknown[]
@@ -48,6 +52,7 @@ export async function GET(request: NextRequest) {
         const allProducts = await db.product.findMany({
           where,
           include: {
+            category: { select: { id: true, name: true, color: true } },
             transactionItems: {
               select: { qty: true },
             },
@@ -71,11 +76,14 @@ export async function GET(request: NextRequest) {
       } else {
         // SQLite: Use raw SQL for best-selling sort
         const rawProducts = await db.$queryRawUnsafe<Array<Record<string, unknown>>>(`
-          SELECT p.*, COALESCE(SUM(ti.qty), 0) as totalSold
+          SELECT p.*, COALESCE(SUM(ti.qty), 0) as totalSold,
+            c.id as "categoryId", c.name as "categoryName", c.color as "categoryColor"
           FROM Product p
           LEFT JOIN TransactionItem ti ON ti.productId = p.id
+          LEFT JOIN Category c ON c.id = p.categoryId
           WHERE p.outletId = ?
           ${search ? 'AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)' : ''}
+          ${categoryId ? 'AND p.categoryId = ?' : ''}
           GROUP BY p.id
           ORDER BY totalSold DESC
           LIMIT ? OFFSET ?
@@ -84,6 +92,7 @@ export async function GET(request: NextRequest) {
           search ? `%${search}%` : '',
           search ? `%${search}%` : '',
           search ? `%${search}%` : '',
+          ...(categoryId ? [categoryId] : []),
           limit,
           skip
         )
@@ -91,8 +100,20 @@ export async function GET(request: NextRequest) {
         // Get total count
         total = await db.product.count({ where })
 
-        // Normalize raw products to match standard shape (remove totalSold extra field)
-        products = rawProducts.map(({ totalSold: _ts, ...rest }) => rest)
+        // Normalize raw products to include category object and remove extra fields
+        products = rawProducts.map(({ totalSold: _ts, categoryName, categoryColor, ...rest }: Record<string, unknown>) => {
+          const product: Record<string, unknown> = { ...rest }
+          if (rest.categoryId) {
+            product.category = {
+              id: rest.categoryId,
+              name: categoryName,
+              color: categoryColor,
+            }
+          } else {
+            product.category = null
+          }
+          return product
+        })
       }
     } else {
       let orderBy: Record<string, string> = { createdAt: 'desc' }
@@ -110,6 +131,9 @@ export async function GET(request: NextRequest) {
           orderBy,
           skip,
           take: limit,
+          include: {
+            category: { select: { id: true, name: true, color: true } },
+          },
         }),
         db.product.count({ where }),
       ])
@@ -141,7 +165,7 @@ export async function POST(request: NextRequest) {
     const outletId = user.outletId
 
     const body = await request.json()
-    const { name, sku, hpp, price, bruto, netto, stock, lowStockAlert, image, categoryId } = body
+    const { name, sku, hpp, price, bruto, netto, stock, lowStockAlert, image, categoryId, unit } = body
 
     if (!name || price === undefined || price === null) {
       return NextResponse.json(
@@ -204,6 +228,7 @@ export async function POST(request: NextRequest) {
           lowStockAlert: lowStockAlert || 10,
           image: image || null,
           categoryId: categoryId || null,
+          unit: unit || 'pcs',
           outletId,
         },
       })
