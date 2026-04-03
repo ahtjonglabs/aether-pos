@@ -1,9 +1,12 @@
+// ==================== AETHER POS SCHEMA ====================
+// Uses DATABASE_URL — works with SQLite (local) or PostgreSQL (Neon)
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -20,6 +23,7 @@ model Outlet {
   users           User[]
   products        Product[]
   customers       Customer[]
+  categories      Category[]
   transactions    Transaction[]
   auditLogs       AuditLog[]
   setting         OutletSetting?
@@ -31,19 +35,34 @@ model Outlet {
 model User {
   id            String   @id @default(cuid())
   name          String
-  email         String   @unique
+  email         String
   password      String
   role          String   @default("CREW") // OWNER or CREW
   outletId      String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  outlet        Outlet           @relation(fields: [outletId], references: [id])
-  transactions  Transaction[]
-  auditLogs     AuditLog[]
-  crewPermission CrewPermission?
+  outlet          Outlet           @relation(fields: [outletId], references: [id])
+  transactions    Transaction[]
+  auditLogs       AuditLog[]
+  crewPermission  CrewPermission?
 
   @@unique([email, outletId])
+}
+
+// ==================== CATEGORY ====================
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  color     String   @default("zinc")  // Tailwind color name for chip styling
+  outletId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outlet   Outlet     @relation(fields: [outletId], references: [id])
+  products Product[]
+
+  @@unique([name, outletId])
 }
 
 // ==================== PRODUCT ====================
@@ -59,13 +78,15 @@ model Product {
   stock         Int      @default(0)    // Current stock
   lowStockAlert Int      @default(10)   // Alert threshold
   image         String?                 // Snapshot image URL
+  categoryId    String?
   outletId      String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  outlet          Outlet         @relation(fields: [outletId], references: [id])
+  outlet           Outlet         @relation(fields: [outletId], references: [id])
+  category        Category?      @relation(fields: [categoryId], references: [id])
   transactionItems TransactionItem[]
-  auditLogs       AuditLog[]
+  auditLogs        AuditLog[]
 
   @@unique([name, outletId])
 }
@@ -186,9 +207,9 @@ model OutletSetting {
   notifyWeeklyReport Boolean @default(false) // Weekly report
   notifyMonthlyReport Boolean @default(true) // Monthly report
 
-  outlet      Outlet   @relation(fields: [outletId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  outlet    Outlet   @relation(fields: [outletId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ==================== PROMO ====================
