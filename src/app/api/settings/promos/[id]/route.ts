@@ -29,13 +29,21 @@ export async function PUT(
     const body = await request.json()
     const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType } = body
 
+    // Validate numeric fields
+    if (value !== undefined) {
+      const numValue = Number(value)
+      if (isNaN(numValue)) {
+        return safeJsonError('Nilai diskon harus berupa angka', 400)
+      }
+    }
+
     // L4: Track changes for audit
     const changes: Record<string, { from: unknown; to: unknown }> = {}
     if (name !== undefined && name !== existing.name) changes.name = { from: existing.name, to: name }
     if (type !== undefined && type !== existing.type) changes.type = { from: existing.type, to: type }
-    if (value !== undefined && Number(value) !== existing.value) changes.value = { from: existing.value, to: Number(value) }
+    if (value !== undefined && !isNaN(Number(value)) && Number(value) !== existing.value) changes.value = { from: existing.value, to: Number(value) }
     if (active !== undefined && active !== existing.active) changes.active = { from: existing.active, to: active }
-    if (buyMinQty !== undefined && Number(buyMinQty) !== existing.buyMinQty) changes.buyMinQty = { from: existing.buyMinQty, to: Number(buyMinQty) }
+    if (buyMinQty !== undefined && !isNaN(Number(buyMinQty)) && Number(buyMinQty) !== existing.buyMinQty) changes.buyMinQty = { from: existing.buyMinQty, to: Number(buyMinQty) }
     if (discountType !== undefined && discountType !== existing.discountType) changes.discountType = { from: existing.discountType, to: discountType }
 
     const promo = await db.$transaction(async (tx) => {
@@ -45,8 +53,8 @@ export async function PUT(
           ...(name !== undefined && { name }),
           ...(type !== undefined && { type }),
           ...(value !== undefined && { value: Number(value) }),
-          ...(minPurchase !== undefined && { minPurchase: minPurchase ? Number(minPurchase) : null }),
-          ...(maxDiscount !== undefined && { maxDiscount: maxDiscount ? Number(maxDiscount) : null }),
+          ...(minPurchase !== undefined && { minPurchase: minPurchase ? (Number(minPurchase) || null) : null }),
+          ...(maxDiscount !== undefined && { maxDiscount: maxDiscount ? (Number(maxDiscount) || null) : null }),
           ...(active !== undefined && { active }),
           ...(buyMinQty !== undefined && { buyMinQty: Number(buyMinQty) || 0 }),
           ...(discountType !== undefined && { discountType }),

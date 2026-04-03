@@ -45,18 +45,23 @@ export async function POST(request: NextRequest) {
       return safeJsonError('Nama, tipe, dan nilai diskon wajib diisi', 400)
     }
 
+    const numValue = Number(value)
+    if (isNaN(numValue)) {
+      return safeJsonError('Nilai diskon harus berupa angka', 400)
+    }
+
     // L4: Create promo with audit log
     const promo = await db.$transaction(async (tx) => {
       const newPromo = await tx.promo.create({
         data: {
           name,
           type,
-          value: Number(value),
-          minPurchase: minPurchase ? Number(minPurchase) : null,
-          maxDiscount: maxDiscount ? Number(maxDiscount) : null,
+          value: numValue,
+          minPurchase: minPurchase ? Number(minPurchase) || null : null,
+          maxDiscount: maxDiscount ? Number(maxDiscount) || null : null,
           active: active !== undefined ? active : true,
           outletId: user.outletId,
-          buyMinQty: type === 'BUY_X_GET_DISCOUNT' ? Number(buyMinQty) || 2 : 0,
+          buyMinQty: type === 'BUY_X_GET_DISCOUNT' ? (Number(buyMinQty) || 2) : 0,
           discountType: type === 'BUY_X_GET_DISCOUNT' ? (discountType || 'PERCENTAGE') : 'PERCENTAGE',
         },
       })

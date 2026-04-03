@@ -17,36 +17,42 @@ const db = new PrismaClient()
 // ============================================================
 
 const ALL_PRODUCTS = [
-  { name: 'Kopi Susu Gula Aren', sku: 'KS-001', hpp: 8000, price: 18000, bruto: 350, netto: 300, stock: 50, lowStockAlert: 10 },
-  { name: 'Es Teh Manis', sku: 'ET-002', hpp: 3000, price: 8000, bruto: 300, netto: 250, stock: 100, lowStockAlert: 15 },
-  { name: 'Jus Alpukat', sku: 'JA-003', hpp: 7000, price: 15000, bruto: 350, netto: 300, stock: 35, lowStockAlert: 10 },
-  { name: 'Es Jeruk Segar', sku: 'EJ-004', hpp: 2500, price: 7000, bruto: 250, netto: 200, stock: 60, lowStockAlert: 15 },
-  { name: 'Teh Tarik', sku: 'TT-005', hpp: 3500, price: 10000, bruto: 280, netto: 240, stock: 45, lowStockAlert: 10 },
-  { name: 'Matcha Latte', sku: 'ML-006', hpp: 9000, price: 22000, bruto: 350, netto: 300, stock: 30, lowStockAlert: 8 },
-  { name: 'Coklat Hangat', sku: 'CH-007', hpp: 5000, price: 14000, bruto: 300, netto: 250, stock: 40, lowStockAlert: 10 },
-  { name: 'Es Kelapa Muda', sku: 'EK-008', hpp: 4000, price: 12000, bruto: 400, netto: 350, stock: 25, lowStockAlert: 8 },
-  { name: 'Air Mineral 600ml', sku: 'AM-009', hpp: 2000, price: 5000, bruto: 650, netto: 600, stock: 200, lowStockAlert: 50 },
-  { name: 'Teh Botol Sosro', sku: 'TB-010', hpp: 3000, price: 7000, bruto: 450, netto: 400, stock: 80, lowStockAlert: 20 },
-  { name: 'Nasi Goreng Spesial', sku: 'NG-011', hpp: 12000, price: 25000, bruto: 500, netto: 400, stock: 30, lowStockAlert: 5 },
-  { name: 'Mie Ayam Bakso', sku: 'MA-012', hpp: 10000, price: 20000, bruto: 450, netto: 380, stock: 25, lowStockAlert: 8 },
-  { name: 'Ayam Geprek', sku: 'AG-013', hpp: 11000, price: 22000, bruto: 400, netto: 350, stock: 20, lowStockAlert: 5 },
-  { name: 'Indomie Goreng', sku: 'IG-014', hpp: 4000, price: 10000, bruto: 150, netto: 120, stock: 80, lowStockAlert: 20 },
-  { name: 'Roti Bakar Coklat', sku: 'RB-015', hpp: 5000, price: 12000, bruto: 200, netto: 180, stock: 40, lowStockAlert: 10 },
-  { name: 'Sate Ayam (10 tusuk)', sku: 'SA-016', hpp: 15000, price: 30000, bruto: 350, netto: 300, stock: 15, lowStockAlert: 5 },
-  { name: 'Dimsum Ayam', sku: 'DM-017', hpp: 8000, price: 18000, bruto: 250, netto: 220, stock: 7, lowStockAlert: 8 },
-  { name: 'Pisang Goreng Keju', sku: 'PG-018', hpp: 4500, price: 12000, bruto: 200, netto: 170, stock: 3, lowStockAlert: 10 },
-  { name: 'Nasi Uduk Komplit', sku: 'NU-019', hpp: 13000, price: 28000, bruto: 550, netto: 450, stock: 20, lowStockAlert: 5 },
-  { name: 'Bakso Urat', sku: 'BU-020', hpp: 10000, price: 22000, bruto: 450, netto: 400, stock: 18, lowStockAlert: 5 },
-  { name: 'Kerupuk Kulit', sku: 'KK-021', hpp: 1500, price: 5000, bruto: 100, netto: 80, stock: 5, lowStockAlert: 10 },
-  { name: 'Kentang Goreng', sku: 'KG-022', hpp: 5000, price: 15000, bruto: 200, netto: 180, stock: 35, lowStockAlert: 10 },
-  { name: 'Nasi Kuning', sku: 'NK-023', hpp: 9000, price: 20000, bruto: 500, netto: 400, stock: 25, lowStockAlert: 8 },
-  { name: 'Soto Betawi', sku: 'SB-024', hpp: 14000, price: 28000, bruto: 500, netto: 450, stock: 15, lowStockAlert: 5 },
-  { name: 'Gado-gado', sku: 'GG-025', hpp: 10000, price: 22000, bruto: 400, netto: 350, stock: 12, lowStockAlert: 5 },
-  { name: 'Rendang Padang', sku: 'RP-026', hpp: 16000, price: 35000, bruto: 300, netto: 250, stock: 10, lowStockAlert: 3 },
-  { name: 'Pempek Palembang', sku: 'PP-027', hpp: 8000, price: 18000, bruto: 300, netto: 250, stock: 20, lowStockAlert: 5 },
-  { name: 'Es Campur', sku: 'EC-028', hpp: 6000, price: 15000, bruto: 400, netto: 350, stock: 30, lowStockAlert: 8 },
-  { name: 'Klepon', sku: 'KP-029', hpp: 3000, price: 10000, bruto: 150, netto: 120, stock: 40, lowStockAlert: 10 },
-  { name: 'Martabak Manis', sku: 'MM-030', hpp: 12000, price: 28000, bruto: 400, netto: 350, stock: 8, lowStockAlert: 3 },
+  { name: 'Kopi Susu Gula Aren', sku: 'KS-001', hpp: 8000, price: 18000, bruto: 350, netto: 300, stock: 50, lowStockAlert: 10, category: 'Minuman' },
+  { name: 'Es Teh Manis', sku: 'ET-002', hpp: 3000, price: 8000, bruto: 300, netto: 250, stock: 100, lowStockAlert: 15, category: 'Minuman' },
+  { name: 'Jus Alpukat', sku: 'JA-003', hpp: 7000, price: 15000, bruto: 350, netto: 300, stock: 35, lowStockAlert: 10, category: 'Minuman' },
+  { name: 'Es Jeruk Segar', sku: 'EJ-004', hpp: 2500, price: 7000, bruto: 250, netto: 200, stock: 60, lowStockAlert: 15, category: 'Minuman' },
+  { name: 'Teh Tarik', sku: 'TT-005', hpp: 3500, price: 10000, bruto: 280, netto: 240, stock: 45, lowStockAlert: 10, category: 'Minuman' },
+  { name: 'Matcha Latte', sku: 'ML-006', hpp: 9000, price: 22000, bruto: 350, netto: 300, stock: 30, lowStockAlert: 8, category: 'Minuman' },
+  { name: 'Coklat Hangat', sku: 'CH-007', hpp: 5000, price: 14000, bruto: 300, netto: 250, stock: 40, lowStockAlert: 10, category: 'Minuman' },
+  { name: 'Es Kelapa Muda', sku: 'EK-008', hpp: 4000, price: 12000, bruto: 400, netto: 350, stock: 25, lowStockAlert: 8, category: 'Minuman' },
+  { name: 'Air Mineral 600ml', sku: 'AM-009', hpp: 2000, price: 5000, bruto: 650, netto: 600, stock: 200, lowStockAlert: 50, category: 'Minuman' },
+  { name: 'Teh Botol Sosro', sku: 'TB-010', hpp: 3000, price: 7000, bruto: 450, netto: 400, stock: 80, lowStockAlert: 20, category: 'Minuman' },
+  { name: 'Nasi Goreng Spesial', sku: 'NG-011', hpp: 12000, price: 25000, bruto: 500, netto: 400, stock: 30, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Mie Ayam Bakso', sku: 'MA-012', hpp: 10000, price: 20000, bruto: 450, netto: 380, stock: 25, lowStockAlert: 8, category: 'Makanan' },
+  { name: 'Ayam Geprek', sku: 'AG-013', hpp: 11000, price: 22000, bruto: 400, netto: 350, stock: 20, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Indomie Goreng', sku: 'IG-014', hpp: 4000, price: 10000, bruto: 150, netto: 120, stock: 80, lowStockAlert: 20, category: 'Makanan' },
+  { name: 'Roti Bakar Coklat', sku: 'RB-015', hpp: 5000, price: 12000, bruto: 200, netto: 180, stock: 40, lowStockAlert: 10, category: 'Snack' },
+  { name: 'Sate Ayam (10 tusuk)', sku: 'SA-016', hpp: 15000, price: 30000, bruto: 350, netto: 300, stock: 15, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Dimsum Ayam', sku: 'DM-017', hpp: 8000, price: 18000, bruto: 250, netto: 220, stock: 7, lowStockAlert: 8, category: 'Makanan' },
+  { name: 'Pisang Goreng Keju', sku: 'PG-018', hpp: 4500, price: 12000, bruto: 200, netto: 170, stock: 3, lowStockAlert: 10, category: 'Snack' },
+  { name: 'Nasi Uduk Komplit', sku: 'NU-019', hpp: 13000, price: 28000, bruto: 550, netto: 450, stock: 20, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Bakso Urat', sku: 'BU-020', hpp: 10000, price: 22000, bruto: 450, netto: 400, stock: 18, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Kerupuk Kulit', sku: 'KK-021', hpp: 1500, price: 5000, bruto: 100, netto: 80, stock: 5, lowStockAlert: 10, category: 'Snack' },
+  { name: 'Kentang Goreng', sku: 'KG-022', hpp: 5000, price: 15000, bruto: 200, netto: 180, stock: 35, lowStockAlert: 10, category: 'Snack' },
+  { name: 'Nasi Kuning', sku: 'NK-023', hpp: 9000, price: 20000, bruto: 500, netto: 400, stock: 25, lowStockAlert: 8, category: 'Makanan' },
+  { name: 'Soto Betawi', sku: 'SB-024', hpp: 14000, price: 28000, bruto: 500, netto: 450, stock: 15, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Gado-gado', sku: 'GG-025', hpp: 10000, price: 22000, bruto: 400, netto: 350, stock: 12, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Rendang Padang', sku: 'RP-026', hpp: 16000, price: 35000, bruto: 300, netto: 250, stock: 10, lowStockAlert: 3, category: 'Makanan' },
+  { name: 'Pempek Palembang', sku: 'PP-027', hpp: 8000, price: 18000, bruto: 300, netto: 250, stock: 20, lowStockAlert: 5, category: 'Makanan' },
+  { name: 'Es Campur', sku: 'EC-028', hpp: 6000, price: 15000, bruto: 400, netto: 350, stock: 30, lowStockAlert: 8, category: 'Minuman' },
+  { name: 'Klepon', sku: 'KP-029', hpp: 3000, price: 10000, bruto: 150, netto: 120, stock: 40, lowStockAlert: 10, category: 'Snack' },
+  { name: 'Martabak Manis', sku: 'MM-030', hpp: 12000, price: 28000, bruto: 400, netto: 350, stock: 8, lowStockAlert: 3, category: 'Snack' },
+]
+
+const CATEGORIES = [
+  { name: 'Minuman', color: 'sky' },
+  { name: 'Makanan', color: 'emerald' },
+  { name: 'Snack', color: 'amber' },
 ]
 
 const CUSTOMER_NAMES = [
@@ -139,6 +145,7 @@ async function main() {
     await db.promo.deleteMany()
     await db.customer.deleteMany()
     await db.product.deleteMany()
+    await db.category.deleteMany()
     await db.outletSetting.deleteMany()
     await db.user.deleteMany()
     await db.outlet.deleteMany()
@@ -172,10 +179,19 @@ async function main() {
         }
       }
 
-      const products: { id: string; price: number; hpp: number }[] = []
+      // Create categories
+      const categoryMap = new Map<string, string>()
+      for (const cat of CATEGORIES) {
+        const category = await tx.category.create({ data: { name: cat.name, color: cat.color, outletId: outlet.id } })
+        categoryMap.set(cat.name, category.id)
+      }
+
+      const products: { id: string; price: number; hpp: number; name: string }[] = []
       for (let i = 0; i < config.productCount && i < ALL_PRODUCTS.length; i++) {
         const p = ALL_PRODUCTS[i]
-        const product = await tx.product.create({ data: { ...p, outletId: outlet.id } })
+        const categoryId = categoryMap.get(p.category || '') || null
+        const { category: _cat, ...productData } = p as any
+        const product = await tx.product.create({ data: { ...productData, categoryId, outletId: outlet.id } })
         products.push(product)
       }
 
@@ -194,6 +210,7 @@ async function main() {
         { name: 'Diskon Akhir Pekan 15%', type: 'PERCENTAGE', value: 15, minPurchase: 75000, maxDiscount: 30000 },
         { name: 'Potongan Rp 25.000', type: 'NOMINAL', value: 25000, minPurchase: 100000, maxDiscount: null },
         { name: 'Cashback Rp 10.000', type: 'NOMINAL', value: 10000, minPurchase: 30000, maxDiscount: null },
+        { name: 'Beli 3 Diskon 10%', type: 'BUY_X_GET_DISCOUNT', value: 10, minPurchase: 0, maxDiscount: 25000, buyMinQty: 3, discountType: 'PERCENTAGE' },
         { name: 'Grand Opening 20%', type: 'PERCENTAGE', value: 20, minPurchase: 0, maxDiscount: 50000 },
       ]
       for (let i = 0; i < config.promoCount && i < promoTemplates.length; i++) {
@@ -231,7 +248,7 @@ async function main() {
           const product = products[(t * 3 + it * 7) % products.length]
           const qty = 1 + Math.floor((t + it) % 3)
           const itemSubtotal = product.price * qty
-          items.push({ productId: product.id, productName: `Product`, price: product.price, qty, subtotal: itemSubtotal, hpp: product.hpp })
+          items.push({ productId: product.id, productName: product.name, price: product.price, qty, subtotal: itemSubtotal, hpp: product.hpp })
           subtotal += itemSubtotal
         }
 

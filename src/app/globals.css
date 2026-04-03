@@ -184,3 +184,42 @@ table { border-collapse: separate; border-spacing: 0; }
     overscroll-behavior-y: contain;
   }
 }
+
+/* ── Modern dialog animations ── */
+@keyframes dialog-overlay-show {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes dialog-overlay-hide {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes dialog-content-show {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes dialog-content-hide {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.96) translateY(4px); }
+}
+
+/* ── Dialog emerald accent line (top glow) ── */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"] {
+  position: relative;
+  overflow: hidden;
+}
+[data-slot="dialog-content"]::before,
+[data-slot="alert-dialog-content"]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, oklch(0.707 0.165 163.223 / 40%), transparent);
+  border-radius: 0 0 4px 4px;
+  z-index: 1;
+  pointer-events: none;
+}

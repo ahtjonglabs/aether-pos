@@ -29,6 +29,9 @@ export async function DELETE(
     const targetOwner = await db.user.findFirst({
       where: { email: user.email ?? '', outletId: id, role: 'OWNER' },
     })
+    if (!targetOwner) {
+      return safeJsonError('Outlet tidak ditemukan atau bukan milik Anda', 404)
+    }
 
     // Delete in correct order (FK constraints) — wrapped in a transaction for atomicity
     await db.$transaction([

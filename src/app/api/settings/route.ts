@@ -73,8 +73,16 @@ export async function PUT(request: NextRequest) {
 
     // Coerce types to match Prisma schema expectations
     const loyaltyEnabled = typeof body.loyaltyEnabled === 'boolean' ? body.loyaltyEnabled : undefined
-    const loyaltyPointsPerAmount = body.loyaltyPointsPerAmount != null ? Number(body.loyaltyPointsPerAmount) : undefined
-    const loyaltyPointValue = body.loyaltyPointValue != null ? Number(body.loyaltyPointValue) : undefined
+    const loyaltyPointsPerAmountRaw = body.loyaltyPointsPerAmount != null ? Number(body.loyaltyPointsPerAmount) : undefined
+    const loyaltyPointValueRaw = body.loyaltyPointValue != null ? Number(body.loyaltyPointValue) : undefined
+    if (loyaltyPointsPerAmountRaw !== undefined && isNaN(loyaltyPointsPerAmountRaw)) {
+      return safeJsonError('loyaltyPointsPerAmount harus berupa angka', 400)
+    }
+    if (loyaltyPointValueRaw !== undefined && isNaN(loyaltyPointValueRaw)) {
+      return safeJsonError('loyaltyPointValue harus berupa angka', 400)
+    }
+    const loyaltyPointsPerAmount = loyaltyPointsPerAmountRaw
+    const loyaltyPointValue = loyaltyPointValueRaw
     const notifyOnTransaction = typeof body.notifyOnTransaction === 'boolean' ? body.notifyOnTransaction : undefined
     const notifyOnCustomer = typeof body.notifyOnCustomer === 'boolean' ? body.notifyOnCustomer : undefined
     const notifyDailyReport = typeof body.notifyDailyReport === 'boolean' ? body.notifyDailyReport : undefined

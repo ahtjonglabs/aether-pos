@@ -218,12 +218,16 @@ model OutletSetting {
 model Promo {
   id          String   @id @default(cuid())
   name        String
-  type        String               // "PERCENTAGE" or "NOMINAL"
+  type        String               // "PERCENTAGE", "NOMINAL", or "BUY_X_GET_DISCOUNT"
   value       Float                // percentage (e.g. 10) or nominal (e.g. 50000)
   minPurchase Float?               // minimum purchase amount to apply
   maxDiscount Float?               // max discount cap for percentage type
   active      Boolean  @default(true)
   outletId    String
+  // For BUY_X_GET_DISCOUNT: minimum qty of items to qualify
+  buyMinQty   Int      @default(0)
+  // For BUY_X_GET_DISCOUNT: "PERCENTAGE" or "NOMINAL" — how the discount is calculated
+  discountType String  @default("PERCENTAGE")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
