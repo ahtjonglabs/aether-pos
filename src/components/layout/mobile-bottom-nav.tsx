@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { usePageStore, type PageType } from '@/hooks/use-page-store'
 import { useSession } from 'next-auth/react'
 import {
@@ -14,6 +14,7 @@ import {
   Settings,
   UserCog,
   LogOut,
+  Lock,
   Sheet,
   SheetContent,
   SheetHeader,
@@ -69,17 +70,12 @@ interface MoreMenuItem {
   action?: () => void
 }
 
-const getMoreMenuItems = (isOwner: boolean): MoreMenuItem[] => {
-  const items: MoreMenuItem[] = [
-    { page: 'customers', icon: <Users className="h-4 w-4" />, label: 'Customers', section: 'Main' },
-    { page: 'audit-log', icon: <ClipboardList className="h-4 w-4" />, label: 'Audit Log', section: 'Admin' },
-  ]
-  if (isOwner) {
-    items.push({ page: 'crew', icon: <UserCog className="h-4 w-4" />, label: 'Kelola Crew', section: 'Admin' })
-    items.push({ page: 'settings', icon: <Settings className="h-4 w-4" />, label: 'Pengaturan', section: 'Admin' })
-  }
-  return items
-}
+const allMoreMenuItems: MoreMenuItem[] = [
+  { page: 'customers', icon: <Users className="h-4 w-4" />, label: 'Customers', section: 'Main' },
+  { page: 'audit-log', icon: <ClipboardList className="h-4 w-4" />, label: 'Audit Log', section: 'Admin' },
+  { page: 'crew', icon: <UserCog className="h-4 w-4" />, label: 'Kelola Crew', section: 'Admin' },
+  { page: 'settings', icon: <Settings className="h-4 w-4" />, label: 'Pengaturan', section: 'Admin' },
+]
 
 export default function MobileBottomNav() {
   const { currentPage, setCurrentPage } = usePageStore()
@@ -87,6 +83,34 @@ export default function MobileBottomNav() {
   const router = useRouter()
   const [moreOpen, setMoreOpen] = useState(false)
   const isOwner = session?.user?.role === 'OWNER'
+
+  // ---- Crew permission-based access ----
+  // null = full access (OWNER or not yet loaded), Set = restricted access
+  const [allowedPages, setAllowedPages] = useState<Set<string> | null>(null)
+
+  useEffect(() => {
+    if (isOwner) return // allowedPages stays null = full access
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/settings/permissions/my')
+        if (res.ok) {
+          const data = await res.json()
+          if (!cancelled) setAllowedPages(new Set((data.pages as string).split(',').filter(Boolean)))
+        } else {
+          if (!cancelled) setAllowedPages(new Set(['pos']))
+        }
+      } catch {
+        if (!cancelled) setAllowedPages(new Set(['pos']))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isOwner])
+
+  const hasAccess = (page?: PageType): boolean => {
+    if (!page) return true
+    return isOwner || !allowedPages || allowedPages.has(page)
+  }
 
   const handleNav = (page: PageType) => {
     setCurrentPage(page)
@@ -115,7 +139,7 @@ export default function MobileBottomNav() {
     window.location.href = '/'
   }
 
-  const moreItems = getMoreMenuItems(!!isOwner)
+  const moreItems = allMoreMenuItems
   const sections = ['Main', 'Admin']
 
   const isActive = (page: PageType) => currentPage === page
@@ -237,33 +261,43 @@ export default function MobileBottomNav() {
                     {section}
                   </p>
                   <div className="space-y-0.5">
-                    {sectionItems.map((item) => (
-                      <button
-                        key={item.page || item.label}
-                        onClick={() => item.action ? item.action() : item.page && handleNav(item.page)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${
-                          item.page && isActive(item.page)
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : item.danger
-                              ? 'text-red-400 hover:bg-red-500/[0.06]'
-                              : 'text-zinc-300 hover:bg-zinc-800/60'
-                        }`}
-                      >
-                        <span className={`shrink-0 ${
-                          item.page && isActive(item.page)
-                            ? 'text-emerald-400'
-                            : item.danger
-                              ? 'text-red-400'
-                              : 'text-zinc-500'
-                        }`}>
-                          {item.icon}
-                        </span>
-                        <span className="text-sm font-medium">{item.label}</span>
-                        {item.page && isActive(item.page) && (
-                          <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        )}
-                      </button>
-                    ))}
+                    {sectionItems.map((item) => {
+                      const locked = item.page ? !hasAccess(item.page) : false
+                      return (
+                        <button
+                          key={item.page || item.label}
+                          onClick={() => !locked && (item.action ? item.action() : item.page && handleNav(item.page))}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${
+                            locked
+                              ? 'opacity-40 cursor-not-allowed pointer-events-none'
+                              : item.page && isActive(item.page)
+                                ? 'bg-emerald-500/10 text-emerald-400'
+                                : item.danger
+                                  ? 'text-red-400 hover:bg-red-500/[0.06]'
+                                  : 'text-zinc-300 hover:bg-zinc-800/60'
+                          }`}
+                        >
+                          <span className={`shrink-0 ${
+                            locked
+                              ? 'text-zinc-600'
+                              : item.page && isActive(item.page)
+                                ? 'text-emerald-400'
+                                : item.danger
+                                  ? 'text-red-400'
+                                  : 'text-zinc-500'
+                          }`}>
+                            {item.icon}
+                          </span>
+                          <span className="text-sm font-medium flex-1">{item.label}</span>
+                          {locked && (
+                            <Lock className="h-3.5 w-3.5 shrink-0 text-zinc-600" />
+                          )}
+                          {!locked && item.page && isActive(item.page) && (
+                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          )}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )

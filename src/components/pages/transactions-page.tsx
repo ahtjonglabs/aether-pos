@@ -132,6 +132,7 @@ export default function TransactionsPage() {
 
   // Cashier list
   const [cashiers, setCashiers] = useState<CashierOption[]>([])
+  const cashiersPopulated = useRef(false)
 
   // Summary data
   const [summary, setSummary] = useState<SummaryData | null>(null)
@@ -235,15 +236,18 @@ export default function TransactionsPage() {
         setTransactions(data.transactions)
         setTotalPages(data.totalPages)
 
-        // Update cashier list from response
-        const uniqueCashiers = new Map<string, string>()
-        for (const t of data.transactions) {
-          if (t.cashierId && t.cashierName && !uniqueCashiers.has(t.cashierId)) {
-            uniqueCashiers.set(t.cashierId, t.cashierName)
+        // Update cashier list from response (only if not already populated)
+        if (!cashiersPopulated.current) {
+          const uniqueCashiers = new Map<string, string>()
+          for (const t of data.transactions) {
+            if (t.cashierId && t.cashierName && !uniqueCashiers.has(t.cashierId)) {
+              uniqueCashiers.set(t.cashierId, t.cashierName)
+            }
           }
-        }
-        if (uniqueCashiers.size > 0 && cashiers.length === 0) {
-          setCashiers(Array.from(uniqueCashiers.entries()).map(([id, name]) => ({ id, name })))
+          if (uniqueCashiers.size > 0) {
+            cashiersPopulated.current = true
+            setCashiers(Array.from(uniqueCashiers.entries()).map(([id, name]) => ({ id, name })))
+          }
         }
       } else {
         toast.error('Failed to load transactions')
@@ -253,7 +257,7 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, search, dateFrom, dateTo, cashierId, paymentMethod, voidFilter, cashiers.length])
+  }, [page, search, dateFrom, dateTo, cashierId, paymentMethod, voidFilter])
 
   useEffect(() => {
     fetchTransactions()

@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       paidAmount,
       change,
+      promoId,
+      promoDiscount,
     } = body
 
     // Validate items

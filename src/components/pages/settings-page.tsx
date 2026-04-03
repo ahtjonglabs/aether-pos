@@ -110,6 +110,8 @@ interface Promo {
   minPurchase: number | null
   maxDiscount: number | null
   active: boolean
+  buyMinQty: number
+  discountType: string
 }
 
 interface CrewPermission {
@@ -127,6 +129,8 @@ interface PromoFormData {
   minPurchase: string
   maxDiscount: string
   active: boolean
+  buyMinQty: string
+  discountType: string
 }
 
 const DEFAULT_PROMO_FORM: PromoFormData = {
@@ -136,6 +140,8 @@ const DEFAULT_PROMO_FORM: PromoFormData = {
   minPurchase: '',
   maxDiscount: '',
   active: true,
+  buyMinQty: '2',
+  discountType: 'PERCENTAGE',
 }
 
 const AVAILABLE_PAGES = [
@@ -875,6 +881,8 @@ function PromoTab() {
       minPurchase: promo.minPurchase ? String(promo.minPurchase) : '',
       maxDiscount: promo.maxDiscount ? String(promo.maxDiscount) : '',
       active: promo.active,
+      buyMinQty: String(promo.buyMinQty || 2),
+      discountType: promo.discountType || 'PERCENTAGE',
     })
     setDialogOpen(true)
   }
@@ -886,13 +894,17 @@ function PromoTab() {
     }
     setSaving(true)
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: formData.name,
         type: formData.type,
         value: Number(formData.value),
         minPurchase: formData.minPurchase ? Number(formData.minPurchase) : null,
-        maxDiscount: formData.type === 'PERCENTAGE' && formData.maxDiscount ? Number(formData.maxDiscount) : null,
+        maxDiscount: (formData.type === 'PERCENTAGE' || formData.type === 'BUY_X_GET_DISCOUNT') && formData.maxDiscount ? Number(formData.maxDiscount) : null,
         active: formData.active,
+      }
+      if (formData.type === 'BUY_X_GET_DISCOUNT') {
+        payload.buyMinQty = Number(formData.buyMinQty) || 2
+        payload.discountType = formData.discountType || 'PERCENTAGE'
       }
       const url = editPromo ? `/api/settings/promos/${editPromo.id}` : '/api/settings/promos'
       const method = editPromo ? 'PUT' : 'POST'
@@ -987,14 +999,18 @@ function PromoTab() {
                         className={`text-[11px] ${
                           promo.type === 'PERCENTAGE'
                             ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                            : promo.type === 'BUY_X_GET_DISCOUNT'
+                              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                              : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
                         }`}
                       >
-                        {promo.type === 'PERCENTAGE' ? 'Persentase' : 'Nominal'}
+                        {promo.type === 'PERCENTAGE' ? 'Persentase' : promo.type === 'BUY_X_GET_DISCOUNT' ? 'Beli N Diskon' : 'Nominal'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-zinc-200 text-right py-2">
-                      {promo.type === 'PERCENTAGE' ? `${promo.value}%` : formatCurrency(promo.value)}
+                      {promo.type === 'BUY_X_GET_DISCOUNT'
+                        ? `${promo.buyMinQty || 2} item → ${promo.discountType === 'PERCENTAGE' ? `${promo.value}%` : formatCurrency(promo.value)}`
+                        : promo.type === 'PERCENTAGE' ? `${promo.value}%` : formatCurrency(promo.value)}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-400 text-right py-2">
                       {promo.minPurchase ? formatCurrency(promo.minPurchase) : '-'}
@@ -1070,12 +1086,13 @@ function PromoTab() {
                   <SelectContent className="bg-zinc-900 border-zinc-800">
                     <SelectItem value="PERCENTAGE">Persentase (%)</SelectItem>
                     <SelectItem value="NOMINAL">Nominal (Rp)</SelectItem>
+                    <SelectItem value="BUY_X_GET_DISCOUNT">Beli N Produk Diskon</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-300">
-                  Nilai Diskon {formData.type === 'PERCENTAGE' ? '(%)' : '(Rp)'}
+                  Nilai Diskon {formData.type === 'PERCENTAGE' || (formData.type === 'BUY_X_GET_DISCOUNT' && formData.discountType === 'PERCENTAGE') ? '(%)' : '(Rp)'}
                 </Label>
                 <Input
                   type="number"
@@ -1097,7 +1114,7 @@ function PromoTab() {
                   className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
                 />
               </div>
-              {formData.type === 'PERCENTAGE' && (
+              {(formData.type === 'PERCENTAGE' || formData.type === 'BUY_X_GET_DISCOUNT') && (
                 <div className="space-y-1.5">
                   <Label className="text-xs text-zinc-300">Maks Diskon (opsional)</Label>
                   <Input
@@ -1109,6 +1126,37 @@ function PromoTab() {
                     className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
                   />
                 </div>
+              )}
+              {formData.type === 'BUY_X_GET_DISCOUNT' && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-300">Minimal Jumlah Item</Label>
+                    <Input
+                      type="number"
+                      min="2"
+                      value={formData.buyMinQty}
+                      onChange={(e) => setFormData((p) => ({ ...p, buyMinQty: e.target.value }))}
+                      placeholder="2"
+                      className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                    />
+                    <p className="text-[10px] text-zinc-500">Minimal jumlah item di keranjang untuk mendapat diskon</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-zinc-300">Tipe Diskon</Label>
+                    <Select
+                      value={formData.discountType}
+                      onValueChange={(v) => setFormData((p) => ({ ...p, discountType: v }))}
+                    >
+                      <SelectTrigger className="bg-zinc-800 border-zinc-700 text-zinc-100 w-full h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-zinc-900 border-zinc-800">
+                        <SelectItem value="PERCENTAGE">Persentase (%)</SelectItem>
+                        <SelectItem value="NOMINAL">Nominal (Rp)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               )}
               <div className="flex items-center gap-2.5 pt-1">
                 <Switch

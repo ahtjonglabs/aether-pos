@@ -53,6 +53,7 @@ import {
   ReceiptText,
   AlertCircle,
   Store,
+  Tag,
 } from 'lucide-react'
 import {
   Select,
@@ -65,6 +66,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { localDB, type CachedProduct, type CachedCategory, type CachedCustomer } from '@/lib/local-db'
 import { syncAllData, getAllSyncTimes, syncSettingsFromServer, getCachedSettings } from '@/lib/sync-service'
 import { useSession } from 'next-auth/react'
+import { usePageStore } from '@/hooks/use-page-store'
 
 // ==================== TYPES ====================
 
@@ -154,6 +156,7 @@ const QUICK_NOMINALS = [5000, 10000, 20000, 50000, 100000, 200000, 500000]
 export default function PosPage() {
   const { data: session } = useSession()
   const isMobile = useIsMobile()
+  const { currentPage } = usePageStore()
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -265,6 +268,35 @@ export default function PosPage() {
     fetchSettings()
   }, [isOnline])
 
+  // Re-fetch settings when returning to POS page
+  useEffect(() => {
+    if (currentPage === 'pos') {
+      const refetchSettings = async () => {
+        try {
+          if (isOnline) {
+            const res = await fetch('/api/settings')
+            if (res.ok) {
+              const data = await res.json()
+              setSettings({
+                paymentMethods: data.paymentMethods || 'CASH,QRIS',
+                loyaltyEnabled: data.loyaltyEnabled ?? true,
+                loyaltyPointsPerAmount: data.loyaltyPointsPerAmount || 10000,
+                loyaltyPointValue: data.loyaltyPointValue || 100,
+                receiptBusinessName: data.receiptBusinessName || 'Aether POS',
+                receiptAddress: data.receiptAddress || '',
+                receiptPhone: data.receiptPhone || '',
+                receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
+                receiptLogo: data.receiptLogo || '',
+                themePrimaryColor: data.themePrimaryColor || 'emerald',
+              })
+            }
+          }
+        } catch { /* silent */ }
+      }
+      refetchSettings()
+    }
+  }, [currentPage, isOnline])
+
   // Fetch user's outlets (enterprise multi-outlet support)
   useEffect(() => {
     const fetchOutlets = async () => {
@@ -305,6 +337,12 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [pointsToUse, setPointsToUse] = useState(0)
 
+  // Promo
+  const [selectedPromo, setSelectedPromo] = useState<{ id: string; name: string; type: string; discount: number; description: string } | null>(null)
+  const [promoDiscount, setPromoDiscount] = useState(0)
+  const [promoLoading, setPromoLoading] = useState(false)
+  const [availablePromos, setAvailablePromos] = useState<Array<{ id: string; name: string; type: string; description: string }>>([])
+
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS' | 'DEBIT'>('CASH')
   const [paidAmount, setPaidAmount] = useState('')
@@ -315,6 +353,62 @@ export default function PosPage() {
       setPaymentMethod(availablePaymentMethods[0])
     }
   }, [availablePaymentMethods, paymentMethod])
+
+  // Fetch available promos
+  useEffect(() => {
+    const fetchPromos = async () => {
+      try {
+        const res = await fetch('/api/settings/promos?active=true')
+        if (res.ok) {
+          const data = await res.json()
+          setAvailablePromos(data.promos || [])
+        }
+      } catch { /* silent */ }
+    }
+    if (isOnline) fetchPromos()
+  }, [isOnline])
+
+  // Calculate promo when cart changes
+  useEffect(() => {
+    if (cart.length === 0) {
+      setSelectedPromo(null)
+      setPromoDiscount(0)
+      return
+    }
+    const calculatePromo = async () => {
+      setPromoLoading(true)
+      try {
+        const cartSubtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0)
+        const res = await fetch('/api/promos/calculate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: cart.map(item => ({
+              productId: item.product.id,
+              productName: item.product.name,
+              price: item.product.price,
+              qty: item.qty,
+              subtotal: item.product.price * item.qty,
+            })),
+            subtotal: cartSubtotal,
+          }),
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.applicablePromo) {
+            setSelectedPromo(data.applicablePromo)
+            setPromoDiscount(data.discount)
+          } else {
+            setSelectedPromo(null)
+            setPromoDiscount(0)
+          }
+        }
+      } catch { /* silent */ }
+      finally { setPromoLoading(false) }
+    }
+    const timer = setTimeout(calculatePromo, 500)
+    return () => clearTimeout(timer)
+  }, [cart])
 
   // Checkout
   const [checkoutOpen, setCheckoutOpen] = useState(false)
@@ -534,7 +628,7 @@ export default function PosPage() {
   const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.qty, 0), [cart])
   const maxPointsToUse = selectedCustomer ? selectedCustomer.points : 0
   const pointsDiscount = pointsToUse * settings.loyaltyPointValue
-  const total = Math.max(0, subtotal - pointsDiscount)
+  const total = Math.max(0, subtotal - pointsDiscount - promoDiscount)
   const change = paymentMethod === 'CASH' ? Math.max(0, Number(paidAmount) - total) : 0
 
   const addToCart = (product: Product) => {
@@ -567,6 +661,8 @@ export default function PosPage() {
     if (availablePaymentMethods.includes('CASH')) setPaymentMethod('CASH')
     setSelectedCustomer(null)
     setCheckoutResult(null)
+    setSelectedPromo(null)
+    setPromoDiscount(0)
   }
 
   const handlePointsChange = (value: string) => {
@@ -655,12 +751,14 @@ export default function PosPage() {
           subtotal: item.product.price * item.qty,
         })),
         subtotal,
-        discount: pointsDiscount,
+        discount: pointsDiscount + promoDiscount,
         pointsUsed: pointsToUse,
         total,
         paymentMethod,
         paidAmount: paymentMethod === 'CASH' ? Number(paidAmount) : total,
         change: paymentMethod === 'CASH' ? change : 0,
+        promoId: selectedPromo?.id || null,
+        promoDiscount,
       }
 
       // STEP 1: Save to IndexedDB first
@@ -1055,6 +1153,7 @@ export default function PosPage() {
         <div className="space-y-0.5 py-2">
           <div className="flex"><span className="text-zinc-500">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
           {pointsDiscount > 0 && <div className="flex text-emerald-600"><span>Poin Diskon</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+          {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span><span>-{formatCurrency(promoDiscount)}</span></div>}
           <div className="border-t border-dashed border-zinc-300 my-2" />
           <div className="flex text-sm font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
         </div>
@@ -1294,6 +1393,15 @@ export default function PosPage() {
               {pointsDiscount > 0 && (
                 <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>
               )}
+              {promoDiscount > 0 && selectedPromo && (
+                <div className="flex justify-between text-amber-400 text-xs">
+                  <span className="flex items-center gap-1">
+                    <Tag className="h-3 w-3" />
+                    Promo: {selectedPromo.name}
+                  </span>
+                  <span>-{formatCurrency(promoDiscount)}</span>
+                </div>
+              )}
               <Separator className="bg-zinc-800" />
               <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
             </div>
@@ -1437,6 +1545,12 @@ export default function PosPage() {
                   </div>
                 )}
                 {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400 text-[11px]"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                {promoDiscount > 0 && selectedPromo && (
+                  <div className="flex justify-between text-amber-400 text-[11px]">
+                    <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
+                    <span>-{formatCurrency(promoDiscount)}</span>
+                  </div>
+                )}
                 <Separator className="bg-zinc-800" />
                 <div className="flex justify-between text-sm font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
               </div>
@@ -1492,6 +1606,12 @@ export default function PosPage() {
                   <Separator className="bg-zinc-800 my-1.5" />
                   <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                   {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                  {promoDiscount > 0 && selectedPromo && (
+                    <div className="flex justify-between text-amber-400 text-xs">
+                      <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
+                      <span>-{formatCurrency(promoDiscount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
                 </div>
 
@@ -1539,6 +1659,12 @@ export default function PosPage() {
                 <Separator className="bg-zinc-800 my-1.5" />
                 <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                 {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                {promoDiscount > 0 && selectedPromo && (
+                  <div className="flex justify-between text-amber-400 text-xs">
+                    <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
+                    <span>-{formatCurrency(promoDiscount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
               </div>
 

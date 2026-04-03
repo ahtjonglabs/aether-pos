@@ -49,23 +49,69 @@ export async function POST(
       return safeJsonError('Reason is required for void', 400)
     }
 
-    // Create void audit log
-    await safeAuditLog({
-      action: 'VOID',
-      entityType: 'TRANSACTION',
-      entityId: id,
-      details: JSON.stringify({
-        invoiceNumber: transaction.invoiceNumber,
-        total: transaction.total,
-        reason: reason.trim(),
-        voidedBy: user.name || user.email,
-        voidedAt: new Date().toISOString(),
-      }),
-      outletId,
-      userId,
+    // Fetch transaction items for stock restoration
+    const transactionItems = await db.transactionItem.findMany({
+      where: { transactionId: id },
+      select: { productId: true, productName: true, qty: true },
     })
 
-    return safeJson({ success: true, message: 'Transaction voided' })
+    // Perform void in a transaction: restore stock + create audit log
+    await db.$transaction(async (tx) => {
+      // Restore stock for each item
+      for (const item of transactionItems) {
+        // Increment product stock
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.qty } },
+        })
+
+        // Create audit log for stock restoration
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { stock: true },
+        })
+
+        await tx.auditLog.create({
+          data: {
+            action: 'RESTOCK',
+            entityType: 'PRODUCT',
+            entityId: item.productId,
+            details: JSON.stringify({
+              reason: `Void transaksi ${transaction.invoiceNumber}`,
+              productName: item.productName,
+              quantityAdded: item.qty,
+              newStock: product?.stock ?? 0,
+            }),
+            outletId,
+            userId,
+          },
+        })
+      }
+
+      // Create void audit log
+      await tx.auditLog.create({
+        data: {
+          action: 'VOID',
+          entityType: 'TRANSACTION',
+          entityId: id,
+          details: JSON.stringify({
+            invoiceNumber: transaction.invoiceNumber,
+            total: transaction.total,
+            reason: reason.trim(),
+            voidedBy: user.name || user.email,
+            voidedAt: new Date().toISOString(),
+            itemsRestored: transactionItems.map(i => ({
+              productName: i.productName,
+              qty: i.qty,
+            })),
+          }),
+          outletId,
+          userId,
+        },
+      })
+    })
+
+    return safeJson({ success: true, message: 'Transaction voided, stock restored' })
   } catch (error) {
     console.error('Void transaction error:', error)
     return safeJsonError('Failed to void transaction', 500)

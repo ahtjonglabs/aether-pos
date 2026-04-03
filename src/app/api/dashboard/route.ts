@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
+import { getVoidedTxIds } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 interface HourBucket {
@@ -22,13 +23,20 @@ export async function GET(request: NextRequest) {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
 
-    // ── All-time totals ──
+    // Get voided transaction IDs to exclude from all calculations
+    const voidedTxIds = await getVoidedTxIds(db, outletId)
+    const voidedIdArray = Array.from(voidedTxIds).filter(Boolean) as string[]
+
+    // Build void exclusion filter
+    const voidExclude = voidedIdArray.length > 0 ? { id: { notIn: voidedIdArray } } : {}
+
+    // ── All-time totals (excluding voided) ──
     const [revenueResult, totalTxCount, totalProducts] = await Promise.all([
       db.transaction.aggregate({
-        where: { outletId },
+        where: { outletId, ...voidExclude },
         _sum: { total: true },
       }),
-      db.transaction.count({ where: { outletId } }),
+      db.transaction.count({ where: { outletId, ...voidExclude } }),
       db.product.count({ where: { outletId } }),
     ])
     const totalRevenue = revenueResult._sum.total ?? 0
@@ -49,11 +57,12 @@ export async function GET(request: NextRequest) {
       take: 5,
     })
 
-    // ── Today's metrics ──
+    // ── Today's metrics (excluding voided) ──
     const todayTransactions = await db.transaction.findMany({
       where: {
         outletId,
         createdAt: { gte: todayStart },
+        ...voidExclude,
       },
       select: {
         subtotal: true,
@@ -71,11 +80,12 @@ export async function GET(request: NextRequest) {
     const todayRevenue = todayTransactions.reduce((s, t) => s + t.total, 0)
     const todayTxCount = todayTransactions.length
 
-    // ── Yesterday's metrics ──
+    // ── Yesterday's metrics (excluding voided) ──
     const yesterdayTransactions = await db.transaction.findMany({
       where: {
         outletId,
         createdAt: { gte: yesterdayStart, lt: todayStart },
+        ...voidExclude,
       },
       select: {
         total: true,
@@ -98,9 +108,11 @@ export async function GET(request: NextRequest) {
     let aiInsight: string | null = null
 
     if (isOwner) {
-      // All-time profit
+      // All-time profit (excluding voided)
       const allItems = await db.transactionItem.findMany({
-        where: { transaction: { outletId } },
+        where: {
+          transaction: { outletId, ...voidExclude },
+        },
         select: { price: true, hpp: true, qty: true },
       })
       totalProfit = allItems.reduce((s, i) => s + (i.price - i.hpp) * i.qty, 0)

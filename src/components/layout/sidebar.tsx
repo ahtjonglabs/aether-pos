@@ -24,6 +24,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   UserCog,
+  Lock,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
@@ -146,17 +147,20 @@ function SidebarContent({ collapsed = false, onNavigate, onToggleCollapse, isMob
     }
   }, [permissionsLoaded, isOwner, allowedPages, currentPage, setCurrentPage])
 
-  // Filter nav items based on permissions
-  const filteredNavItems = useMemo(() => {
-    if (isOwner || !allowedPages) return navItems
-    return navItems.filter((item) => allowedPages.includes(item.page))
+  // Build access map: true if user can access the page, false if locked
+  const navItemAccess = useMemo(() => {
+    const map = new Map<string, boolean>()
+    for (const item of navItems) {
+      map.set(item.page, isOwner || !allowedPages || allowedPages.includes(item.page))
+    }
+    return map
   }, [isOwner, allowedPages])
 
-  // Group filtered items by section
+  // Group all items by section (never filter — locked items are shown disabled)
   const groupedItems = useMemo(() => {
     const groups: { key: string; label: string; items: NavItem[] }[] = []
     const seen = new Set<string>()
-    for (const item of filteredNavItems) {
+    for (const item of navItems) {
       const sec = item.section || 'main'
       if (!seen.has(sec)) {
         seen.add(sec)
@@ -165,7 +169,7 @@ function SidebarContent({ collapsed = false, onNavigate, onToggleCollapse, isMob
       groups[groups.length - 1].items.push(item)
     }
     return groups
-  }, [filteredNavItems])
+  }, [navItemAccess])
 
   const handleNav = (page: PageType) => {
     if (isOwner || !allowedPages || allowedPages.includes(page)) {
@@ -204,27 +208,42 @@ function SidebarContent({ collapsed = false, onNavigate, onToggleCollapse, isMob
   const renderNavButton = (item: NavItem) => {
     const isActive = currentPage === item.page
     const isCompact = collapsed && !isMobile
+    const isLocked = permissionsLoaded && !navItemAccess.get(item.page)
 
     const btn = (
       <button
-        onClick={() => handleNav(item.page)}
+        onClick={() => !isLocked && handleNav(item.page)}
         className={`group relative w-full flex items-center gap-3 rounded-lg text-[13px] font-medium transition-all duration-150 ${
           isCompact ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'
         } ${
-          isActive
-            ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]'
-            : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
+          isLocked
+            ? 'opacity-40 cursor-not-allowed pointer-events-none'
+            : isActive
+              ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.15)]'
+              : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
         }`}
       >
-        {isActive && !isCompact && (
+        {isActive && !isCompact && !isLocked && (
           <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-emerald-500" />
         )}
         <span className={`shrink-0 transition-colors duration-150 ${
-          isActive ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-zinc-300'
+          isLocked
+            ? 'text-zinc-600'
+            : isActive
+              ? 'text-emerald-400'
+              : 'text-zinc-500 group-hover:text-zinc-300'
         }`}>
           {item.icon}
         </span>
-        {!isCompact && <span className="truncate">{item.label}</span>}
+        {!isCompact && (
+          <span className="truncate flex-1">{item.label}</span>
+        )}
+        {!isCompact && isLocked && (
+          <Lock className="h-3 w-3 shrink-0 text-zinc-600" />
+        )}
+        {isCompact && isLocked && (
+          <Lock className="h-3 w-3 absolute -top-0.5 -right-0.5 text-zinc-500" />
+        )}
       </button>
     )
 

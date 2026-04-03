@@ -27,7 +27,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, type, value, minPurchase, maxDiscount, active } = body
+    const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType } = body
 
     // L4: Track changes for audit
     const changes: Record<string, { from: unknown; to: unknown }> = {}
@@ -35,6 +35,8 @@ export async function PUT(
     if (type !== undefined && type !== existing.type) changes.type = { from: existing.type, to: type }
     if (value !== undefined && Number(value) !== existing.value) changes.value = { from: existing.value, to: Number(value) }
     if (active !== undefined && active !== existing.active) changes.active = { from: existing.active, to: active }
+    if (buyMinQty !== undefined && Number(buyMinQty) !== existing.buyMinQty) changes.buyMinQty = { from: existing.buyMinQty, to: Number(buyMinQty) }
+    if (discountType !== undefined && discountType !== existing.discountType) changes.discountType = { from: existing.discountType, to: discountType }
 
     const promo = await db.$transaction(async (tx) => {
       const updated = await tx.promo.update({
@@ -46,6 +48,8 @@ export async function PUT(
           ...(minPurchase !== undefined && { minPurchase: minPurchase ? Number(minPurchase) : null }),
           ...(maxDiscount !== undefined && { maxDiscount: maxDiscount ? Number(maxDiscount) : null }),
           ...(active !== undefined && { active }),
+          ...(buyMinQty !== undefined && { buyMinQty: Number(buyMinQty) || 0 }),
+          ...(discountType !== undefined && { discountType }),
         },
       })
 

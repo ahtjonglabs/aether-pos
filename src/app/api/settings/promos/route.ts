@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, type, value, minPurchase, maxDiscount, active } = body
+    const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType } = body
 
     if (!name || !type || value === undefined) {
       return safeJsonError('Nama, tipe, dan nilai diskon wajib diisi', 400)
@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
           maxDiscount: maxDiscount ? Number(maxDiscount) : null,
           active: active !== undefined ? active : true,
           outletId: user.outletId,
+          buyMinQty: type === 'BUY_X_GET_DISCOUNT' ? Number(buyMinQty) || 2 : 0,
+          discountType: type === 'BUY_X_GET_DISCOUNT' ? (discountType || 'PERCENTAGE') : 'PERCENTAGE',
         },
       })
 
