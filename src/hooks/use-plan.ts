@@ -100,7 +100,7 @@ export function usePlan(): UsePlanReturn {
     } finally {
       setIsLoading(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
 
   // Initial fetch

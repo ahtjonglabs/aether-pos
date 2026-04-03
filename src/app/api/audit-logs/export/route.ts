@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
         { user: { name: { contains: search } } },
         { entityType: { contains: search } },
         { action: { contains: search } },
-        { product: { name: { contains: search } } },
       ]
     }
 
@@ -66,9 +65,6 @@ export async function GET(request: NextRequest) {
         user: {
           select: { name: true, email: true },
         },
-        product: {
-          select: { name: true },
-        },
       },
     })
 
@@ -78,7 +74,6 @@ export async function GET(request: NextRequest) {
       'Action': log.action,
       'Tipe Entity': log.entityType,
       'Entity ID': log.entityId || '-',
-      'Nama Produk': log.product?.name || '-',
       'Detail': typeof log.details === 'string'
         ? (() => { try { return JSON.stringify(JSON.parse(log.details || '{}'), null, 2) } catch { return log.details || '-' } })()
         : (log.details || '-'),
@@ -94,7 +89,6 @@ export async function GET(request: NextRequest) {
       { wch: 14 },  // Action
       { wch: 16 },  // Tipe Entity
       { wch: 36 },  // Entity ID
-      { wch: 30 },  // Nama Produk
       { wch: 60 },  // Detail
     ]
 

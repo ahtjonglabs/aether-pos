@@ -45,7 +45,6 @@ export async function GET(request: NextRequest) {
         { user: { name: { contains: search } } },
         { entityType: { contains: search } },
         { action: { contains: search } },
-        { product: { name: { contains: search } } },
       ]
     }
 
@@ -58,9 +57,6 @@ export async function GET(request: NextRequest) {
         include: {
           user: {
             select: { name: true, email: true },
-          },
-          product: {
-            select: { name: true },
           },
         },
       }),
@@ -78,7 +74,6 @@ export async function GET(request: NextRequest) {
         name: log.user.name,
         email: log.user.email,
       },
-      productName: log.product?.name ?? null,
     }))
 
     return NextResponse.json({

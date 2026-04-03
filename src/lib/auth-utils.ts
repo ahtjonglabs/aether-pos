@@ -1,39 +1,65 @@
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import type { UserRole } from './types';
+import { NextRequest } from 'next/server'
+import { cookies } from 'next/headers'
+import { getAuthUser } from '@/lib/get-auth'
+import type { UserRole } from './types'
 
 interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  outletId: string;
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  outletId: string
 }
 
-export async function getCurrentUser(): Promise<AuthUser> {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    throw new Error('Unauthorized — please log in');
+/**
+ * Get the current authenticated user.
+ *
+ * Two overloads:
+ * 1. API routes: pass a NextRequest to read cookies from it
+ * 2. Server actions: call without args — reads cookies via next/headers
+ */
+export async function getCurrentUser(request?: NextRequest): Promise<AuthUser> {
+  let user: Awaited<ReturnType<typeof getAuthUser>> | null = null
+
+  if (request) {
+    // API route — read cookies from the request
+    user = await getAuthUser(request)
+  } else {
+    // Server action — read cookies via next/headers
+    const cookieStore = await cookies()
+    const sessionToken = cookieStore.get('next-auth.session-token')?.value
+      || cookieStore.get('__Secure-next-auth.session-token')?.value
+
+    if (sessionToken) {
+      // Build a minimal request-like object with the cookie
+      const headers = new Headers()
+      headers.set('cookie', `${sessionToken ? 'next-auth.session-token=' + sessionToken : ''}`)
+      const minimalReq = { cookies: { get: (name: string) => cookieStore.get(name) } } as NextRequest
+      user = await getAuthUser(minimalReq)
+    }
   }
-  const user = session.user as Record<string, unknown>;
+
+  if (!user) {
+    throw new Error('Unauthorized — please log in')
+  }
+
   return {
-    id: session.user.id,
-    name: session.user.name ?? '',
-    email: session.user.email ?? '',
+    id: user.id,
+    name: user.name ?? '',
+    email: user.email ?? '',
     role: user.role as UserRole,
-    outletId: user.outletId as string,
-  };
-}
-
-export async function requireAuth(): Promise<AuthUser> {
-  const user = await getCurrentUser();
-  return user;
-}
-
-export async function requireOwner(): Promise<AuthUser> {
-  const user = await getCurrentUser();
-  if (user.role !== 'OWNER') {
-    throw new Error('Forbidden — owner access required');
+    outletId: user.outletId,
   }
-  return user;
+}
+
+export async function requireAuth(request?: NextRequest): Promise<AuthUser> {
+  return getCurrentUser(request)
+}
+
+export async function requireOwner(request?: NextRequest): Promise<AuthUser> {
+  const user = await getCurrentUser(request)
+  if (user.role !== 'OWNER') {
+    throw new Error('Forbidden — owner access required')
+  }
+  return user
 }

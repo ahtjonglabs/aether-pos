@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth-utils'
 import { db } from '@/lib/db'
 import { getPlanFeatures, getPlanLabel } from '@/lib/plan-config'
@@ -10,9 +10,9 @@ import { getPlanFeatures, getPlanLabel } from '@/lib/plan-config'
  * Called by the client on mount and periodically to detect
  * plan changes from the Command Center.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const user = await requireAuth()
+    const user = await requireAuth(request)
 
     const outlet = await db.outlet.findUnique({
       where: { id: user.outletId },
