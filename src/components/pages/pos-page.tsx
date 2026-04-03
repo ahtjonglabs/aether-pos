@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { formatCurrency } from '@/lib/format'
 import { Button } from '@/components/ui/button'
@@ -36,7 +35,6 @@ import {
   CreditCard,
   ChevronLeft,
   ChevronRight,
-  ScanBarcode,
   Wifi,
   WifiOff,
   RefreshCw,
@@ -44,13 +42,21 @@ import {
   Database,
   ArrowDownToLine,
   LayoutGrid,
-  Tag,
   ReceiptText,
   AlertCircle,
+  Store,
 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { localDB, type CachedProduct, type CachedCategory, type CachedCustomer } from '@/lib/local-db'
 import { syncAllData, getAllSyncTimes, syncSettingsFromServer, getCachedSettings } from '@/lib/sync-service'
+import { useSession } from 'next-auth/react'
 
 // ==================== TYPES ====================
 
@@ -101,6 +107,21 @@ interface OutletSettings {
   receiptFooter: string
   receiptLogo: string
   themePrimaryColor: string
+}
+
+interface OutletInfo {
+  id: string
+  name: string
+  address: string | null
+  phone: string | null
+}
+
+interface UserOutlet {
+  id: string
+  name: string
+  address: string | null
+  phone: string | null
+  isPrimary: boolean
 }
 
 const PRODUCTS_PER_PAGE = 24
@@ -154,6 +175,11 @@ export default function PosPage() {
     themePrimaryColor: 'emerald',
   })
 
+  // Outlet info (from settings API)
+  const [outletInfo, setOutletInfo] = useState<OutletInfo | null>(null)
+  const [userOutlets, setUserOutlets] = useState<UserOutlet[]>([])
+  const [outletsLoading, setOutletsLoading] = useState(false)
+
   const availablePaymentMethods = useMemo(() => {
     return settings.paymentMethods.split(',').map(m => m.trim().toUpperCase()).filter(Boolean) as Array<'CASH' | 'QRIS' | 'DEBIT'>
   }, [settings.paymentMethods])
@@ -178,6 +204,15 @@ export default function PosPage() {
               receiptLogo: data.receiptLogo || '',
               themePrimaryColor: data.themePrimaryColor || 'emerald',
             })
+            // Extract outlet info from settings response
+            if (data.outlet) {
+              setOutletInfo({
+                id: data.outlet.id,
+                name: data.outlet.name,
+                address: data.outlet.address,
+                phone: data.outlet.phone,
+              })
+            }
             // Cache settings for offline use
             syncSettingsFromServer()
           }
@@ -197,11 +232,48 @@ export default function PosPage() {
               receiptLogo: (cached.receiptLogo as string) || '',
               themePrimaryColor: (cached.themePrimaryColor as string) || 'emerald',
             })
+            // Extract outlet info from cached settings
+            const cachedOutlet = cached.outlet as { id: string; name: string; address: string | null; phone: string | null } | undefined
+            if (cachedOutlet) {
+              setOutletInfo({
+                id: cachedOutlet.id,
+                name: cachedOutlet.name,
+                address: cachedOutlet.address,
+                phone: cachedOutlet.phone,
+              })
+            }
           }
         }
       } catch { /* use defaults */ }
     }
     fetchSettings()
+  }, [isOnline])
+
+  // Fetch user's outlets (enterprise multi-outlet support)
+  useEffect(() => {
+    const fetchOutlets = async () => {
+      if (!isOnline) return
+      try {
+        const res = await fetch('/api/outlets')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.outlets && Array.isArray(data.outlets)) {
+            setUserOutlets(data.outlets.map((o: Record<string, unknown>) => ({
+              id: o.id as string,
+              name: o.name as string,
+              address: (o.address as string) || null,
+              phone: (o.phone as string) || null,
+              isPrimary: (o.isPrimary as boolean) || false,
+            })))
+          }
+        }
+      } catch { /* silent - outlets list is non-critical */ }
+      finally {
+        setOutletsLoading(false)
+      }
+    }
+    setOutletsLoading(true)
+    fetchOutlets()
   }, [isOnline])
 
   // Customers
@@ -1004,9 +1076,63 @@ export default function PosPage() {
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-zinc-100">Point of Sale</h1>
-          <p className="text-[11px] text-zinc-500">Proses transaksi & terima pembayaran</p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-lg font-bold text-zinc-100">Point of Sale</h1>
+            <p className="text-[11px] text-zinc-500">Proses transaksi & terima pembayaran</p>
+          </div>
+
+          {/* Outlet Selector */}
+          {userOutlets.length > 1 ? (
+            <Select
+              value={outletInfo?.id || ''}
+              onValueChange={(value) => {
+                const selectedOutlet = userOutlets.find(o => o.id === value)
+                if (selectedOutlet && selectedOutlet.id !== outletInfo?.id) {
+                  toast.info(`Switching to "${selectedOutlet.name}"...`, {
+                    description: 'Data will reload for the selected outlet.',
+                    duration: 3000,
+                  })
+                  setOutletInfo({
+                    id: selectedOutlet.id,
+                    name: selectedOutlet.name,
+                    address: selectedOutlet.address,
+                    phone: selectedOutlet.phone,
+                  })
+                }
+              }}
+            >
+              <SelectTrigger className="w-auto min-w-[180px] max-w-[220px] h-8 bg-zinc-900 border-zinc-700 text-zinc-200 text-xs rounded-lg gap-1.5 pr-2">
+                <Store className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+                <SelectValue placeholder={outletsLoading ? 'Loading...' : 'Select outlet'} />
+              </SelectTrigger>
+              <SelectContent className="bg-zinc-900 border-zinc-700">
+                {userOutlets.map((outlet) => (
+                  <SelectItem key={outlet.id} value={outlet.id} className="text-xs text-zinc-200 focus:bg-zinc-800 focus:text-zinc-100">
+                    <div className="flex items-center gap-2">
+                      <Store className="h-3.5 w-3.5 text-zinc-500" />
+                      <span>{outlet.name}</span>
+                      {outlet.isPrimary && (
+                        <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-medium">
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : outletInfo ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700 text-[11px] font-medium text-zinc-400">
+              <Store className="h-3 w-3" />
+              <span>{outletInfo.name}</span>
+            </div>
+          ) : !outletsLoading ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-800/50 border border-zinc-800 text-[11px] font-medium text-zinc-600">
+              <Store className="h-3 w-3" />
+              <span>No outlet</span>
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           {/* Connection */}

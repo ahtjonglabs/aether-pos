@@ -61,6 +61,12 @@ export interface OfflineTransaction {
   isSynced: 0 | 1
   createdAt: number
   retryCount: number
+  // Fields populated after successful sync
+  syncedAt?: number
+  invoiceNumber?: string
+  serverTransactionId?: string
+  // Fields populated on sync failure
+  lastError?: string
 }
 
 export interface SyncMeta {
