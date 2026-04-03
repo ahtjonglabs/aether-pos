@@ -68,45 +68,55 @@ export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
 
+    // Coerce types to match Prisma schema expectations
+    const loyaltyEnabled = typeof body.loyaltyEnabled === 'boolean' ? body.loyaltyEnabled : undefined
+    const loyaltyPointsPerAmount = body.loyaltyPointsPerAmount != null ? Number(body.loyaltyPointsPerAmount) : undefined
+    const loyaltyPointValue = body.loyaltyPointValue != null ? Number(body.loyaltyPointValue) : undefined
+    const notifyOnTransaction = typeof body.notifyOnTransaction === 'boolean' ? body.notifyOnTransaction : undefined
+    const notifyOnCustomer = typeof body.notifyOnCustomer === 'boolean' ? body.notifyOnCustomer : undefined
+    const notifyDailyReport = typeof body.notifyDailyReport === 'boolean' ? body.notifyDailyReport : undefined
+    const notifyWeeklyReport = typeof body.notifyWeeklyReport === 'boolean' ? body.notifyWeeklyReport : undefined
+    const notifyMonthlyReport = typeof body.notifyMonthlyReport === 'boolean' ? body.notifyMonthlyReport : undefined
+
     // Upsert settings
     const setting = await db.outletSetting.upsert({
       where: { outletId: user.outletId },
       create: {
         outletId: user.outletId,
-        ...(body.paymentMethods !== undefined && { paymentMethods: body.paymentMethods }),
-        ...(body.loyaltyEnabled !== undefined && { loyaltyEnabled: body.loyaltyEnabled }),
-        ...(body.loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount: body.loyaltyPointsPerAmount }),
-        ...(body.loyaltyPointValue !== undefined && { loyaltyPointValue: body.loyaltyPointValue }),
-        ...(body.receiptBusinessName !== undefined && { receiptBusinessName: body.receiptBusinessName }),
-        ...(body.receiptAddress !== undefined && { receiptAddress: body.receiptAddress }),
-        ...(body.receiptPhone !== undefined && { receiptPhone: body.receiptPhone }),
-        ...(body.receiptFooter !== undefined && { receiptFooter: body.receiptFooter }),
-        ...(body.receiptLogo !== undefined && { receiptLogo: body.receiptLogo }),
-        ...(body.themePrimaryColor !== undefined && { themePrimaryColor: body.themePrimaryColor }),
-        ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId }),
-        ...(body.notifyOnTransaction !== undefined && { notifyOnTransaction: body.notifyOnTransaction }),
-        ...(body.notifyOnCustomer !== undefined && { notifyOnCustomer: body.notifyOnCustomer }),
-        ...(body.notifyDailyReport !== undefined && { notifyDailyReport: body.notifyDailyReport }),
-        ...(body.notifyWeeklyReport !== undefined && { notifyWeeklyReport: body.notifyWeeklyReport }),
-        ...(body.notifyMonthlyReport !== undefined && { notifyMonthlyReport: body.notifyMonthlyReport }),
+        ...(body.paymentMethods !== undefined && { paymentMethods: String(body.paymentMethods) }),
+        ...(loyaltyEnabled !== undefined && { loyaltyEnabled }),
+        ...(loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount }),
+        ...(loyaltyPointValue !== undefined && { loyaltyPointValue }),
+        ...(body.receiptBusinessName !== undefined && { receiptBusinessName: String(body.receiptBusinessName ?? '') }),
+        ...(body.receiptAddress !== undefined && { receiptAddress: String(body.receiptAddress ?? '') }),
+        ...(body.receiptPhone !== undefined && { receiptPhone: String(body.receiptPhone ?? '') }),
+        ...(body.receiptFooter !== undefined && { receiptFooter: String(body.receiptFooter ?? '') }),
+        ...(body.receiptLogo !== undefined && { receiptLogo: String(body.receiptLogo ?? '') }),
+        ...(body.themePrimaryColor !== undefined && { themePrimaryColor: String(body.themePrimaryColor) }),
+        ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId ? String(body.telegramChatId) : null }),
+        ...(notifyOnTransaction !== undefined && { notifyOnTransaction }),
+        ...(notifyOnCustomer !== undefined && { notifyOnCustomer }),
+        ...(notifyDailyReport !== undefined && { notifyDailyReport }),
+        ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
+        ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
       },
       update: {
-        ...(body.paymentMethods !== undefined && { paymentMethods: body.paymentMethods }),
-        ...(body.loyaltyEnabled !== undefined && { loyaltyEnabled: body.loyaltyEnabled }),
-        ...(body.loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount: body.loyaltyPointsPerAmount }),
-        ...(body.loyaltyPointValue !== undefined && { loyaltyPointValue: body.loyaltyPointValue }),
-        ...(body.receiptBusinessName !== undefined && { receiptBusinessName: body.receiptBusinessName }),
-        ...(body.receiptAddress !== undefined && { receiptAddress: body.receiptAddress }),
-        ...(body.receiptPhone !== undefined && { receiptPhone: body.receiptPhone }),
-        ...(body.receiptFooter !== undefined && { receiptFooter: body.receiptFooter }),
-        ...(body.receiptLogo !== undefined && { receiptLogo: body.receiptLogo }),
-        ...(body.themePrimaryColor !== undefined && { themePrimaryColor: body.themePrimaryColor }),
-        ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId }),
-        ...(body.notifyOnTransaction !== undefined && { notifyOnTransaction: body.notifyOnTransaction }),
-        ...(body.notifyOnCustomer !== undefined && { notifyOnCustomer: body.notifyOnCustomer }),
-        ...(body.notifyDailyReport !== undefined && { notifyDailyReport: body.notifyDailyReport }),
-        ...(body.notifyWeeklyReport !== undefined && { notifyWeeklyReport: body.notifyWeeklyReport }),
-        ...(body.notifyMonthlyReport !== undefined && { notifyMonthlyReport: body.notifyMonthlyReport }),
+        ...(body.paymentMethods !== undefined && { paymentMethods: String(body.paymentMethods) }),
+        ...(loyaltyEnabled !== undefined && { loyaltyEnabled }),
+        ...(loyaltyPointsPerAmount !== undefined && { loyaltyPointsPerAmount }),
+        ...(loyaltyPointValue !== undefined && { loyaltyPointValue }),
+        ...(body.receiptBusinessName !== undefined && { receiptBusinessName: String(body.receiptBusinessName ?? '') }),
+        ...(body.receiptAddress !== undefined && { receiptAddress: String(body.receiptAddress ?? '') }),
+        ...(body.receiptPhone !== undefined && { receiptPhone: String(body.receiptPhone ?? '') }),
+        ...(body.receiptFooter !== undefined && { receiptFooter: String(body.receiptFooter ?? '') }),
+        ...(body.receiptLogo !== undefined && { receiptLogo: String(body.receiptLogo ?? '') }),
+        ...(body.themePrimaryColor !== undefined && { themePrimaryColor: String(body.themePrimaryColor) }),
+        ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId ? String(body.telegramChatId) : null }),
+        ...(notifyOnTransaction !== undefined && { notifyOnTransaction }),
+        ...(notifyOnCustomer !== undefined && { notifyOnCustomer }),
+        ...(notifyDailyReport !== undefined && { notifyDailyReport }),
+        ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
+        ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
       },
       include: { outlet: true },
     })
