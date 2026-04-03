@@ -801,179 +801,357 @@ export default function ProductsPage() {
         </Select>
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 bg-zinc-900 rounded" />
-          ))}
-        </div>
-      ) : products.length === 0 ? (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6 text-center">
-          <p className="text-xs text-zinc-500">No products found</p>
-        </div>
-      ) : (
-        <div className="rounded-lg border border-zinc-800 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                {bulkMode && (
-                  <TableHead className="text-zinc-500 text-[11px] font-medium w-10">
-                    <Checkbox
-                      checked={selectedIds.size === products.length && products.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                      className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                    />
-                  </TableHead>
-                )}
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Kategori</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">SKU</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Satuan</TableHead>
-                {isOwner && (
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">HPP</TableHead>
-                )}
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Price</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Stock</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-[120px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product) => {
-                const isOutOfStock = product.stock === 0
-                const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
-                const isSelected = selectedIds.has(product.id)
+      {/* Desktop Table */}
+      <div className="hidden md:block">
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 bg-zinc-900 rounded" />
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6 text-center">
+            <p className="text-xs text-zinc-500">No products found</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-zinc-800 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-zinc-800 hover:bg-transparent">
+                  {bulkMode && (
+                    <TableHead className="text-zinc-500 text-[11px] font-medium w-10">
+                      <Checkbox
+                        checked={selectedIds.size === products.length && products.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                        className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                      />
+                    </TableHead>
+                  )}
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Kategori</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">SKU</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Satuan</TableHead>
+                  {isOwner && (
+                    <TableHead className="text-zinc-500 text-[11px] font-medium text-right">HPP</TableHead>
+                  )}
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Price</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Stock</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-[120px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {products.map((product) => {
+                  const isOutOfStock = product.stock === 0
+                  const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
+                  const isSelected = selectedIds.has(product.id)
 
-                let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
-                if (isPro) {
-                  if (isOutOfStock) {
-                    rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
-                  } else if (isLowStock) {
-                    rowClass = 'border-zinc-800 bg-amber-500/5 hover:bg-amber-500/10'
+                  let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
+                  if (isPro) {
+                    if (isOutOfStock) {
+                      rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
+                    } else if (isLowStock) {
+                      rowClass = 'border-zinc-800 bg-amber-500/5 hover:bg-amber-500/10'
+                    }
                   }
-                }
 
-                return (
-                  <TableRow key={product.id} className={rowClass}>
-                    {bulkMode && (
-                      <TableCell className="w-10 py-2.5 px-3">
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleSelect(product.id)}
-                          className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                        />
-                      </TableCell>
-                    )}
-                    <TableCell className="text-xs text-zinc-200 font-medium py-2.5 px-3">
-                      <div className="flex items-center gap-1.5">
-                        {isPro && isOutOfStock && (
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                          </span>
-                        )}
-                        {isPro && isLowStock && !isOutOfStock && (
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-                          </span>
-                        )}
-                        {product.name}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs py-2.5 px-3">
-                      {product.category ? (
+                  return (
+                    <TableRow key={product.id} className={rowClass}>
+                      {bulkMode && (
+                        <TableCell className="w-10 py-2.5 px-3">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelect(product.id)}
+                            className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className="text-xs text-zinc-200 font-medium py-2.5 px-3">
                         <div className="flex items-center gap-1.5">
-                          <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
-                          <span className={`text-[11px] font-medium ${getColorClasses(product.category.color).text}`}>
-                            {product.category.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-zinc-600">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{product.sku || '-'}</TableCell>
-                    <TableCell className="text-xs py-2.5 px-3">
-                      <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0">
-                        {product.unit || 'pcs'}
-                      </Badge>
-                    </TableCell>
-                    {isOwner && (
-                      <TableCell className="text-xs text-zinc-300 text-right py-2.5 px-3">{formatCurrency(product.hpp)}</TableCell>
-                    )}
-                    <TableCell className="text-xs text-zinc-200 text-right py-2.5 px-3">{formatCurrency(product.price)}</TableCell>
-                    <TableCell className="text-xs text-right py-2.5 px-3">
-                      {isPro ? (
-                        <div className="flex items-center justify-end gap-1.5">
-                          {isOutOfStock ? (
-                            <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
-                              <PackageX className="mr-0.5 h-2.5 w-2.5" />
-                              HABIS
-                            </Badge>
-                          ) : isLowStock ? (
-                            <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">
-                              {formatNumber(product.stock)}
-                            </Badge>
-                          ) : (
-                            <span className="text-zinc-200">{formatNumber(product.stock)}</span>
+                          {isPro && isOutOfStock && (
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                            </span>
                           )}
+                          {isPro && isLowStock && !isOutOfStock && (
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                            </span>
+                          )}
+                          {product.name}
                         </div>
-                      ) : product.stock <= product.lowStockAlert ? (
-                        <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
-                          {formatNumber(product.stock)}
+                      </TableCell>
+                      <TableCell className="text-xs py-2.5 px-3">
+                        {product.category ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
+                            <span className={`text-[11px] font-medium ${getColorClasses(product.category.color).text}`}>
+                              {product.category.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-zinc-600">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{product.sku || '-'}</TableCell>
+                      <TableCell className="text-xs py-2.5 px-3">
+                        <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0">
+                          {product.unit || 'pcs'}
                         </Badge>
-                      ) : (
-                        <span className="text-zinc-200">{formatNumber(product.stock)}</span>
+                      </TableCell>
+                      {isOwner && (
+                        <TableCell className="text-xs text-zinc-300 text-right py-2.5 px-3">{formatCurrency(product.hpp)}</TableCell>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right py-2.5 px-3">
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-sky-400 hover:bg-sky-500/10"
-                          onClick={() => openDetail(product)}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                          onClick={() => {
-                            setRestockProduct(product)
-                            setRestockQty('')
-                            setRestockOpen(true)
-                          }}
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                          onClick={() => handleEdit(product)}
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
-                          onClick={() => setDeleteId(product.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      <TableCell className="text-xs text-zinc-200 text-right py-2.5 px-3">{formatCurrency(product.price)}</TableCell>
+                      <TableCell className="text-xs text-right py-2.5 px-3">
+                        {isPro ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {isOutOfStock ? (
+                              <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                                <PackageX className="mr-0.5 h-2.5 w-2.5" />
+                                HABIS
+                              </Badge>
+                            ) : isLowStock ? (
+                              <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">
+                                {formatNumber(product.stock)}
+                              </Badge>
+                            ) : (
+                              <span className="text-zinc-200">{formatNumber(product.stock)}</span>
+                            )}
+                          </div>
+                        ) : product.stock <= product.lowStockAlert ? (
+                          <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                            {formatNumber(product.stock)}
+                          </Badge>
+                        ) : (
+                          <span className="text-zinc-200">{formatNumber(product.stock)}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right py-2.5 px-3">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-sky-400 hover:bg-sky-500/10"
+                            onClick={() => openDetail(product)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            onClick={() => {
+                              setRestockProduct(product)
+                              setRestockQty('')
+                              setRestockOpen(true)
+                            }}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                            onClick={() => handleEdit(product)}
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                            onClick={() => setDeleteId(product.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden">
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-3">
+                <Skeleton className="h-4 w-3/4 bg-zinc-800 rounded mb-2" />
+                <Skeleton className="h-3 w-1/2 bg-zinc-800 rounded mb-3" />
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-3 w-16 bg-zinc-800 rounded" />
+                  <Skeleton className="h-4 w-20 bg-zinc-800 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="rounded-xl border border-zinc-800/60 bg-zinc-900 p-8 text-center">
+            <Package className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
+            <p className="text-xs text-zinc-500">No products found</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {products.map((product) => {
+              const isOutOfStock = product.stock === 0
+              const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
+
+              let cardBorder = 'border-zinc-800/60'
+              if (isPro) {
+                if (isOutOfStock) cardBorder = 'border-red-500/20'
+                else if (isLowStock) cardBorder = 'border-amber-500/20'
+              }
+
+              let cardBg = 'bg-zinc-900'
+              if (isPro) {
+                if (isOutOfStock) cardBg = 'bg-red-500/[0.03]'
+                else if (isLowStock) cardBg = 'bg-amber-500/[0.03]'
+              }
+
+              return (
+                <div
+                  key={product.id}
+                  className={`touch-card rounded-xl ${cardBg} border ${cardBorder} p-3 transition-colors active:bg-zinc-800/80`}
+                >
+                  {/* Top: Name + Stock status indicator */}
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {bulkMode && (
+                        <Checkbox
+                          checked={selectedIds.has(product.id)}
+                          onCheckedChange={() => toggleSelect(product.id)}
+                          className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 flex-shrink-0"
+                        />
+                      )}
+                      <span className="text-sm font-medium text-zinc-100 truncate">
+                        {product.name}
+                      </span>
+                    </div>
+                    {isPro && (
+                      <div className="flex-shrink-0">
+                        {isOutOfStock ? (
+                          <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                            <PackageX className="mr-0.5 h-2.5 w-2.5" />
+                            HABIS
+                          </Badge>
+                        ) : isLowStock ? (
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                          </span>
+                        ) : null}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                    )}
+                  </div>
+
+                  {/* Middle: Category + SKU + Unit */}
+                  <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                    {product.category ? (
+                      <div className="flex items-center gap-1 bg-zinc-800/50 rounded-md px-1.5 py-0.5">
+                        <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
+                        <span className={`text-[10px] font-medium ${getColorClasses(product.category.color).text}`}>
+                          {product.category.name}
+                        </span>
+                      </div>
+                    ) : null}
+                    {product.sku && (
+                      <span className="text-[10px] text-zinc-500 font-mono">{product.sku}</span>
+                    )}
+                    <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0 ml-auto">
+                      {product.unit || 'pcs'}
+                    </Badge>
+                  </div>
+
+                  {/* Bottom: Price + Stock count */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      {isOwner && (
+                        <span className="text-[10px] text-zinc-500 block mb-0.5">
+                          HPP {formatCurrency(product.hpp)}
+                        </span>
+                      )}
+                      <span className="text-sm font-bold text-zinc-100">
+                        {formatCurrency(product.price)}
+                      </span>
+                    </div>
+                    {isPro ? (
+                      isOutOfStock ? null : (
+                        <Badge
+                          className={
+                            isLowStock
+                              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 text-[11px] px-2 py-0.5'
+                              : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300 text-[11px] px-2 py-0.5'
+                          }
+                        >
+                          Stock: {formatNumber(product.stock)}
+                        </Badge>
+                      )
+                    ) : (
+                      <Badge
+                        className={
+                          product.stock <= product.lowStockAlert
+                            ? 'bg-red-500/10 border-red-500/20 text-red-400 text-[11px] px-2 py-0.5'
+                            : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300 text-[11px] px-2 py-0.5'
+                        }
+                      >
+                        Stock: {formatNumber(product.stock)}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <Separator className="bg-zinc-800/60 mb-2" />
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-zinc-400 hover:text-sky-400 hover:bg-sky-500/10"
+                      onClick={() => openDetail(product)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                      onClick={() => {
+                        setRestockProduct(product)
+                        setRestockQty('')
+                        setRestockOpen(true)
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                      onClick={() => handleEdit(product)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                      onClick={() => setDeleteId(product.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
 

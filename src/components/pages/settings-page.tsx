@@ -201,7 +201,7 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/10 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 transition-all duration-150 border border-transparent data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-none"
+              className="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-lg text-xs font-medium whitespace-nowrap data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/10 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 transition-all duration-150 border border-transparent data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-none"
             >
               {tab.icon}
               {tab.label}
@@ -488,7 +488,7 @@ function OutletInfoTab() {
           <p className="text-xs text-zinc-400 mt-0.5">Detail informasi usaha Anda</p>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="outlet-name" className="text-xs text-zinc-300">Nama Outlet</Label>
             <Input
@@ -1048,7 +1048,7 @@ function PromoTab() {
                 {editPromo ? 'Edit Promo' : 'Tambah Promo Baru'}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-3 py-1">
+            <div className="space-y-4 py-1">
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-300">Nama Promo</Label>
                 <Input

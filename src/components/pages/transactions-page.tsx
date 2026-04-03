@@ -813,88 +813,148 @@ export default function TransactionsPage() {
           )}
         </div>
       ) : (
-        <div className="rounded-lg border border-zinc-800 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-500 text-[11px] font-medium w-10"></TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Invoice #</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium hidden md:table-cell">Outlet</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Tanggal</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">Customer</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Pembayaran</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-center hidden sm:table-cell">Item</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-center w-10 hidden sm:table-cell">Sync</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-10">Aksi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.map((txn) => {
-                const isVoid = txn.voidStatus === 'void'
-                let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
-                if (isVoid) {
-                  rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
-                }
-
-                return (
-                  <TableRow key={txn.id} className={rowClass}>
-                    {/* Void badge */}
-                    <TableCell className="py-2.5 px-3">
+        <div className="space-y-2">
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-2">
+            {transactions.map((txn) => {
+              const isVoid = txn.voidStatus === 'void'
+              return (
+                <div
+                  key={txn.id}
+                  className={`rounded-xl p-3 ${
+                    isVoid
+                      ? 'border border-red-500/20 bg-red-500/[0.03]'
+                      : 'border border-zinc-800/60 bg-zinc-900'
+                  }`}
+                >
+                  {/* Top row: Invoice + Badges */}
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <span className="text-xs text-emerald-400 font-mono font-medium truncate">
+                      {txn.invoiceNumber}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {getPaymentBadge(txn.paymentMethod)}
                       {isVoid && (
                         <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
                           <Ban className="mr-0.5 h-2.5 w-2.5" />
                           VOID
                         </Badge>
                       )}
-                    </TableCell>
-                    <TableCell className="text-xs text-emerald-400 font-mono font-medium py-2.5 px-3">
-                      {txn.invoiceNumber}
-                    </TableCell>
-                    {/* Outlet column (hidden on mobile) */}
-                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3 hidden md:table-cell">
-                      <div className="flex items-center gap-1.5">
-                        <Store className="h-3 w-3 text-zinc-500 shrink-0" />
-                        <span className="truncate max-w-[120px]">{txn.outletName || 'Outlet Saat Ini'}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{formatDate(txn.createdAt)}</TableCell>
-                    <TableCell className="text-xs text-zinc-300 py-2.5 px-3 hidden sm:table-cell">{txn.customerName || 'Walk-in'}</TableCell>
-                    <TableCell className="text-center py-2.5 px-3">
-                      {getPaymentBadge(txn.paymentMethod)}
-                    </TableCell>
-                    <TableCell className={`text-xs font-semibold text-right py-2.5 px-3 ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
-                      {formatCurrency(txn.total)}
-                    </TableCell>
-                    <TableCell className="text-xs text-zinc-400 text-center py-2.5 px-3 hidden sm:table-cell">
-                      {txn._count?.items || 0}
-                    </TableCell>
-                    <TableCell className="text-center py-2.5 px-3 hidden sm:table-cell">
-                      {txn.syncStatus === 'synced' ? (
-                        <span className="inline-flex items-center justify-center text-emerald-400">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center justify-center text-amber-400">
-                          <Clock className="h-3.5 w-3.5" />
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right py-2.5 px-3">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                        onClick={() => handleViewDetail(txn)}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+                    </div>
+                  </div>
+                  {/* Middle row: Date + Customer */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-zinc-400">{formatDate(txn.createdAt)}</span>
+                    <span className="text-xs text-zinc-300">{txn.customerName || 'Walk-in'}</span>
+                  </div>
+                  {/* Bottom row: Total + Items + Action */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-semibold ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                        {formatCurrency(txn.total)}
+                      </span>
+                      <span className="text-[10px] text-zinc-500">
+                        {txn._count?.items || 0} item
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                      onClick={() => handleViewDetail(txn)}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="hidden md:block rounded-lg border border-zinc-800 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-zinc-800 hover:bg-transparent">
+                  <TableHead className="text-zinc-500 text-[11px] font-medium w-10"></TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Invoice #</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden md:table-cell">Outlet</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Tanggal</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">Customer</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Pembayaran</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center hidden sm:table-cell">Item</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center w-10 hidden sm:table-cell">Sync</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-10">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((txn) => {
+                  const isVoid = txn.voidStatus === 'void'
+                  let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
+                  if (isVoid) {
+                    rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
+                  }
+
+                  return (
+                    <TableRow key={txn.id} className={rowClass}>
+                      {/* Void badge */}
+                      <TableCell className="py-2.5 px-3">
+                        {isVoid && (
+                          <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                            <Ban className="mr-0.5 h-2.5 w-2.5" />
+                            VOID
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-emerald-400 font-mono font-medium py-2.5 px-3">
+                        {txn.invoiceNumber}
+                      </TableCell>
+                      {/* Outlet column (hidden on mobile) */}
+                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3 hidden md:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <Store className="h-3 w-3 text-zinc-500 shrink-0" />
+                          <span className="truncate max-w-[120px]">{txn.outletName || 'Outlet Saat Ini'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{formatDate(txn.createdAt)}</TableCell>
+                      <TableCell className="text-xs text-zinc-300 py-2.5 px-3 hidden sm:table-cell">{txn.customerName || 'Walk-in'}</TableCell>
+                      <TableCell className="text-center py-2.5 px-3">
+                        {getPaymentBadge(txn.paymentMethod)}
+                      </TableCell>
+                      <TableCell className={`text-xs font-semibold text-right py-2.5 px-3 ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                        {formatCurrency(txn.total)}
+                      </TableCell>
+                      <TableCell className="text-xs text-zinc-400 text-center py-2.5 px-3 hidden sm:table-cell">
+                        {txn._count?.items || 0}
+                      </TableCell>
+                      <TableCell className="text-center py-2.5 px-3 hidden sm:table-cell">
+                        {txn.syncStatus === 'synced' ? (
+                          <span className="inline-flex items-center justify-center text-emerald-400">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center justify-center text-amber-400">
+                            <Clock className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right py-2.5 px-3">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                          onClick={() => handleViewDetail(txn)}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 

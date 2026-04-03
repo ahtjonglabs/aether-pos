@@ -15,6 +15,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from '@/components/ui/sheet'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -145,6 +153,7 @@ const QUICK_NOMINALS = [5000, 10000, 20000, 50000, 100000, 200000, 500000]
 
 export default function PosPage() {
   const { data: session } = useSession()
+  const isMobile = useIsMobile()
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -840,7 +849,7 @@ export default function PosPage() {
     <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
       <button
         onClick={() => handleCategorySelect(null)}
-        className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+        className={`shrink-0 px-4 py-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all ${
           !selectedCategoryId
             ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border}`
             : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
@@ -856,7 +865,7 @@ export default function PosPage() {
           <button
             key={cat.id}
             onClick={() => handleCategorySelect(cat.id)}
-            className={`shrink-0 px-3 py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+            className={`shrink-0 px-4 py-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all ${
               isActive
                 ? `${colors.activeBg} ${colors.text} ${colors.border}`
                 : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
@@ -898,7 +907,7 @@ export default function PosPage() {
           key={product.id}
           onClick={() => !outOfStock && addToCart(product)}
           disabled={outOfStock}
-          className={`relative group p-3 rounded-xl border text-left transition-all duration-150 ${
+          className={`relative group p-3 min-h-[72px] sm:min-h-0 rounded-xl border text-left transition-all duration-150 ${
             outOfStock
               ? 'opacity-40 cursor-not-allowed border-zinc-800/60 bg-zinc-900/50'
               : cartItem
@@ -1378,7 +1387,7 @@ export default function PosPage() {
                 value={productSearch}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                className="pl-10 h-10 text-sm bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
+                className="pl-10 h-11 sm:h-10 text-sm bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
               />
             </div>
             {renderCategoryChips()}
@@ -1464,52 +1473,102 @@ export default function PosPage() {
         </Tabs>
       </div>
 
-      {/* Checkout Confirmation Dialog */}
-      <Dialog open={checkoutOpen} onOpenChange={(open) => { if (!open) setCheckoutOpen(false) }}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md rounded-2xl">
-          <DialogHeader className="pb-2">
-            <DialogTitle className="text-zinc-100 text-sm font-bold">Konfirmasi Pembayaran</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <div className="space-y-1 text-xs">
-              {cart.map((item) => (
-                <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                  <span>{item.product.name} × {item.qty}</span>
-                  <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+      {/* Checkout Confirmation — Sheet on mobile, Dialog on desktop */}
+      {isMobile ? (
+        <Sheet open={checkoutOpen} onOpenChange={(open) => { if (!open) setCheckoutOpen(false) }}>
+          <SheetContent side="bottom" className="bg-zinc-900 border-zinc-800 rounded-t-2xl max-h-[85vh] px-4">
+            <SheetHeader className="pb-2">
+              <SheetTitle className="text-zinc-100 text-sm font-bold">Konfirmasi Pembayaran</SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="flex-1 -mx-4 px-4">
+              <div className="space-y-3 py-1">
+                <div className="space-y-1 text-xs">
+                  {cart.map((item) => (
+                    <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
+                      <span>{item.product.name} × {item.qty}</span>
+                      <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                    </div>
+                  ))}
+                  <Separator className="bg-zinc-800 my-1.5" />
+                  <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                  {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                  <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
                 </div>
-              ))}
-              <Separator className="bg-zinc-800 my-1.5" />
-              <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-              {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
-              <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
+
+                <Separator className="bg-zinc-800" />
+
+                <div className="text-xs space-y-1">
+                  <div className="flex justify-between text-zinc-400"><span>Metode</span><span className="text-zinc-200 font-medium uppercase">{paymentMethod}</span></div>
+                  {paymentMethod === 'CASH' && (
+                    <>
+                      <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(Number(paidAmount))}</span></div>
+                      <div className="flex justify-between text-emerald-400 font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>
+                    </>
+                  )}
+                  {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT') && (
+                    <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(total)}</span></div>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-zinc-500">Customer: {selectedCustomer ? selectedCustomer.name : 'Walk-in'}</p>
+              </div>
+            </ScrollArea>
+            <SheetFooter className="flex-row gap-2 pt-1 pb-2 -mx-4 px-4">
+              <Button variant="ghost" onClick={() => setCheckoutOpen(false)} className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl h-11">Batal</Button>
+              <Button onClick={handleCheckout} disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs rounded-xl font-bold h-11">
+                {checkingOut && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Konfirmasi
+              </Button>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={checkoutOpen} onOpenChange={(open) => { if (!open) setCheckoutOpen(false) }}>
+          <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md rounded-2xl">
+            <DialogHeader className="pb-2">
+              <DialogTitle className="text-zinc-100 text-sm font-bold">Konfirmasi Pembayaran</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-1">
+              <div className="space-y-1 text-xs">
+                {cart.map((item) => (
+                  <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
+                    <span>{item.product.name} × {item.qty}</span>
+                    <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                  </div>
+                ))}
+                <Separator className="bg-zinc-800 my-1.5" />
+                <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
+              </div>
+
+              <Separator className="bg-zinc-800" />
+
+              <div className="text-xs space-y-1">
+                <div className="flex justify-between text-zinc-400"><span>Metode</span><span className="text-zinc-200 font-medium uppercase">{paymentMethod}</span></div>
+                {paymentMethod === 'CASH' && (
+                  <>
+                    <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(Number(paidAmount))}</span></div>
+                    <div className="flex justify-between text-emerald-400 font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>
+                  </>
+                )}
+                {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT') && (
+                  <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(total)}</span></div>
+                )}
+              </div>
+
+              <p className="text-[11px] text-zinc-500">Customer: {selectedCustomer ? selectedCustomer.name : 'Walk-in'}</p>
             </div>
-
-            <Separator className="bg-zinc-800" />
-
-            <div className="text-xs space-y-1">
-              <div className="flex justify-between text-zinc-400"><span>Metode</span><span className="text-zinc-200 font-medium uppercase">{paymentMethod}</span></div>
-              {paymentMethod === 'CASH' && (
-                <>
-                  <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(Number(paidAmount))}</span></div>
-                  <div className="flex justify-between text-emerald-400 font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>
-                </>
-              )}
-              {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT') && (
-                <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(total)}</span></div>
-              )}
-            </div>
-
-            <p className="text-[11px] text-zinc-500">Customer: {selectedCustomer ? selectedCustomer.name : 'Walk-in'}</p>
-          </div>
-          <DialogFooter className="gap-2 pt-1">
-            <Button variant="ghost" onClick={() => setCheckoutOpen(false)} className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl">Batal</Button>
-            <Button onClick={handleCheckout} disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs rounded-xl font-bold">
-              {checkingOut && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Konfirmasi
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter className="gap-2 pt-1">
+              <Button variant="ghost" onClick={() => setCheckoutOpen(false)} className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl">Batal</Button>
+              <Button onClick={handleCheckout} disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs rounded-xl font-bold">
+                {checkingOut && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Konfirmasi
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Receipt Dialog */}
       <Dialog open={receiptOpen} onOpenChange={(open) => { if (!open) handleReceiptSkip() }}>

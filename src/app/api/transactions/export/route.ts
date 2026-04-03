@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { buildDateFilter, resolvePlanType } from '@/lib/api-helpers'
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
 
-    return new NextResponse(buffer, {
+    return new Response(buffer, {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,

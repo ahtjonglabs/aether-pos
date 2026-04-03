@@ -375,10 +375,10 @@ export default function DashboardPage() {
 
       {/* ── Quick Actions ── */}
       <motion.div variants={itemVariants}>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <Button
             variant="outline"
-            className="h-auto py-3 px-4 bg-zinc-900 border-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all rounded-xl gap-2.5 justify-center"
+            className="h-auto py-3.5 sm:py-3 px-4 bg-zinc-900 border-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all rounded-xl gap-2.5 justify-center"
             onClick={() => setCurrentPage('products')}
           >
             <PlusCircle className="h-4 w-4 text-emerald-400" />
@@ -386,7 +386,7 @@ export default function DashboardPage() {
           </Button>
           <Button
             variant="outline"
-            className="h-auto py-3 px-4 bg-zinc-900 border-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all rounded-xl gap-2.5 justify-center"
+            className="h-auto py-3.5 sm:py-3 px-4 bg-zinc-900 border-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all rounded-xl gap-2.5 justify-center"
             onClick={() => setCurrentPage('pos')}
           >
             <ShoppingCart className="h-4 w-4 text-blue-400" />
@@ -394,7 +394,7 @@ export default function DashboardPage() {
           </Button>
           <Button
             variant="outline"
-            className="h-auto py-3 px-4 bg-zinc-900 border-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all rounded-xl gap-2.5 justify-center"
+            className="h-auto py-3.5 sm:py-3 px-4 bg-zinc-900 border-zinc-800/60 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-zinc-100 transition-all rounded-xl gap-2.5 justify-center"
             onClick={() => setCurrentPage('transactions')}
           >
             <FileBarChart className="h-4 w-4 text-violet-400" />
@@ -405,7 +405,7 @@ export default function DashboardPage() {
 
       {/* ── All-time stats — compact horizontal bar ── */}
       <motion.div variants={itemVariants}>
-        <div className="bg-zinc-900/60 border border-zinc-800/40 rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-8 gap-y-2">
+        <div className="bg-zinc-900/60 border border-zinc-800/40 rounded-xl px-4 py-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-8 sm:gap-y-2">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
               <Wallet className="h-3.5 w-3.5 text-emerald-400" />
@@ -544,7 +544,7 @@ export default function DashboardPage() {
                 </div>
 
                 {!isPro ? (
-                  <div className="h-36 flex flex-col items-center justify-center text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
+                  <div className="h-28 sm:h-36 flex flex-col items-center justify-center text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
                     <Crown className="h-8 w-8 text-amber-400/40 mb-2" />
                     <p className="text-xs text-zinc-400 font-medium">
                       Upgrade ke Pro untuk Peak Hours
@@ -554,7 +554,7 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="relative h-36">
+                  <div className="relative h-28 sm:h-36">
                     {/* Y-axis label */}
                     <div className="absolute left-0 top-0 bottom-6 w-7 flex flex-col justify-between text-[10px] text-zinc-600">
                       <span>{maxTxCount}</span>
@@ -683,52 +683,78 @@ export default function DashboardPage() {
                   <p className="text-xs text-zinc-500">Belum ada customer</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-zinc-800/60 hover:bg-transparent">
-                        <TableHead className="text-zinc-500 text-[11px] w-8 py-2.5">#</TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] py-2.5">Nama</TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">
-                          Total Spend
-                        </TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] text-center py-2.5">
-                          Poin
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stats.topCustomers.slice(0, 5).map((c, idx) => (
-                        <TableRow
-                          key={c.id}
-                          className="border-zinc-800/40 hover:bg-zinc-800/30"
-                        >
-                          <TableCell className="text-[11px] text-zinc-500 font-mono py-2.5">
-                            {idx + 1}
-                          </TableCell>
-                          <TableCell className="py-2.5">
-                            <div>
-                              <p className="text-xs text-zinc-200 font-medium">
-                                {c.name}
-                              </p>
-                              <p className="text-[10px] text-zinc-500">
-                                {c.whatsapp}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-xs text-zinc-200 text-right font-semibold py-2.5">
-                            {formatCurrency(c.totalSpend)}
-                          </TableCell>
-                          <TableCell className="text-center py-2.5">
-                            <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
-                              {c.points} pts
-                            </Badge>
-                          </TableCell>
+                <>
+                  {/* Mobile: compact card list */}
+                  <div className="flex flex-col gap-2 md:hidden">
+                    {stats.topCustomers.slice(0, 5).map((c, idx) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center gap-3 rounded-xl bg-zinc-800/40 border border-zinc-700/30 p-3"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                          <span className="text-[11px] font-bold text-emerald-400">{idx + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-zinc-200 font-medium truncate">{c.name}</p>
+                          <p className="text-[10px] text-zinc-500 truncate">{c.whatsapp}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs text-zinc-200 font-semibold">{formatCurrency(c.totalSpend)}</p>
+                          <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] mt-0.5">
+                            {c.points} pts
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Desktop: full table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-zinc-800/60 hover:bg-transparent">
+                          <TableHead className="text-zinc-500 text-[11px] w-8 py-2.5">#</TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] py-2.5">Nama</TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">
+                            Total Spend
+                          </TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] text-center py-2.5">
+                            Poin
+                          </TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {stats.topCustomers.slice(0, 5).map((c, idx) => (
+                          <TableRow
+                            key={c.id}
+                            className="border-zinc-800/40 hover:bg-zinc-800/30"
+                          >
+                            <TableCell className="text-[11px] text-zinc-500 font-mono py-2.5">
+                              {idx + 1}
+                            </TableCell>
+                            <TableCell className="py-2.5">
+                              <div>
+                                <p className="text-xs text-zinc-200 font-medium">
+                                  {c.name}
+                                </p>
+                                <p className="text-[10px] text-zinc-500">
+                                  {c.whatsapp}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-zinc-200 text-right font-semibold py-2.5">
+                              {formatCurrency(c.totalSpend)}
+                            </TableCell>
+                            <TableCell className="text-center py-2.5">
+                              <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
+                                {c.points} pts
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -748,42 +774,24 @@ export default function DashboardPage() {
                   <p className="text-xs text-zinc-500">Semua stok aman</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto max-h-60 overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-zinc-800/60 hover:bg-transparent sticky top-0 bg-zinc-900 z-10">
-                        <TableHead className="text-zinc-500 text-[11px] w-8 py-2.5">#</TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] py-2.5">
-                          Produk
-                        </TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">
-                          Stok
-                        </TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">
-                          Alert
-                        </TableHead>
-                        <TableHead className="text-zinc-500 text-[11px] text-center py-2.5">
-                          Status
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stats.lowStockList.map((p, idx) => {
-                        const isCritical = p.stock === 0
-                        const isWarning = p.stock > 0 && p.stock <= p.lowStockAlert / 2
-                        return (
-                          <TableRow
-                            key={p.id}
-                            className="border-zinc-800/40 hover:bg-zinc-800/30"
-                          >
-                            <TableCell className="text-[11px] text-zinc-500 font-mono py-2.5">
-                              {idx + 1}
-                            </TableCell>
-                            <TableCell className="text-xs text-zinc-200 font-medium py-2.5">
-                              {p.name}
-                            </TableCell>
-                            <TableCell
-                              className={`text-xs text-right font-bold py-2.5 ${
+                <>
+                  {/* Mobile: compact card list */}
+                  <div className="flex flex-col gap-2 md:hidden">
+                    {stats.lowStockList.map((p, idx) => {
+                      const isCritical = p.stock === 0
+                      const isWarning = p.stock > 0 && p.stock <= p.lowStockAlert / 2
+                      return (
+                        <div
+                          key={p.id}
+                          className="flex items-center gap-3 rounded-xl bg-zinc-800/40 border border-zinc-700/30 p-3"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-zinc-200 font-medium truncate">{p.name}</p>
+                            <p className="text-[10px] text-zinc-500">Stok: {p.lowStockAlert} alert</p>
+                          </div>
+                          <div className="text-right shrink-0 flex items-center gap-2">
+                            <span
+                              className={`text-sm font-bold ${
                                 isCritical
                                   ? 'text-red-400'
                                   : isWarning
@@ -792,36 +800,104 @@ export default function DashboardPage() {
                               }`}
                             >
                               {p.stock}
-                            </TableCell>
-                            <TableCell className="text-xs text-zinc-500 text-right py-2.5">
-                              {p.lowStockAlert}
-                            </TableCell>
-                            <TableCell className="text-center py-2.5">
-                              {isCritical ? (
-                                <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">
-                                  Habis
-                                </Badge>
-                              ) : isWarning ? (
-                                <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
-                                  Kritis
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-yellow-500/10 border-yellow-500/20 text-yellow-400 text-[10px]">
-                                  Rendah
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
+                            </span>
+                            {isCritical ? (
+                              <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">
+                                Habis
+                              </Badge>
+                            ) : isWarning ? (
+                              <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
+                                Kritis
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-yellow-500/10 border-yellow-500/20 text-yellow-400 text-[10px]">
+                                Rendah
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {/* Desktop: full table */}
+                  <div className="hidden md:block overflow-x-auto max-h-60 overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-zinc-800/60 hover:bg-transparent sticky top-0 bg-zinc-900 z-10">
+                          <TableHead className="text-zinc-500 text-[11px] w-8 py-2.5">#</TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] py-2.5">
+                            Produk
+                          </TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">
+                            Stok
+                          </TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">
+                            Alert
+                          </TableHead>
+                          <TableHead className="text-zinc-500 text-[11px] text-center py-2.5">
+                            Status
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {stats.lowStockList.map((p, idx) => {
+                          const isCritical = p.stock === 0
+                          const isWarning = p.stock > 0 && p.stock <= p.lowStockAlert / 2
+                          return (
+                            <TableRow
+                              key={p.id}
+                              className="border-zinc-800/40 hover:bg-zinc-800/30"
+                            >
+                              <TableCell className="text-[11px] text-zinc-500 font-mono py-2.5">
+                                {idx + 1}
+                              </TableCell>
+                              <TableCell className="text-xs text-zinc-200 font-medium py-2.5">
+                                {p.name}
+                              </TableCell>
+                              <TableCell
+                                className={`text-xs text-right font-bold py-2.5 ${
+                                  isCritical
+                                    ? 'text-red-400'
+                                    : isWarning
+                                      ? 'text-amber-400'
+                                      : 'text-yellow-300'
+                                }`}
+                              >
+                                {p.stock}
+                              </TableCell>
+                              <TableCell className="text-xs text-zinc-500 text-right py-2.5">
+                                {p.lowStockAlert}
+                              </TableCell>
+                              <TableCell className="text-center py-2.5">
+                                {isCritical ? (
+                                  <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">
+                                    Habis
+                                  </Badge>
+                                ) : isWarning ? (
+                                  <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
+                                    Kritis
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-yellow-500/10 border-yellow-500/20 text-yellow-400 text-[10px]">
+                                    Rendah
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
+
+      {/* Safe area bottom spacer for mobile */}
+      <div className="h-[env(safe-area-inset-bottom)]" />
     </motion.div>
   )
 }

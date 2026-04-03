@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { usePageStore, type PageType } from '@/hooks/use-page-store'
 import { usePlan } from '@/hooks/use-plan'
 import { getPlanBadgeClass } from '@/lib/plan-config'
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +19,6 @@ import {
   Receipt,
   ClipboardList,
   LogOut,
-  Menu,
   Settings,
   ShieldAlert,
   PanelLeftClose,
@@ -460,34 +459,7 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* ─── Mobile Header Bar ─── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 flex items-center gap-2.5 h-12 px-3 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/50">
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 h-8 w-8 rounded-lg"
-            >
-              <Menu className="h-4 w-4" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent
-            side="left"
-            className="p-0 w-64 bg-zinc-950 border-zinc-800/60 outline-none [&>button]:text-zinc-500 [&>button]:hover:text-zinc-300 [&>button]:top-3 [&>button]:right-3"
-          >
-            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-            <SheetDescription className="sr-only">Aether POS main navigation</SheetDescription>
-            <SidebarContent onNavigate={() => setOpen(false)} isMobile />
-          </SheetContent>
-        </Sheet>
-        <img
-          src="/logo.png"
-          alt="Aether POS"
-          className="h-5 w-5 rounded object-cover ring-1 ring-white/[0.06]"
-        />
-        <span className="text-xs font-semibold text-zinc-100 tracking-tight">Aether POS</span>
-      </div>
+      {/* Mobile uses MobileBottomNav — no hamburger header needed */}
 
       {/* ─── Desktop Sidebar ─── */}
       <aside

@@ -373,87 +373,163 @@ export default function CustomersPage() {
           <p className="text-xs text-zinc-500">No customers found</p>
         </div>
       ) : (
-        <div className="rounded-lg border border-zinc-800 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">WhatsApp</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium">Tier</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total Spend</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Points</TableHead>
-                <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-[140px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {customers.map((customer) => {
-                const tier = getTier(customer.totalSpend)
-                return (
-                  <TableRow
-                    key={customer.id}
-                    className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
-                    onClick={() => handleViewPurchases(customer)}
-                  >
-                    <TableCell className="text-xs text-zinc-200 font-medium py-2.5 px-3">{customer.name}</TableCell>
-                    <TableCell className="text-xs text-zinc-400 py-2.5 px-3 hidden sm:table-cell">{customer.whatsapp}</TableCell>
-                    <TableCell className="py-2.5 px-3">
-                      <Badge className={`${getTierBadgeClass(tier)} text-[10px] font-medium border px-1.5 py-0`}>
-                        {tier === 'VIP' && <Crown className="mr-0.5 h-2.5 w-2.5" />}
-                        {tier}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-zinc-200 text-right py-2.5 px-3">{formatCurrency(customer.totalSpend)}</TableCell>
-                    <TableCell className="text-center py-2.5 px-3">
-                      <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
-                        <Coins className="mr-0.5 h-2.5 w-2.5" />
-                        {formatNumber(customer.points)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-0.5">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10"
-                          onClick={() => handleViewPurchases(customer)}
-                          title="Riwayat"
-                        >
-                          <History className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10"
-                          onClick={() => handleViewLoyalty(customer)}
-                          title="Loyalty"
-                        >
-                          <Coins className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                          onClick={() => handleEdit(customer)}
-                          title="Edit"
-                        >
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
-                          onClick={() => setDeleteId(customer.id)}
-                          title="Delete"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+        <div className="space-y-2">
+          {/* Mobile card view */}
+          <div className="md:hidden space-y-2">
+            {customers.map((customer) => {
+              const tier = getTier(customer.totalSpend)
+              return (
+                <div
+                  key={customer.id}
+                  className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-3 cursor-pointer"
+                  onClick={() => handleViewPurchases(customer)}
+                >
+                  {/* Top row: Name + Tier badge */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-zinc-200 font-semibold truncate mr-2">{customer.name}</span>
+                    <Badge className={`${getTierBadgeClass(tier)} text-[10px] font-medium border px-1.5 py-0 shrink-0`}>
+                      {tier === 'VIP' && <Crown className="mr-0.5 h-2.5 w-2.5" />}
+                      {tier}
+                    </Badge>
+                  </div>
+                  {/* Middle row: WhatsApp + Total spend */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-zinc-400">{customer.whatsapp}</span>
+                    <span className="text-xs text-zinc-200 font-medium">{formatCurrency(customer.totalSpend)}</span>
+                  </div>
+                  {/* Bottom row: Points badge + Action buttons */}
+                  <div className="flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+                    <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
+                      <Coins className="mr-0.5 h-2.5 w-2.5" />
+                      {formatNumber(customer.points)} pts
+                    </Badge>
+                    <div className="flex items-center gap-0.5">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10"
+                        onClick={() => handleViewPurchases(customer)}
+                        title="Riwayat"
+                      >
+                        <History className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10"
+                        onClick={() => handleViewLoyalty(customer)}
+                        title="Loyalty"
+                      >
+                        <Coins className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                        onClick={() => handleEdit(customer)}
+                        title="Edit"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                        onClick={() => setDeleteId(customer.id)}
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="hidden md:block rounded-lg border border-zinc-800 overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-zinc-800 hover:bg-transparent">
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">WhatsApp</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium">Tier</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total Spend</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Points</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-[140px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {customers.map((customer) => {
+                  const tier = getTier(customer.totalSpend)
+                  return (
+                    <TableRow
+                      key={customer.id}
+                      className="border-zinc-800 hover:bg-zinc-800/50 cursor-pointer"
+                      onClick={() => handleViewPurchases(customer)}
+                    >
+                      <TableCell className="text-xs text-zinc-200 font-medium py-2.5 px-3">{customer.name}</TableCell>
+                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3 hidden sm:table-cell">{customer.whatsapp}</TableCell>
+                      <TableCell className="py-2.5 px-3">
+                        <Badge className={`${getTierBadgeClass(tier)} text-[10px] font-medium border px-1.5 py-0`}>
+                          {tier === 'VIP' && <Crown className="mr-0.5 h-2.5 w-2.5" />}
+                          {tier}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-zinc-200 text-right py-2.5 px-3">{formatCurrency(customer.totalSpend)}</TableCell>
+                      <TableCell className="text-center py-2.5 px-3">
+                        <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
+                          <Coins className="mr-0.5 h-2.5 w-2.5" />
+                          {formatNumber(customer.points)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right py-2.5 px-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-blue-400 hover:bg-blue-500/10"
+                            onClick={() => handleViewPurchases(customer)}
+                            title="Riwayat"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10"
+                            onClick={() => handleViewLoyalty(customer)}
+                            title="Loyalty"
+                          >
+                            <Coins className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                            onClick={() => handleEdit(customer)}
+                            title="Edit"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                            onClick={() => setDeleteId(customer.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 

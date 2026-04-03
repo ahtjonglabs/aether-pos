@@ -154,3 +154,33 @@ table { border-collapse: separate; border-spacing: 0; }
     }
   }
 }
+
+/* ── Mobile bottom nav safe area ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ── Modern card touch feedback ── */
+@media (pointer: coarse) {
+  .touch-card {
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+}
+
+/* ── Smooth scrolling for mobile ── */
+@media (pointer: coarse) {
+  html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Pull-to-refresh safe zone ── */
+@supports (overscroll-behavior: contain) {
+  body {
+    overscroll-behavior-y: contain;
+  }
+}
