@@ -12,13 +12,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogDescription,
+} from '@/components/ui/responsive-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -87,6 +87,11 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { ProGate } from '@/components/shared/pro-gate'
 import ProductFormDialog from './product-form-dialog'
 
@@ -113,9 +118,17 @@ interface Product {
   unit: string
 }
 
+interface ProductStats {
+  total: number
+  categories: number
+  lowStock: number
+  inventoryValue: number
+}
+
 interface ProductListResponse {
   products: Product[]
   totalPages: number
+  stats: ProductStats
 }
 
 type SortOption = 'newest' | 'best-selling' | 'low-stock' | 'most-stock'
@@ -290,6 +303,11 @@ export default function ProductsPage() {
   const [bulkStockValue, setBulkStockValue] = useState('')
   const [bulkStockSubmitting, setBulkStockSubmitting] = useState(false)
 
+  // Bulk category change state
+  const [bulkCategoryOpen, setBulkCategoryOpen] = useState(false)
+  const [bulkCategoryId, setBulkCategoryId] = useState<string>('')
+  const [bulkCategorySubmitting, setBulkCategorySubmitting] = useState(false)
+
   // Bulk upload Excel state
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -314,6 +332,9 @@ export default function ProductsPage() {
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null)
   const [deleteCategoryProductCount, setDeleteCategoryProductCount] = useState(0)
   const [categoryDeleting, setCategoryDeleting] = useState(false)
+
+  // Analytics stats from API (all products, not just current page)
+  const [stats, setStats] = useState<ProductStats>({ total: 0, categories: 0, lowStock: 0, inventoryValue: 0 })
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -345,6 +366,9 @@ export default function ProductsPage() {
         const data: ProductListResponse = await res.json()
         setProducts(data.products)
         setTotalPages(data.totalPages)
+        if (data.stats) {
+          setStats(data.stats)
+        }
       } else {
         toast.error('Failed to load products')
       }
@@ -544,6 +568,37 @@ export default function ProductsPage() {
     }
   }
 
+  const handleBulkCategory = async () => {
+    if (selectedIds.size === 0 || !bulkCategoryId) return
+    setBulkCategorySubmitting(true)
+    try {
+      const res = await fetch('/api/products/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productIds: Array.from(selectedIds),
+          categoryId: bulkCategoryId,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        toast.success(`Kategori diperbarui untuk ${data.updated} produk`)
+        setBulkCategoryOpen(false)
+        setBulkCategoryId('')
+        setSelectedIds(new Set())
+        setBulkMode(false)
+        fetchProducts()
+        fetchCategories()
+      } else {
+        toast.error('Gagal mengubah kategori')
+      }
+    } catch {
+      toast.error('Gagal mengubah kategori')
+    } finally {
+      setBulkCategorySubmitting(false)
+    }
+  }
+
   // Category CRUD handlers
   const openCategoryDialog = (cat: Category | null = null) => {
     setEditCategory(cat)
@@ -621,6 +676,23 @@ export default function ProductsPage() {
     })
   }, [detailData, movementFilter])
 
+  // Product analytics
+  const productAnalytics = useMemo(() => {
+    const totalProducts = products.length
+    const totalInventoryValue = products.reduce((sum, p) => sum + p.price * p.stock, 0)
+    const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= p.lowStockAlert).length
+    const outOfStockCount = products.filter((p) => p.stock === 0).length
+    const categoryDist: Record<string, number> = {}
+    products.forEach((p) => {
+      const catName = p.category?.name || 'Tanpa Kategori'
+      categoryDist[catName] = (categoryDist[catName] || 0) + 1
+    })
+    return { totalProducts, totalInventoryValue, lowStockCount, outOfStockCount, categoryDist }
+  }, [products])
+
+  // Analytics collapsible
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
+
   // Stock aging calculation
   const stockAgingDays = useMemo(() => {
     if (!detailData?.summary.lastRestockDate) return null
@@ -632,6 +704,130 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-4">
+      {/* Analytics Section */}
+      {!loading && products.length > 0 && (
+        <Collapsible open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 transition-colors">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-xs font-semibold text-zinc-200">Analitik</span>
+                <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0">
+                  {productAnalytics.totalProducts} produk
+                </Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <DollarSign className="h-3 w-3" />
+                    <span>Nilai: {formatCurrency(productAnalytics.totalInventoryValue)}</span>
+                  </div>
+                  {productAnalytics.lowStockCount > 0 && (
+                    <div className="flex items-center gap-1 text-[11px] text-amber-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>{productAnalytics.lowStockCount} stok rendah</span>
+                    </div>
+                  )}
+                  {productAnalytics.outOfStockCount > 0 && (
+                    <div className="flex items-center gap-1 text-[11px] text-red-400">
+                      <PackageX className="h-3 w-3" />
+                      <span>{productAnalytics.outOfStockCount} habis</span>
+                    </div>
+                  )}
+                </div>
+                {analyticsOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
+                )}
+              </div>
+            </CollapsibleTrigger>
+
+            <CollapsibleContent>
+              <div className="px-4 pb-3">
+                {/* Mobile mini stats */}
+                <div className="sm:hidden flex flex-wrap items-center gap-3 mb-3">
+                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <DollarSign className="h-3 w-3" />
+                    <span>Nilai: {formatCurrency(productAnalytics.totalInventoryValue)}</span>
+                  </div>
+                  {productAnalytics.lowStockCount > 0 && (
+                    <div className="flex items-center gap-1 text-[11px] text-amber-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      <span>{productAnalytics.lowStockCount} rendah</span>
+                    </div>
+                  )}
+                  {productAnalytics.outOfStockCount > 0 && (
+                    <div className="flex items-center gap-1 text-[11px] text-red-400">
+                      <PackageX className="h-3 w-3" />
+                      <span>{productAnalytics.outOfStockCount} habis</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Inventory Value */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <DollarSign className="h-3 w-3 text-emerald-400" />
+                      Total Nilai Inventori
+                    </h3>
+                    <span className="text-lg font-bold text-zinc-100">
+                      {formatCurrency(productAnalytics.totalInventoryValue)}
+                    </span>
+                    <p className="text-[10px] text-zinc-500">harga × stok semua produk</p>
+                  </div>
+
+                  {/* Stock Alerts */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <AlertTriangle className="h-3 w-3 text-amber-400" />
+                      Peringatan Stok
+                    </h3>
+                    <div className="flex items-center gap-3">
+                      {productAnalytics.lowStockCount > 0 ? (
+                        <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] font-medium border px-2 py-0.5">
+                          {productAnalytics.lowStockCount} Stok Rendah
+                        </Badge>
+                      ) : null}
+                      {productAnalytics.outOfStockCount > 0 ? (
+                        <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] font-medium border px-2 py-0.5">
+                          <PackageX className="mr-0.5 h-2.5 w-2.5" />
+                          {productAnalytics.outOfStockCount} Habis
+                        </Badge>
+                      ) : null}
+                      {productAnalytics.lowStockCount === 0 && productAnalytics.outOfStockCount === 0 && (
+                        <span className="text-xs text-emerald-400">Semua stok aman ✓</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Category Distribution */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <Tags className="h-3 w-3 text-emerald-400" />
+                      Distribusi Kategori
+                    </h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(productAnalytics.categoryDist).map(([name, count]) => {
+                        const cat = categories.find((c) => c.name === name)
+                        const dotColor = cat ? getColorDotClasses(cat.color) : 'bg-zinc-400'
+                        return (
+                          <Badge key={name} className="bg-zinc-800/60 border-zinc-700/50 text-zinc-300 text-[10px] font-medium border px-2 py-0.5">
+                            <span className={`inline-block h-2 w-2 rounded-full mr-1 ${dotColor}`} />
+                            {name}: {count}
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -676,6 +872,57 @@ export default function ProductsPage() {
           </Button>
         </div>
       </div>
+
+      {/* Stats Cards */}
+      {!loading && stats.total > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Total Products */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                <Package className="h-3.5 w-3.5 text-emerald-400" />
+              </div>
+              <span className="text-[11px] font-medium text-zinc-400">Total Produk</span>
+            </div>
+            <p className="text-xl font-bold text-zinc-100">{formatNumber(stats.total)}</p>
+          </div>
+
+          {/* Total Categories */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                <Tags className="h-3.5 w-3.5 text-emerald-400" />
+              </div>
+              <span className="text-[11px] font-medium text-zinc-400">Kategori</span>
+            </div>
+            <p className="text-xl font-bold text-zinc-100">{formatNumber(stats.categories)}</p>
+          </div>
+
+          {/* Low Stock Items */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
+            <div className="flex items-center gap-2">
+              <div className={`h-7 w-7 rounded-md flex items-center justify-center ${stats.lowStock > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
+                <AlertTriangle className={`h-3.5 w-3.5 ${stats.lowStock > 0 ? 'text-amber-400' : 'text-emerald-400'}`} />
+              </div>
+              <span className="text-[11px] font-medium text-zinc-400">Stok Rendah</span>
+            </div>
+            <p className={`text-xl font-bold ${stats.lowStock > 0 ? 'text-amber-400' : 'text-zinc-100'}`}>
+              {formatNumber(stats.lowStock)}
+            </p>
+          </div>
+
+          {/* Total Inventory Value */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+              </div>
+              <span className="text-[11px] font-medium text-zinc-400">Nilai Inventori</span>
+            </div>
+            <p className="text-xl font-bold text-zinc-100">{formatCurrency(stats.inventoryValue)}</p>
+          </div>
+        </div>
+      )}
 
       {/* Category Management Section */}
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
@@ -1193,6 +1440,14 @@ export default function ProductsPage() {
                 <Package className="mr-1.5 h-3 w-3" />
                 Ubah Stok
               </Button>
+              <Button
+                size="sm"
+                onClick={() => { setBulkCategoryOpen(true); setBulkCategoryId('') }}
+                className="bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20 h-7 text-xs"
+              >
+                <Tags className="mr-1.5 h-3 w-3" />
+                Ubah Kategori
+              </Button>
             </div>
           </div>
         </div>
@@ -1207,16 +1462,16 @@ export default function ProductsPage() {
       />
 
       {/* Category Create/Edit Dialog */}
-      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold">
+      <ResponsiveDialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">
               {editCategory ? 'Edit Kategori' : 'Tambah Kategori'}
-            </DialogTitle>
-            <DialogDescription className="text-zinc-400 text-xs">
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-zinc-400 text-xs">
               {editCategory ? 'Ubah nama dan warna kategori' : 'Buat kategori baru untuk mengelompokkan produk'}
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-1">
             <div className="space-y-1.5">
               <Label className="text-zinc-300 text-xs">Nama Kategori *</Label>
@@ -1248,7 +1503,7 @@ export default function ProductsPage() {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               variant="ghost"
               onClick={() => setCategoryDialogOpen(false)}
@@ -1264,9 +1519,9 @@ export default function ProductsPage() {
               {categorySaving && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               {editCategory ? 'Simpan' : 'Tambah'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Category Delete Confirmation */}
       <AlertDialog open={!!deleteCategoryId} onOpenChange={(open) => !open && setDeleteCategoryId(null)}>
@@ -1330,13 +1585,13 @@ export default function ProductsPage() {
       </AlertDialog>
 
       {/* Restock Dialog */}
-      <Dialog open={restockOpen} onOpenChange={setRestockOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold">
+      <ResponsiveDialog open={restockOpen} onOpenChange={setRestockOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">
               Restock: {restockProduct?.name}
-            </DialogTitle>
-          </DialogHeader>
+            </ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-1">
             <div className="text-xs text-zinc-400">
               Current stock: <span className="text-zinc-200 font-medium">{restockProduct?.stock}</span>
@@ -1353,7 +1608,7 @@ export default function ProductsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               variant="ghost"
               onClick={() => setRestockOpen(false)}
@@ -1369,19 +1624,19 @@ export default function ProductsPage() {
               {restocking && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               Restock
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Bulk Price Dialog */}
-      <Dialog open={bulkPriceOpen} onOpenChange={setBulkPriceOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold">Ubah Harga Massal</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-xs">
+      <ResponsiveDialog open={bulkPriceOpen} onOpenChange={setBulkPriceOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Ubah Harga Massal</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-zinc-400 text-xs">
               Mengubah harga untuk {selectedIds.size} produk
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-1">
             <div className="flex gap-1.5">
               <Button
@@ -1450,7 +1705,7 @@ export default function ProductsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               variant="ghost"
               onClick={() => setBulkPriceOpen(false)}
@@ -1466,19 +1721,19 @@ export default function ProductsPage() {
               {bulkPriceSubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               Terapkan
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Bulk Stock Dialog */}
-      <Dialog open={bulkStockOpen} onOpenChange={setBulkStockOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold">Ubah Stok Massal</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-xs">
+      <ResponsiveDialog open={bulkStockOpen} onOpenChange={setBulkStockOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Ubah Stok Massal</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-zinc-400 text-xs">
               Mengubah stok untuk {selectedIds.size} produk
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-1">
             <div className="flex gap-1.5">
               <Button
@@ -1532,7 +1787,7 @@ export default function ProductsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               variant="ghost"
               onClick={() => setBulkStockOpen(false)}
@@ -1548,19 +1803,77 @@ export default function ProductsPage() {
               {bulkStockSubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               Terapkan
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+
+      {/* Bulk Category Change Dialog */}
+      <ResponsiveDialog open={bulkCategoryOpen} onOpenChange={setBulkCategoryOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Ubah Kategori Massal</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-zinc-400 text-xs">
+              Mengubah kategori untuk {selectedIds.size} produk
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label className="text-zinc-300 text-xs">Pilih Kategori</Label>
+              {categoriesLoading ? (
+                <Skeleton className="h-8 bg-zinc-800 rounded" />
+              ) : (
+                <Select value={bulkCategoryId} onValueChange={setBulkCategoryId}>
+                  <SelectTrigger className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+                    <SelectValue placeholder="Pilih kategori..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-800 border-zinc-700">
+                    {categories.map((cat) => (
+                      <SelectItem
+                        key={cat.id}
+                        value={cat.id}
+                        className="text-zinc-200 focus:bg-zinc-700 focus:text-zinc-100"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className={`h-2.5 w-2.5 rounded-full ${getColorDotClasses(cat.color)}`} />
+                          {cat.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-[11px] text-zinc-500">Kategori baru akan diterapkan ke semua produk yang dipilih.</p>
+            </div>
+          </div>
+          <ResponsiveDialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setBulkCategoryOpen(false)}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs"
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleBulkCategory}
+              disabled={bulkCategorySubmitting || !bulkCategoryId}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+            >
+              {bulkCategorySubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+              Terapkan
+            </Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Upload Excel Dialog */}
-      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold">Upload Produk Excel</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-xs">
+      <ResponsiveDialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-md">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Upload Produk Excel</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-zinc-400 text-xs">
               Upload file Excel (.xlsx) untuk menambahkan produk secara massal (maks. 500 baris)
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
 
           {!uploadResult ? (
             <div className="space-y-3 py-1">
@@ -1685,7 +1998,7 @@ export default function ProductsPage() {
             </div>
           )}
 
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             {!uploadResult ? (
               <>
                 <Button
@@ -1739,9 +2052,9 @@ export default function ProductsPage() {
                 Selesai
               </Button>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Product Detail Sheet */}
       <Sheet open={detailOpen} onOpenChange={setDetailOpen}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { formatCurrency, formatDate } from '@/lib/format'
@@ -11,15 +11,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+  ResponsiveDialogDescription,
+} from '@/components/ui/responsive-dialog'
 import {
   Select,
   SelectContent,
@@ -58,6 +61,11 @@ import {
   Receipt,
   BarChart3,
   Trophy,
+  ShoppingBag,
+  AlertTriangle,
+  Hash,
+  Package,
+  ArrowUpRight,
 } from 'lucide-react'
 
 interface TransactionItem {
@@ -103,13 +111,44 @@ interface SummaryData {
   totalRevenue: number
   totalTransactions: number
   avgTransaction: number
+  totalItemsSold: number
   paymentBreakdown: { method: string; count: number; total: number }[]
   topProducts: { rank: number; name: string; quantity: number; revenue: number }[]
+  hourlyBreakdown: { hour: number; count: number }[]
+  voidInfo: { count: number; total: number }
 }
 
-function getTodayISO(): string {
+function getTodayLocal(): string {
   const d = new Date()
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+}
+
+/** Get start-of-day in local time as milliseconds (timezone-safe) */
+function getStartOfDayMs(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime()
+}
+
+/** Get end-of-day in local time as milliseconds (timezone-safe) */
+function getEndOfDayMs(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime()
+}
+
+const PAYMENT_COLORS: Record<string, { bg: string; border: string; text: string; iconBg: string }> = {
+  CASH: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', iconBg: 'bg-emerald-500/10' },
+  QRIS: { bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-400', iconBg: 'bg-sky-500/10' },
+  DEBIT: { bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-400', iconBg: 'bg-violet-500/10' },
+}
+
+const PAYMENT_BAR_COLORS: Record<string, string> = {
+  CASH: 'bg-emerald-500',
+  QRIS: 'bg-sky-500',
+  DEBIT: 'bg-violet-500',
+}
+
+function formatHour(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`
 }
 
 export default function TransactionsPage() {
@@ -118,13 +157,16 @@ export default function TransactionsPage() {
   const { plan } = usePlan()
   const isPro = plan?.type === 'pro' || plan?.type === 'enterprise'
 
+  // Active tab
+  const [activeTab, setActiveTab] = useState('transactions')
+
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [search, setSearch] = useState('')
-  const [dateFrom, setDateFrom] = useState(getTodayISO)
-  const [dateTo, setDateTo] = useState(getTodayISO)
+  const [dateFrom, setDateFrom] = useState(getTodayLocal)
+  const [dateTo, setDateTo] = useState(getTodayLocal)
   const [cashierId, setCashierId] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('')
   const [voidFilter, setVoidFilter] = useState('')
@@ -202,8 +244,15 @@ export default function TransactionsPage() {
     setSummaryLoading(true)
     try {
       const params = new URLSearchParams()
-      if (dateFrom) params.set('dateFrom', dateFrom)
+      const tzOffset = new Date().getTimezoneOffset()
+      if (dateFrom) {
+        params.set('dateFrom', dateFrom)
+        params.set('tzOffset', String(tzOffset))
+      }
       if (dateTo) params.set('dateTo', dateTo)
+      // Keep dateFromMs/dateToMs as fallback for old server code
+      if (dateFrom) params.set('dateFromMs', String(getStartOfDayMs(dateFrom)))
+      if (dateTo) params.set('dateToMs', String(getEndOfDayMs(dateTo)))
       if (outletId) params.set('outletId', outletId)
 
       const res = await fetch(`/api/transactions/summary?${params}`)
@@ -225,8 +274,15 @@ export default function TransactionsPage() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' })
       if (search) params.set('search', search)
-      if (dateFrom) params.set('dateFrom', dateFrom)
+      const tzOffset = new Date().getTimezoneOffset()
+      if (dateFrom) {
+        params.set('dateFrom', dateFrom)
+        params.set('tzOffset', String(tzOffset))
+      }
       if (dateTo) params.set('dateTo', dateTo)
+      // Keep dateFromMs/dateToMs as fallback for old server code
+      if (dateFrom) params.set('dateFromMs', String(getStartOfDayMs(dateFrom)))
+      if (dateTo) params.set('dateToMs', String(getEndOfDayMs(dateTo)))
       if (cashierId) params.set('cashierId', cashierId)
       if (paymentMethod) params.set('paymentMethod', paymentMethod)
       if (voidFilter) params.set('voidStatus', voidFilter)
@@ -297,7 +353,7 @@ export default function TransactionsPage() {
   }
 
   const handleSetToday = () => {
-    const today = getTodayISO()
+    const today = getTodayLocal()
     setDateFrom(today)
     setDateTo(today)
   }
@@ -308,8 +364,8 @@ export default function TransactionsPage() {
   }
 
   const handleClearAllFilters = () => {
-    setDateFrom(getTodayISO)
-    setDateTo(getTodayISO)
+    setDateFrom(getTodayLocal)
+    setDateTo(getTodayLocal)
     setSearch('')
     setCashierId('')
     setPaymentMethod('')
@@ -323,8 +379,8 @@ export default function TransactionsPage() {
       return
     }
     const params = new URLSearchParams()
-    if (dateFrom) params.set('dateFrom', dateFrom)
-    if (dateTo) params.set('dateTo', dateTo)
+    if (dateFrom) params.set('dateFromMs', String(getStartOfDayMs(dateFrom)))
+    if (dateTo) params.set('dateToMs', String(getEndOfDayMs(dateTo)))
     if (cashierId) params.set('cashierId', cashierId)
     if (paymentMethod) params.set('paymentMethod', paymentMethod)
     window.open(`/api/transactions/export?${params}`, '_blank')
@@ -391,195 +447,230 @@ export default function TransactionsPage() {
 
   const hasActiveFilters = search || dateFrom || dateTo || cashierId || paymentMethod || voidFilter || outletId
 
+  // --- Payment badge helpers ---
   const getPaymentBadge = (method: string) => {
-    switch (method) {
-      case 'CASH':
-        return (
-          <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px]">
-            <Banknote className="mr-0.5 h-2.5 w-2.5" />CASH
-          </Badge>
-        )
-      case 'QRIS':
-        return (
-          <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
-            <QrCode className="mr-0.5 h-2.5 w-2.5" />QRIS
-          </Badge>
-        )
-      case 'DEBIT':
-        return (
-          <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px]">
-            <CreditCard className="mr-0.5 h-2.5 w-2.5" />DEBIT
-          </Badge>
-        )
-      default:
-        return <Badge className="text-[10px]">{method}</Badge>
-    }
+    const colors = PAYMENT_COLORS[method]
+    if (!colors) return <Badge className="text-[10px]">{method}</Badge>
+    const icon = method === 'CASH' ? <Banknote className="mr-0.5 h-2.5 w-2.5" />
+      : method === 'QRIS' ? <QrCode className="mr-0.5 h-2.5 w-2.5" />
+      : <CreditCard className="mr-0.5 h-2.5 w-2.5" />
+    return (
+      <Badge className={`${colors.bg} ${colors.border} ${colors.text} text-[10px]`}>
+        {icon}{method}
+      </Badge>
+    )
   }
 
-  const getPaymentBadgeSmall = (method: string, total: number, count: number) => {
-    switch (method) {
-      case 'CASH':
-        return (
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10 px-3 py-2">
-            <Banknote className="h-4 w-4 text-emerald-400 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-emerald-400">CASH</p>
-              <p className="text-[10px] text-zinc-500">{count} transaksi</p>
-            </div>
-            <p className="text-xs font-semibold text-zinc-200 ml-auto whitespace-nowrap">{formatCurrency(total)}</p>
-          </div>
-        )
-      case 'QRIS':
-        return (
-          <div className="flex items-center gap-2 rounded-lg bg-amber-500/5 border border-amber-500/10 px-3 py-2">
-            <QrCode className="h-4 w-4 text-amber-400 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-amber-400">QRIS</p>
-              <p className="text-[10px] text-zinc-500">{count} transaksi</p>
-            </div>
-            <p className="text-xs font-semibold text-zinc-200 ml-auto whitespace-nowrap">{formatCurrency(total)}</p>
-          </div>
-        )
-      case 'DEBIT':
-        return (
-          <div className="flex items-center gap-2 rounded-lg bg-sky-500/5 border border-sky-500/10 px-3 py-2">
-            <CreditCard className="h-4 w-4 text-sky-400 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-sky-400">DEBIT</p>
-              <p className="text-[10px] text-zinc-500">{count} transaksi</p>
-            </div>
-            <p className="text-xs font-semibold text-zinc-200 ml-auto whitespace-nowrap">{formatCurrency(total)}</p>
-          </div>
-        )
-      default:
-        return null
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold text-zinc-100">Transaksi</h1>
-        <p className="text-xs text-zinc-500 mt-0.5">Lihat semua transaksi penjualan</p>
+  const getPaymentIcon = (method: string) => {
+    const colors = PAYMENT_COLORS[method]
+    if (!colors) return null
+    const icon = method === 'CASH' ? <Banknote className="h-3.5 w-3.5" />
+      : method === 'QRIS' ? <QrCode className="h-3.5 w-3.5" />
+      : <CreditCard className="h-3.5 w-3.5" />
+    return (
+      <div className={`w-7 h-7 rounded-lg ${colors.iconBg} flex items-center justify-center ${colors.text}`}>
+        {icon}
       </div>
+    )
+  }
 
-      {/* Transaction Summary Section (Pro/Enterprise only) */}
-      <ProGate
-        feature="transactionSummary"
-        label="Ringkasan Transaksi"
-        description="Lihat ringkasan penjualan per outlet"
-        minHeight="180px"
-      >
-        {summaryLoading ? (
+  // --- Hourly chart max ---
+  const hourlyMax = useMemo(() => {
+    if (!summary) return 1
+    return Math.max(...summary.hourlyBreakdown.map(h => h.count), 1)
+  }, [summary])
+
+  // --- Payment bar max ---
+  const paymentMax = useMemo(() => {
+    if (!summary) return 1
+    return Math.max(...summary.paymentBreakdown.map(p => p.total), 1)
+  }, [summary])
+
+  // --- Closing Tab Content ---
+  const renderClosingTab = () => (
+    <ProGate
+      feature="transactionSummary"
+      label="Closing Harian"
+      description="Lihat ringkasan closing harian per outlet"
+      minHeight="400px"
+    >
+      {summaryLoading ? (
+        <div className="space-y-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 bg-zinc-900 rounded-lg" />
+              <Skeleton key={i} className="h-28 bg-zinc-900 rounded-xl" />
             ))}
           </div>
-        ) : summary ? (
-          <div className="space-y-3">
-            {/* Summary Cards Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {/* Total Revenue */}
-              <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <TrendingUp className="h-4 w-4 text-emerald-400" />
-                    </div>
-                    <span className="text-[11px] text-zinc-500 font-medium">Total Pendapatan</span>
+          <Skeleton className="h-40 bg-zinc-900 rounded-xl" />
+          <Skeleton className="h-48 bg-zinc-900 rounded-xl" />
+        </div>
+      ) : summary ? (
+        <div className="space-y-4">
+          {/* Today's Summary Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Total Revenue */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/10 to-transparent rounded-bl-full" />
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <TrendingUp className="h-4 w-4 text-emerald-400" />
                   </div>
-                  <p className="text-lg font-bold text-zinc-100">{formatCurrency(summary.totalRevenue)}</p>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">
-                    {dateFrom && dateTo && dateFrom === dateTo
-                      ? `Hari ini`
-                      : `${dateFrom || '...'} — ${dateTo || '...'}`
-                    }
-                  </p>
-                </CardContent>
-              </Card>
+                  <span className="text-[11px] text-zinc-500 font-medium">Total Pendapatan</span>
+                </div>
+                <p className="text-xl lg:text-2xl font-bold text-emerald-400 tracking-tight">
+                  {formatCurrency(summary.totalRevenue)}
+                </p>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  {dateFrom && dateTo && dateFrom === dateTo ? 'Hari ini' : `${dateFrom || '...'} — ${dateTo || '...'}`}
+                </p>
+              </CardContent>
+            </Card>
 
-              {/* Total Transactions */}
-              <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-sky-500/10 flex items-center justify-center">
-                      <Receipt className="h-4 w-4 text-sky-400" />
-                    </div>
-                    <span className="text-[11px] text-zinc-500 font-medium">Total Transaksi</span>
+            {/* Total Transactions */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-sky-500/10 to-transparent rounded-bl-full" />
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-sky-500/10 flex items-center justify-center">
+                    <Receipt className="h-4 w-4 text-sky-400" />
                   </div>
-                  <p className="text-lg font-bold text-zinc-100">{summary.totalTransactions}</p>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">Non-void</p>
-                </CardContent>
-              </Card>
+                  <span className="text-[11px] text-zinc-500 font-medium">Transaksi</span>
+                </div>
+                <p className="text-xl lg:text-2xl font-bold text-zinc-100 tracking-tight">
+                  {summary.totalTransactions}
+                </p>
+                <p className="text-[10px] text-zinc-500 mt-1">Non-void</p>
+              </CardContent>
+            </Card>
 
-              {/* Average Transaction */}
-              <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                      <BarChart3 className="h-4 w-4 text-violet-400" />
-                    </div>
-                    <span className="text-[11px] text-zinc-500 font-medium">Rata-rata Transaksi</span>
+            {/* Average Transaction */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-violet-500/10 to-transparent rounded-bl-full" />
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                    <BarChart3 className="h-4 w-4 text-violet-400" />
                   </div>
-                  <p className="text-lg font-bold text-zinc-100">{formatCurrency(summary.avgTransaction)}</p>
-                  <p className="text-[10px] text-zinc-500 mt-0.5">Per transaksi</p>
-                </CardContent>
-              </Card>
+                  <span className="text-[11px] text-zinc-500 font-medium">Rata-rata</span>
+                </div>
+                <p className="text-xl lg:text-2xl font-bold text-zinc-100 tracking-tight">
+                  {formatCurrency(summary.avgTransaction)}
+                </p>
+                <p className="text-[10px] text-zinc-500 mt-1">Per transaksi</p>
+              </CardContent>
+            </Card>
 
-              {/* Payment Breakdown + Top Products */}
-              <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                      <Trophy className="h-4 w-4 text-amber-400" />
-                    </div>
-                    <span className="text-[11px] text-zinc-500 font-medium">Produk Terlaris</span>
+            {/* Total Items Sold */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl overflow-hidden relative">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/10 to-transparent rounded-bl-full" />
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                    <ShoppingBag className="h-4 w-4 text-amber-400" />
                   </div>
-                  {summary.topProducts.length > 0 ? (
-                    <div className="space-y-0.5">
-                      {summary.topProducts.slice(0, 2).map((p) => (
-                        <div key={p.rank} className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-bold text-amber-400 w-4">#{p.rank}</span>
-                            <span className="text-xs text-zinc-300 truncate max-w-[80px]">{p.name}</span>
+                  <span className="text-[11px] text-zinc-500 font-medium">Item Terjual</span>
+                </div>
+                <p className="text-xl lg:text-2xl font-bold text-zinc-100 tracking-tight">
+                  {summary.totalItemsSold}
+                </p>
+                <p className="text-[10px] text-zinc-500 mt-1">Total unit</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Two-column: Payment Breakdown + Hourly Breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* Revenue by Payment Method */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
+                  <CreditCard className="h-3.5 w-3.5 text-zinc-500" />
+                  Pendapatan per Metode
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0 space-y-3">
+                {summary.paymentBreakdown.length > 0 ? (
+                  summary.paymentBreakdown.map((pb) => {
+                    const pct = paymentMax > 0 ? (pb.total / paymentMax) * 100 : 0
+                    const barColor = PAYMENT_BAR_COLORS[pb.method] || 'bg-zinc-500'
+                    return (
+                      <div key={pb.method} className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {getPaymentIcon(pb.method)}
+                            <div>
+                              <span className="text-xs font-medium text-zinc-200">{pb.method}</span>
+                              <span className="text-[10px] text-zinc-500 ml-1.5">{pb.count} transaksi</span>
+                            </div>
                           </div>
-                          <span className="text-[10px] text-zinc-500">{p.quantity}x</span>
+                          <span className="text-xs font-semibold text-zinc-200">{formatCurrency(pb.total)}</span>
                         </div>
-                      ))}
-                      {summary.topProducts.length > 2 && (
-                        <p className="text-[10px] text-zinc-600">+{summary.topProducts.length - 2} lainnya</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-zinc-500">Belum ada data</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                        <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                          <div className={`h-full ${barColor} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs text-zinc-500 text-center py-4">Belum ada data</p>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* Payment Breakdown Row */}
-            {summary.paymentBreakdown.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {summary.paymentBreakdown.map((pb) => (
-                  <div key={pb.method} className="flex-1 min-w-[160px]">
-                    {getPaymentBadgeSmall(pb.method, pb.total, pb.count)}
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Hourly Breakdown */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 text-zinc-500" />
+                  Transaksi per Jam
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="flex items-end gap-1 h-32">
+                  {summary.hourlyBreakdown
+                    .filter(h => h.hour >= 6 && h.hour <= 23)
+                    .map((h) => {
+                      const height = hourlyMax > 0 ? (h.count / hourlyMax) * 100 : 0
+                      const isPeak = h.count > 0 && h.count === Math.max(...summary.hourlyBreakdown.map(x => x.count))
+                      return (
+                        <div key={h.hour} className="flex-1 flex flex-col items-center gap-1">
+                          {h.count > 0 && (
+                            <span className="text-[9px] text-zinc-400 font-medium">{h.count}</span>
+                          )}
+                          <div className="w-full flex items-end" style={{ height: '80px' }}>
+                            <div
+                              className={`w-full rounded-t-sm transition-all duration-500 ${isPeak ? 'bg-emerald-500' : h.count > 0 ? 'bg-zinc-600' : 'bg-zinc-800'}`}
+                              style={{ height: `${Math.max(height, h.count > 0 ? 4 : 2)}%` }}
+                            />
+                          </div>
+                          <span className="text-[8px] text-zinc-600">{h.hour}</span>
+                        </div>
+                      )
+                    })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-            {/* Top Products Full List */}
-            {summary.topProducts.length > 0 && (
-              <Card className="bg-zinc-900 border-zinc-800">
-                <CardContent className="p-4">
-                  <p className="text-xs font-medium text-zinc-400 mb-3">Produk Terlaris</p>
+          {/* Two-column: Top Products + Void Transactions */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {/* Top 5 Products Today */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
+                  <Trophy className="h-3.5 w-3.5 text-amber-400" />
+                  Top 5 Produk Hari Ini
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                {summary.topProducts.length > 0 ? (
                   <div className="space-y-2">
                     {summary.topProducts.map((p) => (
-                      <div key={p.rank} className="flex items-center gap-3">
+                      <div key={p.rank} className="flex items-center gap-3 py-1">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
                           p.rank === 1
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
                             : p.rank === 2
                               ? 'bg-zinc-400/10 text-zinc-400 border border-zinc-400/20'
                               : p.rank === 3
@@ -588,35 +679,97 @@ export default function TransactionsPage() {
                         }`}>
                           {p.rank}
                         </span>
-                        <span className="text-xs text-zinc-300 flex-1 truncate">{p.name}</span>
-                        <span className="text-[10px] text-zinc-500 shrink-0">{p.quantity} terjual</span>
-                        <span className="text-xs font-medium text-zinc-200 shrink-0">{formatCurrency(p.revenue)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-zinc-200 truncate">{p.name}</p>
+                          <p className="text-[10px] text-zinc-500">{p.quantity} terjual</p>
+                        </div>
+                        <span className="text-xs font-semibold text-zinc-200 shrink-0">{formatCurrency(p.revenue)}</span>
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="bg-zinc-900 border-zinc-800">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
-                      <BarChart3 className="h-4 w-4 text-zinc-600" />
-                    </div>
-                    <span className="text-[11px] text-zinc-600 font-medium">—</span>
-                  </div>
-                  <p className="text-lg font-bold text-zinc-700">Rp 0</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </ProGate>
+                ) : (
+                  <p className="text-xs text-zinc-500 text-center py-4">Belum ada data</p>
+                )}
+              </CardContent>
+            </Card>
 
+            {/* Void Transactions */}
+            <Card className="bg-zinc-900 border-zinc-800 rounded-xl">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+                  Transaksi Void
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 p-3 rounded-lg bg-red-500/5 border border-red-500/10">
+                    <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                      <Ban className="h-5 w-5 text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-300">Total Void</p>
+                      <p className="text-lg font-bold text-red-400">{summary.voidInfo.count} transaksi</p>
+                    </div>
+                    <div className="ml-auto text-right">
+                      <p className="text-[10px] text-zinc-500">Nilai Void</p>
+                      <p className="text-sm font-semibold text-red-300/70">{formatCurrency(summary.voidInfo.total)}</p>
+                    </div>
+                  </div>
+
+                  {summary.totalRevenue > 0 && summary.voidInfo.count > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-zinc-500">Void Ratio</span>
+                        <span className="text-zinc-400 font-medium">
+                          {((summary.voidInfo.count / (summary.totalTransactions + summary.voidInfo.count)) * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-red-500/60 rounded-full"
+                          style={{
+                            width: `${Math.min((summary.voidInfo.count / (summary.totalTransactions + summary.voidInfo.count)) * 100, 100)}%`
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {summary.voidInfo.count === 0 && (
+                    <div className="text-center py-2">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-500/40 mx-auto mb-2" />
+                      <p className="text-xs text-zinc-500">Tidak ada transaksi void hari ini</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="bg-zinc-900 border-zinc-800 rounded-xl">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
+                    <BarChart3 className="h-4 w-4 text-zinc-600" />
+                  </div>
+                  <span className="text-[11px] text-zinc-600 font-medium">—</span>
+                </div>
+                <p className="text-lg font-bold text-zinc-700">Rp 0</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </ProGate>
+  )
+
+  // --- Transactions Tab Content ---
+  const renderTransactionsTab = () => (
+    <>
       {/* Filters */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:flex-wrap">
@@ -799,18 +952,19 @@ export default function TransactionsPage() {
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 bg-zinc-900 rounded" />
+            <Skeleton key={i} className="h-14 bg-zinc-900 rounded-xl" />
           ))}
         </div>
       ) : transactions.length === 0 ? (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6 text-center">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
+          <Receipt className="h-8 w-8 text-zinc-700 mx-auto mb-3" />
           <p className="text-xs text-zinc-500">Tidak ada transaksi ditemukan</p>
           {hasActiveFilters && (
             <Button
               variant="ghost"
               size="sm"
               onClick={handleClearAllFilters}
-              className="mt-2 text-zinc-500 hover:text-zinc-300 text-xs h-7"
+              className="mt-3 text-zinc-500 hover:text-zinc-300 text-xs h-7"
             >
               Reset semua filter
             </Button>
@@ -825,50 +979,64 @@ export default function TransactionsPage() {
               return (
                 <div
                   key={txn.id}
-                  className={`rounded-xl p-3 ${
+                  className={`rounded-xl border-l-4 p-3.5 transition-colors ${
                     isVoid
-                      ? 'border border-red-500/20 bg-red-500/[0.03]'
-                      : 'border border-zinc-800/60 bg-zinc-900'
+                      ? 'border-l-red-500 border border-red-500/15 bg-red-500/[0.03]'
+                      : 'border-l-emerald-500/50 border border-zinc-800/60 bg-zinc-900'
                   }`}
                 >
-                  {/* Top row: Invoice + Badges */}
-                  <div className="flex items-center justify-between mb-2 gap-2">
-                    <span className="text-xs text-emerald-400 font-mono font-medium truncate">
-                      {txn.invoiceNumber}
-                    </span>
+                  <div className="flex items-center justify-between mb-2.5 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {getPaymentIcon(txn.paymentMethod)}
+                      <div className="min-w-0">
+                        <span className="text-xs text-emerald-400 font-mono font-medium block truncate">
+                          {txn.invoiceNumber}
+                        </span>
+                        <span className="text-[10px] text-zinc-500">{formatDate(txn.createdAt)}</span>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      {getPaymentBadge(txn.paymentMethod)}
                       {isVoid && (
                         <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
-                          <Ban className="mr-0.5 h-2.5 w-2.5" />
-                          VOID
+                          VOIDED
                         </Badge>
                       )}
                     </div>
                   </div>
-                  {/* Middle row: Date + Customer */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-zinc-400">{formatDate(txn.createdAt)}</span>
-                    <span className="text-xs text-zinc-300">{txn.customerName || 'Walk-in'}</span>
-                  </div>
-                  {/* Bottom row: Total + Items + Action */}
+
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-semibold ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
-                        {formatCurrency(txn.total)}
-                      </span>
-                      <span className="text-[10px] text-zinc-500">
-                        {txn._count?.items || 0} item
-                      </span>
+                      <div>
+                        <span className={`text-sm font-semibold block ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
+                          {formatCurrency(txn.total)}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-zinc-500">{txn._count?.items || 0} item</span>
+                          <span className="text-[10px] text-zinc-600">·</span>
+                          <span className="text-[10px] text-zinc-500 truncate max-w-[100px]">{txn.customerName || 'Walk-in'}</span>
+                        </div>
+                      </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                      onClick={() => handleViewDetail(txn)}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                        onClick={() => handleViewDetail(txn)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                      {isOwner && !isVoid && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                          onClick={() => { setDetailTransaction(txn); setVoidOpen(true) }}
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )
@@ -876,34 +1044,36 @@ export default function TransactionsPage() {
           </div>
 
           {/* Desktop table view */}
-          <div className="hidden md:block rounded-lg border border-zinc-800 overflow-x-auto">
+          <div className="hidden md:block rounded-xl border border-zinc-800 overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableRow className="border-zinc-800 hover:bg-transparent bg-zinc-900/50">
                   <TableHead className="text-zinc-500 text-[11px] font-medium w-10"></TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium">Invoice #</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden md:table-cell">Outlet</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden lg:table-cell">Outlet</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium">Tanggal</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden sm:table-cell">Customer</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden md:table-cell">Customer</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Pembayaran</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center hidden sm:table-cell">Item</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center w-10 hidden sm:table-cell">Sync</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-10">Aksi</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center hidden md:table-cell">Item</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center w-10 hidden lg:table-cell">Sync</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-20">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {transactions.map((txn) => {
                   const isVoid = txn.voidStatus === 'void'
-                  let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
-                  if (isVoid) {
-                    rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
-                  }
-
                   return (
-                    <TableRow key={txn.id} className={rowClass}>
-                      {/* Void badge */}
-                      <TableCell className="py-2.5 px-3">
+                    <TableRow
+                      key={txn.id}
+                      className={`border-zinc-800/60 transition-colors ${
+                        isVoid
+                          ? 'border-l-2 border-l-red-500 bg-red-500/[0.02] hover:bg-red-500/5'
+                          : 'hover:bg-zinc-800/40'
+                      }`}
+                    >
+                      {/* Void indicator */}
+                      <TableCell className="py-3 px-3">
                         {isVoid && (
                           <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
                             <Ban className="mr-0.5 h-2.5 w-2.5" />
@@ -911,28 +1081,28 @@ export default function TransactionsPage() {
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-emerald-400 font-mono font-medium py-2.5 px-3">
+                      <TableCell className="text-xs text-emerald-400 font-mono font-medium py-3 px-3">
                         {txn.invoiceNumber}
                       </TableCell>
-                      {/* Outlet column (hidden on mobile) */}
-                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3 hidden md:table-cell">
+                      {/* Outlet column */}
+                      <TableCell className="text-xs text-zinc-400 py-3 px-3 hidden lg:table-cell">
                         <div className="flex items-center gap-1.5">
                           <Store className="h-3 w-3 text-zinc-500 shrink-0" />
                           <span className="truncate max-w-[120px]">{txn.outletName || 'Outlet Saat Ini'}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{formatDate(txn.createdAt)}</TableCell>
-                      <TableCell className="text-xs text-zinc-300 py-2.5 px-3 hidden sm:table-cell">{txn.customerName || 'Walk-in'}</TableCell>
-                      <TableCell className="text-center py-2.5 px-3">
+                      <TableCell className="text-xs text-zinc-400 py-3 px-3">{formatDate(txn.createdAt)}</TableCell>
+                      <TableCell className="text-xs text-zinc-300 py-3 px-3 hidden md:table-cell">{txn.customerName || 'Walk-in'}</TableCell>
+                      <TableCell className="text-center py-3 px-3">
                         {getPaymentBadge(txn.paymentMethod)}
                       </TableCell>
-                      <TableCell className={`text-xs font-semibold text-right py-2.5 px-3 ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-200'}`}>
+                      <TableCell className={`text-xs font-semibold text-right py-3 px-3 ${isVoid ? 'text-zinc-500 line-through' : 'text-zinc-100'}`}>
                         {formatCurrency(txn.total)}
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-400 text-center py-2.5 px-3 hidden sm:table-cell">
+                      <TableCell className="text-xs text-zinc-400 text-center py-3 px-3 hidden md:table-cell">
                         {txn._count?.items || 0}
                       </TableCell>
-                      <TableCell className="text-center py-2.5 px-3 hidden sm:table-cell">
+                      <TableCell className="text-center py-3 px-3 hidden lg:table-cell">
                         {txn.syncStatus === 'synced' ? (
                           <span className="inline-flex items-center justify-center text-emerald-400">
                             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -943,15 +1113,27 @@ export default function TransactionsPage() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right py-2.5 px-3">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                          onClick={() => handleViewDetail(txn)}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
+                      <TableCell className="text-right py-3 px-3">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                            onClick={() => handleViewDetail(txn)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          {isOwner && !isVoid && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                              onClick={() => { setDetailTransaction(txn); setVoidOpen(true) }}
+                            >
+                              <Ban className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )
@@ -963,195 +1145,294 @@ export default function TransactionsPage() {
       )}
 
       <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+    </>
+  )
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-lg font-semibold text-zinc-100">Transaksi</h1>
+        <p className="text-xs text-zinc-500 mt-0.5">Lihat semua transaksi dan ringkasan harian</p>
+      </div>
+
+      {/* Date bar (shared across tabs) */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <CalendarDays className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-full sm:w-[140px] [color-scheme:dark]"
+          />
+          <span className="text-zinc-600 text-[11px]">—</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-full sm:w-[140px] [color-scheme:dark]"
+          />
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleSetToday}
+          className="text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 text-[11px] h-8 px-2.5 rounded-full"
+        >
+          Hari Ini
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
+          onClick={handleClearAllFilters}
+          title="Reset filter"
+        >
+          <RotateCcw className="h-3 w-3" />
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="bg-zinc-900 border border-zinc-800 rounded-lg h-9 p-0.5">
+          <TabsTrigger
+            value="transactions"
+            className="text-xs px-3 h-8 rounded-md data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 text-zinc-400 data-[state=active]:shadow-sm"
+          >
+            <Receipt className="mr-1.5 h-3.5 w-3.5" />
+            Daftar Transaksi
+          </TabsTrigger>
+          <TabsTrigger
+            value="closing"
+            className="text-xs px-3 h-8 rounded-md data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 text-zinc-400 data-[state=active]:shadow-sm"
+          >
+            <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+            Closing Harian
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="transactions" className="mt-4 space-y-3">
+          {renderTransactionsTab()}
+        </TabsContent>
+
+        <TabsContent value="closing" className="mt-4">
+          {renderClosingTab()}
+        </TabsContent>
+      </Tabs>
 
       {/* Detail Dialog */}
-      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-md sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-zinc-100 text-sm font-semibold">
-                Detail Transaksi
-              </DialogTitle>
-              {detailTransaction?.voidStatus === 'void' && (
-                <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">
-                  <Ban className="mr-0.5 h-2.5 w-2.5" />
-                  VOID
-                </Badge>
-              )}
-            </div>
-          </DialogHeader>
-
+      <ResponsiveDialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 max-h-[90vh] overflow-y-auto p-0" desktopClassName="max-w-md sm:max-w-lg">
           {detailTransaction && (
-            <div className="space-y-3 py-1">
-              {/* Receipt Preview */}
-              <div className="rounded-lg border border-zinc-700 p-1">
-                <div
-                  ref={receiptRef}
-                  className="bg-white rounded-md p-4 font-mono text-xs text-zinc-800 max-w-[300px] mx-auto"
-                >
-                  {/* Header with outlet info */}
-                  <div className="text-center mb-3">
-                    <p className="font-bold text-sm text-zinc-900">{detailOutlet?.name || 'Aether POS'}</p>
-                    {detailOutlet?.address && (
-                      <p className="text-zinc-500 text-[10px]">{detailOutlet.address}</p>
-                    )}
-                    {detailOutlet?.phone && (
-                      <p className="text-zinc-500 text-[10px]">{detailOutlet.phone}</p>
-                    )}
-                  </div>
-
-                  <div className="border-t border-dashed border-zinc-300 my-2" />
-
-                  {/* Meta */}
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between">
-                      <span>No</span>
-                      <span className="font-semibold">{detailTransaction.invoiceNumber}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Tanggal</span>
-                      <span>{formatDate(detailTransaction.createdAt)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Kasir</span>
-                      <span>{detailCashierName || '-'}</span>
-                    </div>
-                    {detailTransaction.customerName && detailTransaction.customerName !== 'Walk-in' && (
-                      <div className="flex justify-between">
-                        <span>Customer</span>
-                        <span>{detailTransaction.customerName}</span>
+            <>
+              {/* Dialog Header */}
+              <div className="p-4 pb-3 border-b border-zinc-800/60">
+                <ResponsiveDialogHeader>
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {getPaymentIcon(detailTransaction.paymentMethod)}
+                      <div className="min-w-0">
+                        <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold font-mono truncate block">
+                          {detailTransaction.invoiceNumber}
+                        </ResponsiveDialogTitle>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{formatDate(detailTransaction.createdAt)}</p>
                       </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span>Pembayaran</span>
-                      <span>{detailTransaction.paymentMethod}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Outlet</span>
-                      <span>{detailOutlet?.name || 'Outlet Saat Ini'}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {getPaymentBadge(detailTransaction.paymentMethod)}
+                      {detailTransaction.voidStatus === 'void' && (
+                        <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">
+                          <Ban className="mr-0.5 h-2.5 w-2.5" />
+                          VOIDED
+                        </Badge>
+                      )}
                     </div>
                   </div>
+                </ResponsiveDialogHeader>
+              </div>
 
-                  <div className="border-t border-dashed border-zinc-300 my-2" />
+              <div className="p-4 space-y-4">
+                {/* Info Row */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-zinc-800/50 p-2.5 space-y-1">
+                    <p className="text-[10px] text-zinc-500">Kasir</p>
+                    <p className="text-xs text-zinc-200 font-medium">{detailCashierName || '-'}</p>
+                  </div>
+                  <div className="rounded-lg bg-zinc-800/50 p-2.5 space-y-1">
+                    <p className="text-[10px] text-zinc-500">Customer</p>
+                    <p className="text-xs text-zinc-200 font-medium">{detailTransaction.customerName || 'Walk-in'}</p>
+                  </div>
+                  <div className="rounded-lg bg-zinc-800/50 p-2.5 space-y-1">
+                    <p className="text-[10px] text-zinc-500">Outlet</p>
+                    <p className="text-xs text-zinc-200 font-medium truncate">{detailOutlet?.name || 'Outlet Saat Ini'}</p>
+                  </div>
+                  <div className="rounded-lg bg-zinc-800/50 p-2.5 space-y-1">
+                    <p className="text-[10px] text-zinc-500">Item</p>
+                    <p className="text-xs text-zinc-200 font-medium">{detailLoading ? '-' : detailItems.length} produk</p>
+                  </div>
+                </div>
 
-                  {/* Items */}
+                {/* Items List */}
+                <div className="rounded-lg border border-zinc-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-zinc-800/40 border-b border-zinc-800/60">
+                    <p className="text-[11px] font-medium text-zinc-400">Item Pesanan</p>
+                  </div>
                   {detailLoading ? (
-                    <div className="space-y-2 py-2">
-                      <Skeleton className="h-4 bg-zinc-200 rounded" />
-                      <Skeleton className="h-4 bg-zinc-200 rounded" />
+                    <div className="p-3 space-y-2">
+                      <Skeleton className="h-8 bg-zinc-800 rounded" />
+                      <Skeleton className="h-8 bg-zinc-800 rounded" />
                     </div>
                   ) : (
-                    <table className="w-full">
-                      <tbody>
-                        {detailItems.map((item) => (
-                          <tr key={item.id}>
-                            <td className="py-0.5 text-left">{item.productName}</td>
-                            <td className="py-0.5 text-right text-zinc-500">{item.qty}</td>
-                            <td className="py-0.5 text-right">{formatCurrency(item.subtotal)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="divide-y divide-zinc-800/40">
+                      {detailItems.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between px-3 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-zinc-200 truncate">{item.productName}</p>
+                            <p className="text-[10px] text-zinc-500">{formatCurrency(item.price)} × {item.qty}</p>
+                          </div>
+                          <span className="text-xs font-medium text-zinc-200 shrink-0 ml-3">{formatCurrency(item.subtotal)}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
+                </div>
 
-                  <div className="border-t border-dashed border-zinc-300 my-2" />
-
-                  {/* Totals */}
-                  <div className="space-y-0.5">
-                    <div className="flex justify-between">
-                      <span>Subtotal</span>
-                      <span>{formatCurrency(detailTransaction.subtotal ?? 0)}</span>
+                {/* Payment Summary */}
+                <div className="rounded-lg border border-zinc-800 overflow-hidden">
+                  <div className="px-3 py-2 bg-zinc-800/40 border-b border-zinc-800/60">
+                    <p className="text-[11px] font-medium text-zinc-400">Ringkasan Pembayaran</p>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-zinc-400">Subtotal</span>
+                      <span className="text-zinc-200">{formatCurrency(detailTransaction.subtotal ?? 0)}</span>
                     </div>
                     {(detailTransaction.discount ?? 0) > 0 && (
-                      <div className="flex justify-between text-zinc-500">
-                        <span>Diskon</span>
-                        <span>-{formatCurrency(detailTransaction.discount ?? 0)}</span>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-zinc-400">Diskon</span>
+                        <span className="text-amber-400">-{formatCurrency(detailTransaction.discount ?? 0)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between font-bold text-sm border-t border-dashed border-zinc-300 pt-1">
-                      <span>TOTAL</span>
-                      <span>{formatCurrency(detailTransaction.total)}</span>
+                    <Separator className="bg-zinc-800" />
+                    <div className="flex justify-between text-sm">
+                      <span className="font-semibold text-zinc-200">Total</span>
+                      <span className="font-bold text-emerald-400">{formatCurrency(detailTransaction.total)}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Dibayar</span>
-                      <span>{formatCurrency(detailTransaction.paidAmount ?? 0)}</span>
+                    <Separator className="bg-zinc-800" />
+                    <div className="flex justify-between text-xs">
+                      <span className="text-zinc-400">Dibayar</span>
+                      <span className="text-zinc-200">{formatCurrency(detailTransaction.paidAmount ?? 0)}</span>
                     </div>
                     {(detailTransaction.change ?? 0) > 0 && (
-                      <div className="flex justify-between">
-                        <span>Kembalian</span>
-                        <span>{formatCurrency(detailTransaction.change ?? 0)}</span>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-zinc-400">Kembalian</span>
+                        <span className="text-zinc-200">{formatCurrency(detailTransaction.change ?? 0)}</span>
                       </div>
                     )}
                   </div>
+                </div>
 
-                  <div className="border-t border-dashed border-zinc-300 my-2" />
-
-                  {/* Footer */}
-                  <div className="text-center text-zinc-400 text-[10px]">
-                    <p>Terima kasih atas kunjungan Anda!</p>
+                {/* Receipt Preview (hidden, for printing) */}
+                <div className="hidden">
+                  <div ref={receiptRef} className="bg-white rounded-md p-4 font-mono text-xs text-zinc-800 max-w-[300px] mx-auto">
+                    <div className="text-center mb-3">
+                      <p className="font-bold text-sm text-zinc-900">{detailOutlet?.name || 'Aether POS'}</p>
+                      {detailOutlet?.address && <p className="text-zinc-500 text-[10px]">{detailOutlet.address}</p>}
+                      {detailOutlet?.phone && <p className="text-zinc-500 text-[10px]">{detailOutlet.phone}</p>}
+                    </div>
+                    <div className="border-t border-dashed border-zinc-300 my-2" />
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between"><span>No</span><span className="font-semibold">{detailTransaction.invoiceNumber}</span></div>
+                      <div className="flex justify-between"><span>Tanggal</span><span>{formatDate(detailTransaction.createdAt)}</span></div>
+                      <div className="flex justify-between"><span>Kasir</span><span>{detailCashierName || '-'}</span></div>
+                      {detailTransaction.customerName && detailTransaction.customerName !== 'Walk-in' && (
+                        <div className="flex justify-between"><span>Customer</span><span>{detailTransaction.customerName}</span></div>
+                      )}
+                      <div className="flex justify-between"><span>Pembayaran</span><span>{detailTransaction.paymentMethod}</span></div>
+                    </div>
+                    <div className="border-t border-dashed border-zinc-300 my-2" />
+                    <table className="w-full"><tbody>
+                      {detailItems.map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-0.5 text-left">{item.productName}</td>
+                          <td className="py-0.5 text-right text-zinc-500">{item.qty}</td>
+                          <td className="py-0.5 text-right">{formatCurrency(item.subtotal)}</td>
+                        </tr>
+                      ))}
+                    </tbody></table>
+                    <div className="border-t border-dashed border-zinc-300 my-2" />
+                    <div className="space-y-0.5">
+                      <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(detailTransaction.subtotal ?? 0)}</span></div>
+                      {(detailTransaction.discount ?? 0) > 0 && (
+                        <div className="flex justify-between text-zinc-500"><span>Diskon</span><span>-{formatCurrency(detailTransaction.discount ?? 0)}</span></div>
+                      )}
+                      <div className="flex justify-between font-bold text-sm border-t border-dashed border-zinc-300 pt-1"><span>TOTAL</span><span>{formatCurrency(detailTransaction.total)}</span></div>
+                      <div className="flex justify-between"><span>Dibayar</span><span>{formatCurrency(detailTransaction.paidAmount ?? 0)}</span></div>
+                      {(detailTransaction.change ?? 0) > 0 && (
+                        <div className="flex justify-between"><span>Kembalian</span><span>{formatCurrency(detailTransaction.change ?? 0)}</span></div>
+                      )}
+                    </div>
+                    <div className="border-t border-dashed border-zinc-300 my-2" />
+                    <div className="text-center text-zinc-400 text-[10px]"><p>Terima kasih atas kunjungan Anda!</p></div>
                   </div>
                 </div>
-              </div>
 
-              {/* Print button */}
-              <div className="flex justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePrint}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs"
-                >
-                  <Printer className="mr-1.5 h-3 w-3" />
-                  Cetak Struk
-                </Button>
-              </div>
-
-              {/* Void info */}
-              {detailVoidInfo && (
-                <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-red-400 flex items-center gap-1">
-                    <Ban className="h-3.5 w-3.5" />
-                    Transaksi di-void
-                  </p>
-                  <p className="text-[11px] text-red-300/70">
-                    Alasan: {detailVoidInfo.reason}
-                  </p>
-                  {detailVoidInfo.voidedBy && (
-                    <p className="text-[11px] text-red-300/70">
-                      Oleh: {detailVoidInfo.voidedBy}
+                {/* Void Info */}
+                {detailVoidInfo && (
+                  <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-1.5">
+                    <p className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
+                      <Ban className="h-3.5 w-3.5" />
+                      Transaksi di-void
                     </p>
-                  )}
-                </div>
-              )}
+                    <p className="text-[11px] text-red-300/70">
+                      Alasan: {detailVoidInfo.reason}
+                    </p>
+                    {detailVoidInfo.voidedBy && (
+                      <p className="text-[11px] text-red-300/70">
+                        Oleh: {detailVoidInfo.voidedBy} {detailVoidInfo.voidedAt && `· ${formatDate(detailVoidInfo.voidedAt)}`}
+                      </p>
+                    )}
+                  </div>
+                )}
 
-              {/* Void button (OWNER only, only for active transactions) */}
-              {isOwner && detailTransaction.voidStatus !== 'void' && (
-                <div className="pt-2 border-t border-zinc-800">
+                {/* Actions */}
+                <div className="flex gap-2 pt-1">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setVoidOpen(true)}
-                    className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 w-full h-8 text-xs"
+                    onClick={handlePrint}
+                    className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-9 text-xs"
                   >
-                    <Ban className="mr-1.5 h-3 w-3" />
-                    Void Transaksi
+                    <Printer className="mr-1.5 h-3.5 w-3.5" />
+                    Cetak Struk
                   </Button>
+                  {isOwner && detailTransaction.voidStatus !== 'void' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVoidOpen(true)}
+                      className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 hover:text-red-300 h-9 text-xs"
+                    >
+                      <Ban className="mr-1.5 h-3.5 w-3.5" />
+                      Void
+                    </Button>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            </>
           )}
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Void Confirmation Dialog */}
-      <Dialog open={voidOpen} onOpenChange={setVoidOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm p-4">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold">Void Transaksi</DialogTitle>
-            <DialogDescription className="text-zinc-400 text-xs">
+      <ResponsiveDialog open={voidOpen} onOpenChange={setVoidOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 p-4" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Void Transaksi</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-zinc-400 text-xs">
               Transaksi <span className="text-emerald-400 font-mono">{detailTransaction?.invoiceNumber}</span> akan ditandai sebagai void. Data tetap tersimpan untuk audit.
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-1">
             <div className="space-y-1.5">
               <Label className="text-zinc-300 text-xs">Alasan void <span className="text-red-400">*</span></Label>
@@ -1164,7 +1445,7 @@ export default function TransactionsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               variant="ghost"
               onClick={() => setVoidOpen(false)}
@@ -1181,9 +1462,9 @@ export default function TransactionsPage() {
               {voidSubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               Void
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   )
 }

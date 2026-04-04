@@ -13,16 +13,15 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+} from '@/components/ui/responsive-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,13 +47,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { usePlan } from '@/hooks/use-plan'
+import { PLANS, getPlanLabel, getPlanBadgeClass, formatLimit, isUnlimited, type AccountType } from '@/lib/plan-config'
 import { ProGate } from '@/components/shared/pro-gate'
 import {
   Banknote,
   QrCode,
   CreditCard,
   Store,
-  Users,
   Star,
   Tag,
   Palette,
@@ -65,7 +65,10 @@ import {
   Trash2,
   Loader2,
   Check,
-  Shield,
+  Crown,
+  Zap,
+  X,
+  ArrowUpRight,
   Send,
   KeyRound,
   Building2,
@@ -114,14 +117,6 @@ interface Promo {
   discountType: string
 }
 
-interface CrewPermission {
-  userId: string
-  userName: string
-  userEmail: string
-  role: string
-  pages: string
-}
-
 interface PromoFormData {
   name: string
   type: string
@@ -143,16 +138,6 @@ const DEFAULT_PROMO_FORM: PromoFormData = {
   buyMinQty: '2',
   discountType: 'PERCENTAGE',
 }
-
-const AVAILABLE_PAGES = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'products', label: 'Produk' },
-  { key: 'customers', label: 'Pelanggan' },
-  { key: 'pos', label: 'POS' },
-  { key: 'transactions', label: 'Transaksi' },
-  { key: 'audit-log', label: 'Audit Log' },
-  { key: 'settings', label: 'Pengaturan' },
-]
 
 const THEME_COLORS = [
   { name: 'emerald', label: 'Emerald', classes: 'bg-emerald-500' },
@@ -184,12 +169,12 @@ export default function SettingsPage() {
 // ==================== TABS WRAPPER ====================
 
 function SettingsTabs({ isOwner }: { isOwner: boolean }) {
-  const [activeTab, setActiveTab] = useState('payment')
+  const [activeTab, setActiveTab] = useState('plan')
 
   const tabs = [
+    { value: 'plan', label: 'Plan & Langganan', icon: <Crown className="h-4 w-4" /> },
     { value: 'payment', label: 'Pembayaran', icon: <Banknote className="h-4 w-4" /> },
     { value: 'outlet', label: 'Info Outlet', icon: <Store className="h-4 w-4" /> },
-    ...(isOwner ? [{ value: 'crew', label: 'Hak Akses', icon: <Shield className="h-4 w-4" /> }] : []),
     { value: 'loyalty', label: 'Loyalty', icon: <Star className="h-4 w-4" /> },
     ...(isOwner ? [{ value: 'promo', label: 'Promo', icon: <Tag className="h-4 w-4" /> }] : []),
     { value: 'theme', label: 'Tema & Struk', icon: <Palette className="h-4 w-4" /> },
@@ -217,19 +202,15 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
       </div>
 
       <div className="min-w-0">
+        <TabsContent value="plan">
+          <PlanTab />
+        </TabsContent>
         <TabsContent value="payment">
           <PaymentMethodsTab />
         </TabsContent>
         <TabsContent value="outlet">
           <OutletInfoTab />
         </TabsContent>
-        {isOwner && (
-          <TabsContent value="crew">
-            <ProGate feature="crewPermissions" label="Hak Akses Crew" description="Kelola akses halaman per crew member" minHeight="200px">
-              <CrewAccessTab />
-            </ProGate>
-          </TabsContent>
-        )}
         <TabsContent value="loyalty">
           <LoyaltyTab />
         </TabsContent>
@@ -542,162 +523,7 @@ function OutletInfoTab() {
   )
 }
 
-// ==================== TAB 3: CREW ACCESS ====================
-
-function CrewAccessTab() {
-  const [permissions, setPermissions] = useState<CrewPermission[]>([])
-  const [loading, setLoading] = useState(true)
-  const [savingId, setSavingId] = useState<string | null>(null)
-
-  const fetchPermissions = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/settings/permissions')
-      if (res.ok) {
-        const data = await res.json()
-        setPermissions(data.permissions || [])
-      } else {
-        toast.error('Gagal memuat hak akses crew')
-      }
-    } catch {
-      toast.error('Gagal memuat hak akses crew')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchPermissions()
-  }, [fetchPermissions])
-
-  const handleTogglePage = async (userId: string, pageKey: string, currentlyChecked: boolean) => {
-    const crew = permissions.find((p) => p.userId === userId)
-    if (!crew) return
-
-    const pagesList = crew.pages.split(',').filter(Boolean)
-    const updated = currentlyChecked
-      ? pagesList.filter((p) => p !== pageKey)
-      : [...pagesList, pageKey]
-
-    if (updated.length === 0) {
-      toast.error('Minimal satu halaman harus diaktifkan')
-      return
-    }
-
-    // Optimistic update
-    setPermissions((prev) =>
-      prev.map((p) =>
-        p.userId === userId ? { ...p, pages: updated.join(',') } : p
-      )
-    )
-
-    setSavingId(userId)
-    try {
-      const res = await fetch(`/api/settings/permissions/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pages: updated.join(',') }),
-      })
-      if (res.ok) {
-        toast.success(`Hak akses ${crew.userName} berhasil diperbarui`)
-      } else {
-        // Revert on failure
-        setPermissions((prev) =>
-          prev.map((p) =>
-            p.userId === userId ? { ...p, pages: crew.pages } : p
-          )
-        )
-        toast.error('Gagal memperbarui hak akses')
-      }
-    } catch {
-      setPermissions((prev) =>
-        prev.map((p) =>
-          p.userId === userId ? { ...p, pages: crew.pages } : p
-        )
-      )
-      toast.error('Gagal memperbarui hak akses')
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  if (loading) {
-    return (
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardContent className="p-4 space-y-3">
-          <Skeleton className="h-5 w-36 bg-zinc-800" />
-          {Array.from({ length: 2 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 bg-zinc-800 rounded-lg" />
-          ))}
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card className="bg-zinc-900 border-zinc-800">
-      <CardContent className="p-4 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-100">Hak Akses Crew</h2>
-          <p className="text-xs text-zinc-400 mt-0.5">Kelola halaman yang dapat diakses oleh setiap crew</p>
-        </div>
-
-        {permissions.length === 0 ? (
-          <div className="py-8 text-center">
-            <Users className="h-10 w-10 text-zinc-700 mx-auto mb-2" />
-            <p className="text-sm text-zinc-500">Belum ada crew</p>
-            <p className="text-[11px] text-zinc-600 mt-0.5">Crew akan muncul setelah terdaftar di outlet</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {permissions.map((crew) => {
-              const crewPages = crew.pages.split(',').filter(Boolean)
-              return (
-                <div
-                  key={crew.userId}
-                  className="rounded-lg border border-zinc-800 bg-zinc-800/50 p-3 space-y-2"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
-                      <Users className="h-4 w-4 text-zinc-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-zinc-200">{crew.userName}</p>
-                      <p className="text-[11px] text-zinc-500">{crew.userEmail}</p>
-                    </div>
-                    {savingId === crew.userId && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2.5">
-                    {AVAILABLE_PAGES.map((page) => {
-                      const isChecked = crewPages.includes(page.key)
-                      return (
-                        <label
-                          key={page.key}
-                          className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer hover:text-zinc-200 transition-colors"
-                        >
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={() => handleTogglePage(crew.userId, page.key, isChecked)}
-                            className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                          />
-                          {page.label}
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ==================== TAB 4: LOYALTY PROGRAM ====================
+// ==================== TAB 3: LOYALTY PROGRAM ====================
 
 function LoyaltyTab() {
   const { settings, loading, saving, saveSettings } = useSettings()
@@ -1057,13 +883,13 @@ function PromoTab() {
         )}
 
         {/* Promo Form Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="bg-zinc-900 border-zinc-800 p-4">
-            <DialogHeader>
-              <DialogTitle className="text-sm font-semibold text-zinc-100">
+        <ResponsiveDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 p-4">
+            <ResponsiveDialogHeader>
+              <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100">
                 {editPromo ? 'Edit Promo' : 'Tambah Promo Baru'}
-              </DialogTitle>
-            </DialogHeader>
+              </ResponsiveDialogTitle>
+            </ResponsiveDialogHeader>
             <div className="space-y-4 py-1">
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-300">Nama Promo</Label>
@@ -1167,7 +993,7 @@ function PromoTab() {
                 <Label className="text-xs text-zinc-300">Promo aktif</Label>
               </div>
             </div>
-            <DialogFooter>
+            <ResponsiveDialogFooter>
               <Button
                 variant="ghost"
                 onClick={() => setDialogOpen(false)}
@@ -1183,9 +1009,9 @@ function PromoTab() {
                 {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                 {editPromo ? 'Perbarui' : 'Tambah'}
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </ResponsiveDialogFooter>
+          </ResponsiveDialogContent>
+        </ResponsiveDialog>
 
         {/* Delete Confirmation */}
         <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
@@ -1751,6 +1577,495 @@ function TelegramTab() {
   )
 }
 
+// ==================== TAB 7: PLAN & LANGGANAN ====================
+
+/** Fictional pricing data for display */
+const PLAN_PRICING: Record<AccountType, { price: string; period: string; description: string }> = {
+  free: { price: 'Gratis', period: '', description: 'Untuk bisnis yang baru memulai' },
+  pro: { price: 'Rp 149.000', period: '/bulan', description: 'Untuk bisnis yang sedang berkembang' },
+  enterprise: { price: 'Rp 449.000', period: '/bulan', description: 'Untuk bisnis skala besar & multi-outlet' },
+}
+
+/** Progress bar component for usage tracking */
+function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: React.ReactNode }) {
+  const unlimited = isUnlimited(limit)
+  const pct = unlimited ? 0 : limit > 0 ? Math.min((used / limit) * 100, 100) : 0
+  const isNearLimit = !unlimited && pct >= 80 && pct < 100
+  const isAtLimit = !unlimited && pct >= 100
+
+  const barColor = isAtLimit
+    ? 'bg-red-500'
+    : isNearLimit
+      ? 'bg-amber-500'
+      : 'bg-emerald-500'
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="text-zinc-500">{icon}</span>
+          <span className="text-xs text-zinc-400">{label}</span>
+        </div>
+        <span className={`text-xs font-medium ${isAtLimit ? 'text-red-400' : isNearLimit ? 'text-amber-400' : 'text-zinc-200'}`}>
+          {used}
+          {!unlimited && <span className="text-zinc-500 font-normal"> / {limit}</span>}
+        </span>
+      </div>
+      {!unlimited && (
+        <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PlanTab() {
+  const { planData, plan, features, usage, isLoading } = usePlan()
+  const currentPlan = (plan?.type || 'free') as AccountType
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 space-y-3">
+            <Skeleton className="h-5 w-36 bg-zinc-800" />
+            <Skeleton className="h-40 bg-zinc-800 rounded-lg" />
+            <Skeleton className="h-24 bg-zinc-800 rounded-lg" />
+          </CardContent>
+        </Card>
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 space-y-3">
+            <Skeleton className="h-5 w-48 bg-zinc-800" />
+            <Skeleton className="h-48 bg-zinc-800 rounded-lg" />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Plan comparison rows
+  const comparisonRows = [
+    { label: 'Produk', key: 'maxProducts' as const, format: (v: number) => formatLimit(v) },
+    { label: 'Kategori', key: 'maxCategories' as const, format: (v: number) => formatLimit(v) },
+    { label: 'Foto Produk', key: 'productImage' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Crew', key: 'maxCrew' as const, format: (v: number) => formatLimit(v) },
+    { label: 'Hak Akses Crew', key: 'crewPermissions' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Pelanggan', key: 'maxCustomers' as const, format: (v: number) => formatLimit(v) },
+    { label: 'Loyalti', key: 'loyaltyProgram' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Transaksi/Bulan', key: 'maxTransactionsPerMonth' as const, format: (v: number) => formatLimit(v) },
+    { label: 'Export Excel', key: 'exportExcel' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Promo', key: 'maxPromos' as const, format: (v: number) => formatLimit(v) },
+    { label: 'Audit Log', key: 'auditLog' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Stock Movement', key: 'stockMovement' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Offline Mode', key: 'offlineMode' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Multi-Outlet', key: 'multiOutlet' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Bulk Upload', key: 'bulkUpload' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Ringkasan Transaksi', key: 'transactionSummary' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'API Access', key: 'apiAccess' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+    { label: 'Support Prioritas', key: 'prioritySupport' as const, format: (v: boolean) => v ? 'Ya' : 'Tidak' },
+  ]
+
+  const planKeys: AccountType[] = ['free', 'pro', 'enterprise']
+
+  const handleUpgrade = (targetPlan: string) => {
+    toast.info(`Hubungi admin untuk upgrade ke ${getPlanLabel(targetPlan)}`)
+  }
+
+  const handleContactAdmin = () => {
+    toast.info('Silakan hubungi admin Aether POS untuk perubahan plan')
+  }
+
+  // Plan accent colors
+  const planAccent: Record<AccountType, { border: string; bg: string; text: string; icon: string }> = {
+    free: { border: 'border-zinc-500/20', bg: 'bg-zinc-500/5', text: 'text-zinc-400', icon: 'bg-zinc-500/10 text-zinc-400' },
+    pro: { border: 'border-emerald-500/20', bg: 'bg-emerald-500/5', text: 'text-emerald-400', icon: 'bg-emerald-500/10 text-emerald-400' },
+    enterprise: { border: 'border-amber-500/20', bg: 'bg-amber-500/5', text: 'text-amber-400', icon: 'bg-amber-500/10 text-amber-400' },
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* ===== SECTION 1: Current Plan Card ===== */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Plan & Langganan</h2>
+              <p className="text-xs text-zinc-400 mt-0.5">Informasi paket langganan outlet Anda</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {plan?.isSuspended ? (
+                <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-xs font-semibold px-2.5 py-1">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 mr-1.5" />
+                  Ditangguhkan
+                </Badge>
+              ) : (
+                <Badge className={`${getPlanBadgeClass(currentPlan)} text-xs font-semibold px-2.5 py-1`}>
+                  {getPlanLabel(currentPlan)}
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Suspended warning */}
+          {plan?.isSuspended && (
+            <Alert className="border-red-500/20 bg-red-500/5 p-3">
+              <AlertDescription className="text-xs text-red-400">
+                Akun Anda saat ini ditangguhkan. Hubungi admin untuk informasi lebih lanjut.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Account & Plan Info */}
+          {planData && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">Nama Outlet</span>
+                <span className="text-xs font-medium text-zinc-200">{planData.outletName || '-'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">Tipe Plan</span>
+                <span className={`text-xs font-medium ${planAccent[currentPlan].text}`}>{getPlanLabel(currentPlan)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">Status</span>
+                <Badge className={`text-[10px] px-1.5 py-0 ${plan?.isSuspended ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
+                  {plan?.isSuspended ? 'Ditangguhkan' : 'Aktif'}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-400">Harga</span>
+                <span className="text-xs font-medium text-zinc-200">
+                  {PLAN_PRICING[currentPlan].price}{PLAN_PRICING[currentPlan].period && <span className="text-zinc-500 font-normal">{PLAN_PRICING[currentPlan].period}</span>}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Usage Stats with Progress Bars */}
+          {features && usage && (
+            <div className="space-y-3">
+              <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">Penggunaan Saat Ini</p>
+              <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-800/20 p-3">
+                <UsageBar
+                  label="Produk"
+                  used={usage.products}
+                  limit={features.maxProducts}
+                  icon={<Tag className="h-3 w-3" />}
+                />
+                <UsageBar
+                  label="Kategori"
+                  used={usage.categories}
+                  limit={features.maxCategories}
+                  icon={<Palette className="h-3 w-3" />}
+                />
+                <UsageBar
+                  label="Crew"
+                  used={usage.crew}
+                  limit={features.maxCrew}
+                  icon={<KeyRound className="h-3 w-3" />}
+                />
+                <UsageBar
+                  label="Pelanggan"
+                  used={usage.customers}
+                  limit={features.maxCustomers}
+                  icon={<Star className="h-3 w-3" />}
+                />
+                <UsageBar
+                  label="Transaksi"
+                  used={usage.transactions}
+                  limit={features.maxTransactionsPerMonth}
+                  icon={<Receipt className="h-3 w-3" />}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ===== SECTION 2: Upgrade CTAs ===== */}
+          {currentPlan === 'free' && !plan?.isSuspended && (
+            <div className="space-y-3">
+              {/* Upgrade to Pro */}
+              <div className={`rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3`}>
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Zap className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div>
+                      <p className="text-xs font-semibold text-emerald-300">Upgrade ke Pro</p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        Unlimited produk, export Excel, API access, foto produk, dan banyak lagi.
+                      </p>
+                      <p className="text-xs font-semibold text-emerald-400 mt-1">
+                        {PLAN_PRICING.pro.price}<span className="text-emerald-400/60 font-normal">{PLAN_PRICING.pro.period}</span>
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleUpgrade('pro')}
+                        size="sm"
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px]"
+                      >
+                        Upgrade ke Pro
+                        <ArrowUpRight className="ml-1 h-3 w-3" />
+                      </Button>
+                      <Button
+                        onClick={() => handleUpgrade('enterprise')}
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-7 text-[11px]"
+                      >
+                        Upgrade ke Enterprise
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentPlan === 'pro' && !plan?.isSuspended && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                  <Crown className="h-4 w-4 text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div>
+                    <p className="text-xs font-semibold text-amber-300">Upgrade ke Enterprise</p>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Multi-outlet management untuk bisnis yang berkembang dengan kontrol penuh.
+                    </p>
+                    <p className="text-xs font-semibold text-amber-400 mt-1">
+                      {PLAN_PRICING.enterprise.price}<span className="text-amber-400/60 font-normal">{PLAN_PRICING.enterprise.period}</span>
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => handleUpgrade('enterprise')}
+                    size="sm"
+                    className="bg-amber-500 hover:bg-amber-600 text-white h-7 text-[11px]"
+                  >
+                    Upgrade ke Enterprise
+                    <ArrowUpRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {currentPlan === 'enterprise' && !plan?.isSuspended && (
+            <div className={`rounded-lg border ${planAccent.enterprise.border} ${planAccent.enterprise.bg} p-3`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-lg ${planAccent.enterprise.icon} flex items-center justify-center shrink-0`}>
+                  <Crown className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-amber-300">Current Plan — Semua fitur terbuka</p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Anda memiliki akses penuh ke semua fitur Aether POS termasuk multi-outlet.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===== SECTION 3: Manage Subscription ===== */}
+          <Separator className="bg-zinc-800" />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium text-zinc-300">Kelola Langganan</p>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Upgrade, downgrade, atau perubahan plan lainnya</p>
+            </div>
+            <Button
+              onClick={handleContactAdmin}
+              variant="outline"
+              size="sm"
+              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-8 text-xs gap-1.5"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Hubungi Admin
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ===== SECTION 4: Plan Comparison ===== */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Perbandingan Plan</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Bandingkan fitur dari setiap paket langganan</p>
+          </div>
+
+          {/* Pricing Cards Row */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {planKeys.map((key) => {
+              const pricing = PLAN_PRICING[key]
+              const isCurrent = key === currentPlan
+              const accent = planAccent[key]
+              return (
+                <div
+                  key={key}
+                  className={`rounded-lg border p-3 text-center space-y-1.5 transition-colors ${
+                    isCurrent
+                      ? `${accent.border} ${accent.bg}`
+                      : 'border-zinc-800 bg-zinc-800/20 hover:bg-zinc-800/40'
+                  }`}
+                >
+                  <Badge className={`${getPlanBadgeClass(key)} text-[10px] font-semibold px-2 py-0`}>
+                    {getPlanLabel(key)}
+                  </Badge>
+                  <div>
+                    <p className={`text-sm font-bold ${isCurrent ? accent.text : 'text-zinc-200'}`}>
+                      {pricing.price}
+                    </p>
+                    {pricing.period && (
+                      <p className="text-[10px] text-zinc-500">{pricing.period}</p>
+                    )}
+                  </div>
+                  {isCurrent && (
+                    <span className="text-[9px] text-emerald-400 font-medium">Plan Anda</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block rounded-lg border border-zinc-800 overflow-hidden max-h-[420px] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-zinc-800 hover:bg-transparent bg-zinc-800/30 sticky top-0 z-10">
+                  <TableHead className="text-zinc-500 text-[11px] font-medium h-9 w-[180px]">Fitur</TableHead>
+                  {planKeys.map((key) => (
+                    <TableHead key={key} className="text-center text-[11px] font-medium h-9">
+                      <div className="flex flex-col items-center gap-1">
+                        <Badge className={`${getPlanBadgeClass(key)} text-[10px] font-semibold px-2 py-0`}>
+                          {getPlanLabel(key)}
+                        </Badge>
+                        {key === currentPlan && (
+                          <span className="text-[9px] text-emerald-400 font-medium">Plan Anda</span>
+                        )}
+                      </div>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {comparisonRows.map((row, idx) => (
+                  <TableRow key={row.key} className={`border-zinc-800 hover:bg-transparent ${idx % 2 === 0 ? 'bg-zinc-900/50' : ''}`}>
+                    <TableCell className="text-xs text-zinc-300 font-medium py-2">{row.label}</TableCell>
+                    {planKeys.map((key) => {
+                      const planFeatures = PLANS[key]
+                      const value = planFeatures[row.key]
+                      const display = row.format(value as number & boolean)
+                      const isCurrentPlan = key === currentPlan
+                      const isBoolean = typeof value === 'boolean'
+                      const isUnlimitedValue = typeof value === 'number' && value === -1
+
+                      return (
+                        <TableCell key={key} className={`text-center py-2 ${isCurrentPlan ? 'bg-emerald-500/[0.03]' : ''}`}>
+                          {isBoolean ? (
+                            value ? (
+                              <Check className="h-4 w-4 text-emerald-400 mx-auto" />
+                            ) : (
+                              <X className="h-3.5 w-3.5 text-zinc-600 mx-auto" />
+                            )
+                          ) : (
+                            <span className={`text-xs font-medium ${isUnlimitedValue ? 'text-emerald-400' : isCurrentPlan ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                              {display}
+                            </span>
+                          )}
+                        </TableCell>
+                      )
+                    })}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3 max-h-[520px] overflow-y-auto">
+            {planKeys.map((key) => {
+              const planFeatures = PLANS[key]
+              const isCurrentPlan = key === currentPlan
+              const accent = planAccent[key]
+
+              return (
+                <div
+                  key={key}
+                  className={`rounded-lg border p-3 space-y-2.5 transition-colors ${
+                    isCurrentPlan
+                      ? `${accent.border} ${accent.bg}`
+                      : 'border-zinc-800 bg-zinc-800/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <Badge className={`${getPlanBadgeClass(key)} text-[11px] font-semibold px-2 py-0`}>
+                      {getPlanLabel(key)}
+                    </Badge>
+                    {isCurrentPlan && (
+                      <span className="text-[10px] text-emerald-400 font-medium">Plan Anda</span>
+                    )}
+                  </div>
+                  <p className={`text-sm font-bold ${isCurrentPlan ? accent.text : 'text-zinc-200'}`}>
+                    {PLAN_PRICING[key].price}{PLAN_PRICING[key].period && <span className="text-zinc-500 font-normal text-xs">{PLAN_PRICING[key].period}</span>}
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    {comparisonRows.map((row) => {
+                      const value = planFeatures[row.key]
+                      const display = row.format(value as number & boolean)
+                      const isBoolean = typeof value === 'boolean'
+                      const isUnlimitedValue = typeof value === 'number' && value === -1
+
+                      return (
+                        <div key={row.key} className="flex items-center justify-between py-0.5">
+                          <span className="text-[11px] text-zinc-500">{row.label}</span>
+                          {isBoolean ? (
+                            value ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                            ) : (
+                              <X className="h-3 w-3 text-zinc-600" />
+                            )
+                          ) : (
+                            <span className={`text-[11px] font-medium ${isUnlimitedValue ? 'text-emerald-400' : 'text-zinc-300'}`}>
+                              {display}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  {!isCurrentPlan && (key === 'pro' || key === 'enterprise') && (
+                    <Button
+                      onClick={() => handleUpgrade(key)}
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-7 text-[11px]"
+                    >
+                      Upgrade ke {getPlanLabel(key)}
+                      <ArrowUpRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  )}
+                  {isCurrentPlan && (
+                    <div className="text-center pt-0.5">
+                      <span className="text-[11px] text-emerald-400 font-medium">✓ Plan aktif</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 // ==================== TAB 8: ACCOUNT SECURITY ====================
 
 function AccountTab() {
@@ -2181,11 +2496,11 @@ function MultiOutletTab() {
       </Card>
 
       {/* Add Outlet Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 p-4">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-semibold text-zinc-100">Tambah Outlet Cabang</DialogTitle>
-          </DialogHeader>
+      <ResponsiveDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 p-4">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100">Tambah Outlet Cabang</ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-zinc-300">Nama Outlet *</Label>
@@ -2215,7 +2530,7 @@ function MultiOutletTab() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button type="button" variant="ghost" onClick={() => setDialogOpen(false)}
               className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs">
               Batal
@@ -2225,9 +2540,9 @@ function MultiOutletTab() {
               {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Tambah Outlet
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>

@@ -94,9 +94,28 @@ export async function GET(request: NextRequest) {
       total = count
     }
 
+    // Analytics stats (computed on all products in outlet, not filtered)
+    const [totalCount, categoryCount, statsProducts] = await Promise.all([
+      db.product.count({ where: { outletId } }),
+      db.category.count({ where: { outletId } }),
+      db.product.findMany({
+        where: { outletId },
+        select: { price: true, stock: true, lowStockAlert: true },
+      }),
+    ])
+
+    const lowStockCount = statsProducts.filter((p) => p.stock <= p.lowStockAlert && p.stock >= 0).length
+    const totalInventoryValue = statsProducts.reduce((sum, p) => sum + (Number(p.price) * p.stock), 0)
+
     return safeJson({
       products,
       totalPages: Math.ceil(total / limit),
+      stats: {
+        total: totalCount,
+        categories: categoryCount,
+        lowStock: lowStockCount,
+        inventoryValue: totalInventoryValue,
+      },
     })
   } catch (error) {
     console.error('Products GET error:', error)

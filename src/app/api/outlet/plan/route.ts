@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
             users: true,
             products: true,
             customers: true,
+            categories: true,
             promos: true,
             transactions: true,
           },
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
     // Calculate usage vs limits
     const usage = {
       products: outlet._count.products,
+      categories: outlet._count.categories,
       customers: outlet._count.customers,
       crew: outlet._count.users - 1, // exclude owner
       promos: outlet._count.promos,

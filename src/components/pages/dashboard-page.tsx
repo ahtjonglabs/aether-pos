@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { formatCurrency, formatNumber } from '@/lib/format'
 import { usePlan } from '@/hooks/use-plan'
 import { usePageStore } from '@/hooks/use-page-store'
+import { getPlanLabel, getPlanBadgeClass } from '@/lib/plan-config'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,6 +40,8 @@ import {
   Wallet,
   Users,
   CircleDot,
+  Check,
+  ShieldAlert,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -124,7 +127,7 @@ function formatDateNow(): string {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const { features, isLoading: planLoading } = usePlan()
+  const { plan, features, isSuspended, isLoading: planLoading } = usePlan()
   const { setCurrentPage } = usePageStore()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -209,6 +212,125 @@ export default function DashboardPage() {
         </h1>
         <p className="text-sm text-zinc-500">{formatDateNow()}</p>
       </motion.div>
+
+      {/* ── Plan Status Card ── */}
+      {!planLoading && plan && (
+        <motion.div variants={itemVariants}>
+          <Card className={`border overflow-hidden relative ${
+            isSuspended
+              ? 'bg-red-950/30 border-red-500/20'
+              : plan.type === 'free'
+                ? 'bg-zinc-900 border-zinc-800/60'
+                : plan.type === 'pro'
+                  ? 'bg-zinc-900 border-emerald-500/20'
+                  : 'bg-zinc-900 border-amber-500/20'
+          }`}>
+            {/* Gradient overlay */}
+            {isSuspended ? (
+              <div className="absolute inset-0 bg-gradient-to-r from-red-500/10 via-red-500/5 to-transparent" />
+            ) : plan.type === 'free' ? (
+              <div className="absolute inset-0 bg-gradient-to-r from-zinc-700/10 via-zinc-700/5 to-transparent" />
+            ) : plan.type === 'pro' ? (
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent" />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent" />
+            )}
+
+            <CardContent className="p-4 relative">
+              <div className="flex items-start gap-3">
+                {/* Icon */}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  isSuspended
+                    ? 'bg-red-500/15 text-red-400'
+                    : plan.type === 'free'
+                      ? 'bg-zinc-500/15 text-zinc-400'
+                      : plan.type === 'pro'
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : 'bg-amber-500/15 text-amber-400'
+                }`}>
+                  {isSuspended ? (
+                    <ShieldAlert className="h-5 w-5" />
+                  ) : plan.type === 'free' ? (
+                    <CircleDot className="h-5 w-5" />
+                  ) : plan.type === 'pro' ? (
+                    <Crown className="h-5 w-5" />
+                  ) : (
+                    <Sparkles className="h-5 w-5" />
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm font-semibold text-zinc-100">
+                      {isSuspended ? 'Akun Ditangguhkan' : plan.type === 'free' ? 'Upgrade Paket Kamu' : 'Paket Aktif'}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 leading-none border ${
+                        isSuspended
+                          ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                          : plan.type === 'free'
+                            ? 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'
+                            : plan.type === 'pro'
+                              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                              : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                      }`}
+                    >
+                      {getPlanLabel(plan.type)}
+                    </Badge>
+                  </div>
+
+                  {isSuspended ? (
+                    <p className="text-xs text-red-300/80 mt-1">
+                      Akun outlet ditangguhkan. Silakan hubungi support untuk informasi lebih lanjut.
+                    </p>
+                  ) : plan.type === 'free' ? (
+                    <div className="mt-2 space-y-1.5">
+                      <p className="text-xs text-zinc-400">Buka fitur lengkap dengan upgrade ke Pro:</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        <span className="text-[11px] text-zinc-300 flex items-center gap-1">
+                          <Check className="h-3 w-3 text-emerald-400" /> Produk unlimited
+                        </span>
+                        <span className="text-[11px] text-zinc-300 flex items-center gap-1">
+                          <Check className="h-3 w-3 text-emerald-400" /> Export Excel
+                        </span>
+                        <span className="text-[11px] text-zinc-300 flex items-center gap-1">
+                          <Check className="h-3 w-3 text-emerald-400" /> Ringkasan Transaksi
+                        </span>
+                      </div>
+                    </div>
+                  ) : plan.type === 'pro' ? (
+                    <div className="mt-2">
+                      <p className="text-xs text-zinc-400">
+                        Semua fitur Pro aktif — AI Insight, Peak Hours, Export Excel, dan lainnya.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <p className="text-xs text-zinc-400">
+                        All-access — Multi Outlet, API Access, Priority Support, dan semua fitur Enterprise aktif.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA Button */}
+                {!isSuspended && plan.type === 'free' && (
+                  <Button
+                    size="sm"
+                    className="shrink-0 bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-medium h-8 px-3.5 rounded-lg gap-1.5"
+                    onClick={() => setCurrentPage('settings')}
+                  >
+                    <Crown className="h-3.5 w-3.5" />
+                    Upgrade ke Pro
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* ═══════════════════════════════════════════════════
           SECTION 1 — Stat Cards Row

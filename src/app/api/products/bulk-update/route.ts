@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const userId = user.id
 
     const body = await request.json()
-    const { productIds, priceAdjustment, stockAdjustment } = body
+    const { productIds, priceAdjustment, stockAdjustment, categoryId } = body
 
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
       return safeJsonError('productIds is required and must be a non-empty array', 400)
@@ -26,8 +26,8 @@ export async function POST(request: NextRequest) {
       return safeJsonError('Maximum 200 products per bulk update', 400)
     }
 
-    if (!priceAdjustment && !stockAdjustment) {
-      return safeJsonError('At least one adjustment type (priceAdjustment or stockAdjustment) is required', 400)
+    if (!priceAdjustment && !stockAdjustment && categoryId === undefined) {
+      return safeJsonError('At least one adjustment type (priceAdjustment, stockAdjustment, or categoryId) is required', 400)
     }
 
     // Validate price adjustment
@@ -52,10 +52,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate categoryId if provided
+    if (categoryId !== undefined && categoryId !== null) {
+      const category = await db.category.findFirst({
+        where: { id: categoryId, outletId },
+      })
+      if (!category) {
+        return safeJsonError('Category not found', 400)
+      }
+    }
+
     // Verify all products belong to this outlet
     const existingProducts = await db.product.findMany({
       where: { id: { in: productIds }, outletId },
-      select: { id: true, name: true, price: true, stock: true },
+      select: { id: true, name: true, price: true, stock: true, categoryId: true },
     })
 
     if (existingProducts.length === 0) {
@@ -76,7 +86,7 @@ export async function POST(request: NextRequest) {
     await db.$transaction(async (tx) => {
       for (const product of existingProducts) {
         const updates: Record<string, unknown> = {}
-        const changes: Record<string, { from: number; to: number }> = {}
+        const changes: Record<string, { from: unknown; to: unknown }> = {}
 
         // Price adjustment
         if (priceAdjustment) {
@@ -112,6 +122,12 @@ export async function POST(request: NextRequest) {
 
           updates.stock = newStock
           changes.stock = { from: oldStock, to: newStock }
+        }
+
+        // Category change
+        if (categoryId !== undefined) {
+          updates.categoryId = categoryId
+          changes.categoryId = { from: product.categoryId || null, to: categoryId }
         }
 
         await tx.product.update({

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
-import { parsePagination, buildDateFilter, buildVoidMap, getVoidedTxIds } from '@/lib/api-helpers'
+import { parsePagination, buildDateFilter, buildDateFilterTz, buildVoidMap, getVoidedTxIds } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export async function GET(request: NextRequest) {
@@ -17,6 +17,9 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || ''
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
+    const dateFromMs = searchParams.get('dateFromMs') || ''
+    const dateToMs = searchParams.get('dateToMs') || ''
+    const tzOffset = searchParams.get('tzOffset') ? Number(searchParams.get('tzOffset')) : null
     const cashierId = searchParams.get('cashierId') || ''
     const paymentMethod = searchParams.get('paymentMethod') || ''
     const voidStatus = searchParams.get('voidStatus') || '' // 'void' or 'active'
@@ -29,7 +32,13 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
+    // Use timezone-aware filter if tzOffset is provided, else fall back to legacy
+    let dateFilter: Record<string, Date>
+    if (tzOffset !== null && !isNaN(tzOffset)) {
+      dateFilter = buildDateFilterTz(dateFrom || null, dateTo || null, tzOffset)
+    } else {
+      dateFilter = buildDateFilter(dateFrom || null, dateTo || null, dateFromMs || null, dateToMs || null)
+    }
     if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter
     }

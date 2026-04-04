@@ -33,6 +33,7 @@ export interface PlanInfo {
 
 export interface PlanUsage {
   products: number
+  categories: number
   customers: number
   crew: number
   promos: number

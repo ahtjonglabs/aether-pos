@@ -29,12 +29,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
+    const dateFromMs = searchParams.get('dateFromMs') || ''
+    const dateToMs = searchParams.get('dateToMs') || ''
     const cashierId = searchParams.get('cashierId') || ''
     const paymentMethod = searchParams.get('paymentMethod') || ''
 
     const where: Record<string, unknown> = { outletId }
 
-    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
+    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null, dateFromMs || null, dateToMs || null)
     if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter
     }

@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle, ResponsiveDialogDescription, ResponsiveDialogFooter } from '@/components/ui/responsive-dialog'
 import {
   Sheet,
   SheetContent,
@@ -22,6 +23,7 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet'
+import { motion } from 'framer-motion'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -65,6 +67,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks'
 import { localDB, type CachedProduct, type CachedCategory, type CachedCustomer } from '@/lib/local-db'
 import { syncAllData, getAllSyncTimes, syncSettingsFromServer, getCachedSettings } from '@/lib/sync-service'
+import { cn } from '@/lib/utils'
 import { useSession } from 'next-auth/react'
 import { usePageStore } from '@/hooks/use-page-store'
 
@@ -415,6 +418,7 @@ export default function PosPage() {
   const [checkingOut, setCheckingOut] = useState(false)
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
+  const [mobileCartOpen, setMobileCartOpen] = useState(false)
 
   // Online/offline detection
   useEffect(() => {
@@ -761,69 +765,108 @@ export default function PosPage() {
         promoDiscount,
       }
 
-      // STEP 1: Save to IndexedDB first
-      const localId = await localDB.transactions.add({
-        payload: checkoutPayload,
-        isSynced: 0,
-        createdAt: Date.now(),
-        retryCount: 0,
-      })
+      if (isOnline) {
+        // ─── ONLINE: Use direct checkout API ───
+        try {
+          const res = await fetch('/api/pos/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(checkoutPayload),
+          })
+          const data = await res.json()
 
-      // STEP 1b: Decrement stock locally in IndexedDB to prevent overselling while offline
-      for (const item of cart) {
-        await localDB.products
-          .where('id')
-          .equals(item.product.id)
-          .modify((p) => {
+          if (res.ok && data.success) {
+            // Save to IndexedDB as already synced (for local history)
+            await localDB.transactions.add({
+              payload: checkoutPayload,
+              isSynced: 1,
+              createdAt: Date.now(),
+              syncedAt: Date.now(),
+              invoiceNumber: data.invoiceNumber,
+              serverTransactionId: null,
+              retryCount: 0,
+            })
+
+            setCheckoutResult({ success: true, invoiceNumber: data.invoiceNumber })
+            toast.success(`Pembayaran berhasil! Invoice: ${data.invoiceNumber}`)
+          } else {
+            // Online checkout failed — check if it's a retryable error
+            const isServerError = res.status >= 500
+            const error = data.error || 'Checkout gagal'
+
+            if (isServerError) {
+              // Server error — fall back to offline mode
+              const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+              await localDB.transactions.add({
+                payload: checkoutPayload,
+                isSynced: 0,
+                createdAt: Date.now(),
+                retryCount: 0,
+              })
+              // Decrement stock locally
+              for (const item of cart) {
+                await localDB.products.where('id').equals(item.product.id).modify((p) => {
+                  p.stock = Math.max(0, (p.stock || 0) - item.qty)
+                  p.updatedAt = new Date().toISOString()
+                })
+              }
+              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: error })
+              toast.warning('Server error — tersimpan offline', { description: error })
+            } else {
+              // Validation error (4xx) — DON'T fall back to offline, show error to user
+              toast.error(error, { description: 'Periksa data dan coba lagi' })
+              setCheckingOut(false)
+              return  // Exit without proceeding to receipt
+            }
+          }
+        } catch {
+          // Network error — fall back to offline mode
+          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+          await localDB.transactions.add({
+            payload: checkoutPayload,
+            isSynced: 0,
+            createdAt: Date.now(),
+            retryCount: 0,
+          })
+          for (const item of cart) {
+            await localDB.products.where('id').equals(item.product.id).modify((p) => {
+              p.stock = Math.max(0, (p.stock || 0) - item.qty)
+              p.updatedAt = new Date().toISOString()
+            })
+          }
+          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
+          toast.warning('Offline — transaksi tersimpan lokal')
+        }
+      } else {
+        // ─── OFFLINE: Save locally and queue for sync ───
+        const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+        await localDB.transactions.add({
+          payload: checkoutPayload,
+          isSynced: 0,
+          createdAt: Date.now(),
+          retryCount: 0,
+        })
+        // Decrement stock locally to prevent overselling
+        for (const item of cart) {
+          await localDB.products.where('id').equals(item.product.id).modify((p) => {
             p.stock = Math.max(0, (p.stock || 0) - item.qty)
             p.updatedAt = new Date().toISOString()
           })
-      }
-
-      // STEP 2: If online, sync immediately
-      if (isOnline) {
-        try {
-          const unsyncedTx = await localDB.transactions.get(localId)
-          if (unsyncedTx) {
-            const syncRes = await fetch('/api/transactions/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: [unsyncedTx] }),
-            })
-            const syncData = await syncRes.json()
-            if (syncRes.ok && syncData.synced > 0) {
-              await localDB.transactions.update(localId, {
-                isSynced: 1,
-                syncedAt: Date.now(),
-                invoiceNumber: syncData.results?.[0]?.invoiceNumber,
-                serverTransactionId: syncData.results?.[0]?.serverId,
-              })
-              const invoiceNum = syncData.results?.[0]?.invoiceNumber || `OFF-${Date.now().toString(36).toUpperCase()}`
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum })
-              toast.success(`Pembayaran berhasil! Invoice: ${invoiceNum}`)
-            } else {
-              const error = syncData.results?.[0]?.error || 'Gagal sync ke server'
-              const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan lokal', syncError: error })
-              toast.warning('Tersimpan lokal — akan sync otomatis', { description: error })
-            }
-          }
-        } catch (syncErr) {
-          console.error('Immediate sync failed:', syncErr)
-          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
-          toast.warning('Tersimpan offline — akan sync otomatis')
         }
-      } else {
-        const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
         setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Transaksi offline' })
         toast.warning('Offline — transaksi tersimpan lokal', { duration: 5000 })
       }
 
       setCheckoutOpen(false)
       setReceiptOpen(true)
-      fetchProducts(productSearch, productPage, selectedCategoryId)
-      loadCustomersFromCache()
+
+      // Refresh data from server (online) or local cache (offline)
+      if (isOnline) {
+        syncAllData().catch(() => {})
+      } else {
+        fetchProducts(productSearch, productPage, selectedCategoryId)
+        loadCustomersFromCache()
+      }
     } catch {
       toast.error('Checkout gagal')
     } finally {
@@ -944,13 +987,14 @@ export default function PosPage() {
   // ==================== RENDER HELPERS ====================
 
   const renderCategoryChips = () => (
-    <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
+    <div className="bg-zinc-900/30 md:bg-transparent rounded-2xl md:rounded-none p-2 md:p-0 mb-1 md:mb-0">
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
       <button
         onClick={() => handleCategorySelect(null)}
-        className={`shrink-0 px-4 py-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+        className={`shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
           !selectedCategoryId
-            ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border}`
-            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
+            ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border} shadow-sm`
+            : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
         }`}
       >
         <LayoutGrid className="inline h-3 w-3 mr-1 -mt-0.5" />
@@ -963,23 +1007,24 @@ export default function PosPage() {
           <button
             key={cat.id}
             onClick={() => handleCategorySelect(cat.id)}
-            className={`shrink-0 px-4 py-2 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all ${
+            className={`shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
               isActive
-                ? `${colors.activeBg} ${colors.text} ${colors.border}`
-                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300'
+                ? `${colors.activeBg} ${colors.text} ${colors.border} shadow-sm`
+                : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
             }`}
           >
             {cat.name}
           </button>
         )
       })}
+      </div>
     </div>
   )
 
   const renderProductGrid = () => {
     if (productsLoading) {
       return Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="h-[88px] rounded-xl bg-zinc-800/30 animate-pulse" />
+        <div key={i} className="h-[88px] md:h-[72px] rounded-xl bg-zinc-800/20 animate-pulse" />
       ))
     }
 
@@ -999,30 +1044,44 @@ export default function PosPage() {
       const outOfStock = product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
       const accentColor = catColor ? (CATEGORY_COLORS[catColor] || themeColors) : themeColors
+      const lowStock = product.stock > 0 && product.stock <= 5
 
       return (
         <button
           key={product.id}
           onClick={() => !outOfStock && addToCart(product)}
           disabled={outOfStock}
-          className={`relative group p-3 min-h-[72px] sm:min-h-0 rounded-xl border text-left transition-all duration-150 ${
+          className={cn(
+            'relative group p-2.5 md:p-3 min-h-[68px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200 active:scale-[0.98]',
             outOfStock
-              ? 'opacity-40 cursor-not-allowed border-zinc-800/60 bg-zinc-900/50'
+              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30'
               : cartItem
-              ? `${accentColor.border} ${accentColor.bg} hover:shadow-lg hover:shadow-emerald-500/5`
-              : 'border-zinc-800/60 bg-zinc-900/80 hover:border-zinc-700 hover:bg-zinc-800/60 hover:shadow-lg hover:shadow-black/20'
-          }`}
+              ? `${accentColor.border} ${accentColor.bg} hover:shadow-lg hover:shadow-emerald-500/5 ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
+              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm'
+          )}
         >
           {cartItem && (
-            <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30">
+            <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10">
               {cartItem.qty}
             </div>
           )}
-          <p className="text-xs font-medium text-zinc-200 truncate mb-1 pr-6">{product.name}</p>
-          <p className={`text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
-          <p className={`text-[10px] mt-1 ${outOfStock ? 'text-red-400 font-medium' : 'text-zinc-500'}`}>
-            {outOfStock ? 'Habis' : `Stok: ${product.stock}`}
-          </p>
+          <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate mb-1 md:mb-1.5 pr-6">{product.name}</p>
+          <p className={`text-xs md:text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
+          <div className="flex items-center justify-between mt-1.5">
+            {outOfStock ? (
+              <span className="text-[10px] text-red-400 font-medium">Habis</span>
+            ) : (
+              <span className={cn(
+                'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                lowStock
+                  ? 'bg-amber-500/10 text-amber-400'
+                  : 'bg-zinc-800/80 text-zinc-500'
+              )}>
+                <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
+                {product.stock}
+              </span>
+            )}
+          </div>
         </button>
       )
     })
@@ -1050,16 +1109,19 @@ export default function PosPage() {
     return (
       <div className="flex gap-2">
         {availablePaymentMethods.map(method => {
-          const icons: Record<string, React.ReactNode> = { CASH: <Banknote className="h-3 w-3" />, QRIS: <QrCode className="h-3 w-3" />, DEBIT: <CreditCard className="h-3 w-3" /> }
+          const icons: Record<string, React.ReactNode> = { CASH: <Banknote className="h-3.5 w-3.5" />, QRIS: <QrCode className="h-3.5 w-3.5" />, DEBIT: <CreditCard className="h-3.5 w-3.5" /> }
           const isActive = paymentMethod === method
           return (
-            <Button key={method} variant={isActive ? 'default' : 'outline'} onClick={() => setPaymentMethod(method as 'CASH' | 'QRIS' | 'DEBIT')}
-              className={`flex-1 ${compact ? 'h-8 text-xs' : 'h-9 text-xs'} ${
-                isActive ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border} hover:${themeColors.activeBg}`
-                : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'
-              }`}>
+            <button key={method} onClick={() => setPaymentMethod(method as 'CASH' | 'QRIS' | 'DEBIT')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 rounded-full border text-xs font-medium transition-all duration-150',
+                compact ? 'h-9 py-2' : 'h-10 py-2.5',
+                isActive
+                  ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border} shadow-sm ring-1 ring-inset ${themeColors.border.replace('border-', 'ring-')}`
+                  : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 hover:border-zinc-600'
+              )}>
               {icons[method]} {method}
-            </Button>
+            </button>
           )
         })}
       </div>
@@ -1067,46 +1129,52 @@ export default function PosPage() {
   }
 
   const renderCustomerSelector = (isMobile = false) => (
-    <div className={isMobile ? 'bg-zinc-900/80 border border-zinc-800 rounded-xl p-3' : 'border-b border-zinc-800 px-4 py-3'}>
-      <div className="flex items-center justify-between mb-1.5">
-        <Label className="text-[11px] text-zinc-500 font-medium">Customer</Label>
-        <button onClick={() => setAddCustomerOpen(true)} className="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-0.5">
-          <UserPlus className="h-2.5 w-2.5" /> Tambah Baru
+    <div className={isMobile ? 'bg-zinc-900/80 border border-zinc-800/60 rounded-2xl p-3.5 space-y-2' : 'border-b border-zinc-800 px-4 py-3'}>
+      <div className="flex items-center justify-between">
+        <Label className="text-[11px] text-zinc-500 font-medium tracking-wide uppercase">Customer</Label>
+        <button onClick={() => setAddCustomerOpen(true)} className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 transition-colors">
+          <UserPlus className="h-3 w-3" /> Tambah Baru
         </button>
       </div>
       <div className="relative">
-        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
         <Input
           placeholder={selectedCustomer ? selectedCustomer.name : 'Cari customer (walk-in jika kosong)'}
           value={customerSearch}
           onChange={(e) => { setCustomerSearch(e.target.value); setCustomerDropdownOpen(true) }}
           onFocus={() => setCustomerDropdownOpen(true)}
-          className="pl-9 pr-8 h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 rounded-lg"
+          className="pl-10 pr-8 h-10 text-sm bg-zinc-800/50 border-zinc-700/60 text-zinc-100 placeholder:text-zinc-500 rounded-xl backdrop-blur-sm"
         />
         {selectedCustomer && (
           <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); setPointsToUse(0) }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+            className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded-full bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 transition-colors">
             <X className="h-3 w-3" />
           </button>
         )}
       </div>
       {customerDropdownOpen && filteredCustomers.length > 0 && !selectedCustomer && (
-        <div className={`absolute z-30 ${isMobile ? 'w-[calc(100%-1.5rem)]' : 'w-full'} mt-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl max-h-40 overflow-y-auto`}>
+        <div className={`absolute z-30 ${isMobile ? 'w-[calc(100%-1.75rem)]' : 'w-full'} mt-1 bg-zinc-900 border border-zinc-700/60 rounded-2xl shadow-2xl shadow-black/40 max-h-44 overflow-y-auto backdrop-blur-xl`}>
           {filteredCustomers.map((customer) => (
             <button key={customer.id} onClick={() => { setSelectedCustomer(customer); setCustomerSearch(''); setCustomerDropdownOpen(false); setPointsToUse(0) }}
-              className="w-full text-left px-3 py-2 hover:bg-zinc-700/80 border-b border-zinc-700/50 last:border-0 transition-colors">
+              className="w-full text-left px-4 py-2.5 hover:bg-zinc-800/80 border-b border-zinc-800/40 last:border-0 transition-colors first:rounded-t-2xl last:rounded-b-2xl">
               <p className="text-xs text-zinc-200 font-medium">{customer.name}</p>
-              <p className="text-[10px] text-zinc-500">{customer.whatsapp} · {customer.points} pts</p>
+              <p className="text-[10px] text-zinc-500 mt-0.5">{customer.whatsapp} · <span className="text-amber-400">{customer.points} pts</span></p>
             </button>
           ))}
         </div>
       )}
       {selectedCustomer && (
-        <div className="mt-1.5 flex items-center gap-2">
-          <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">
-            <Coins className="mr-1 h-2.5 w-2.5" />
-            {selectedCustomer.points} poin tersedia
-          </Badge>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <User className="h-3 w-3 text-emerald-400" />
+            <span className="text-[11px] text-emerald-300 font-medium">{selectedCustomer.name}</span>
+          </div>
+          {selectedCustomer.points > 0 && (
+            <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] rounded-lg">
+              <Coins className="mr-1 h-2.5 w-2.5" />
+              {selectedCustomer.points} poin
+            </Badge>
+          )}
         </div>
       )}
     </div>
@@ -1182,8 +1250,54 @@ export default function PosPage() {
 
   return (
     <div className="space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* Header — Mobile Compact */}
+      <div className="md:hidden flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {outletInfo ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-semibold text-zinc-300 min-w-0">
+              <Store className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <span className="truncate">{outletInfo.name}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-[11px] font-medium text-zinc-600">
+              <Store className="h-3.5 w-3.5" />
+              <span>No outlet</span>
+            </div>
+          )}
+          <div className={`flex items-center gap-1 px-2 py-1.5 rounded-xl text-[10px] font-medium border shrink-0 ${
+            isOnline ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'
+          }`}>
+            {isOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+          </div>
+          {unsyncedCount > 0 && (
+            <button onClick={handleSync} disabled={syncing || !isOnline}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-medium shrink-0 disabled:opacity-50">
+              {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              {unsyncedCount}
+            </button>
+          )}
+        </div>
+        <button onClick={async () => {
+          if (dataSyncing || !isOnline) return
+          setDataSyncing(true)
+          try {
+            const result = await syncAllData()
+            fetchProducts(productSearch, productPage, selectedCategoryId)
+            loadCategoriesFromCache()
+            loadCustomersFromCache()
+            const times = await getAllSyncTimes()
+            setLastSyncTimes(times)
+            toast.success(`Data direfresh: ${result.products.count} produk, ${result.customers.count} customer`)
+          } catch { toast.error('Gagal refresh data') }
+          finally { setDataSyncing(false) }
+        }} disabled={dataSyncing || !isOnline}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-500 text-[10px] font-medium shrink-0 disabled:opacity-50">
+          {dataSyncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowDownToLine className="h-3 w-3" />}
+        </button>
+      </div>
+
+      {/* Header — Desktop Full */}
+      <div className="hidden md:flex md:items-center md:justify-between">
         <div className="flex items-center gap-3">
           <div>
             <h1 className="text-lg font-bold text-zinc-100">Point of Sale</h1>
@@ -1469,123 +1583,175 @@ export default function PosPage() {
         </div>
       </div>
 
-      {/* Mobile Layout */}
+      {/* Mobile Layout — Product view + floating cart */}
       <div className="md:hidden">
-        <Tabs defaultValue="products" className="w-full">
-          <TabsList className="w-full bg-zinc-900 border border-zinc-800 rounded-xl h-11 p-1">
-            <TabsTrigger value="products" className="flex-1 data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 text-zinc-500 rounded-lg h-9 text-xs font-medium">
-              <Package className="mr-1 h-3.5 w-3.5" /> Produk
-            </TabsTrigger>
-            <TabsTrigger value="cart" className="flex-1 data-[state=active]:bg-zinc-800 data-[state=active]:text-zinc-100 text-zinc-500 rounded-lg h-9 text-xs font-medium relative">
-              <ShoppingCart className="mr-1 h-3.5 w-3.5" /> Keranjang
-              {cart.length > 0 && (
-                <span className="ml-1 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[9px] flex items-center justify-center font-bold">
-                  {cart.reduce((s, i) => s + i.qty, 0)}
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+          <Input
+            ref={searchInputRef}
+            placeholder="Cari produk..."
+            value={productSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            className="pl-10 h-11 text-sm bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/50 ring-1 ring-inset ring-zinc-700/50 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
+          />
+        </div>
+        {renderCategoryChips()}
+        <div className="grid grid-cols-2 gap-2.5 pb-24">{renderProductGrid()}</div>
+        {renderPagination()}
 
-          <TabsContent value="products" className="mt-3">
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              <Input
-                ref={searchInputRef}
-                placeholder="Scan barcode atau cari produk..."
-                value={productSearch}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                className="pl-10 h-11 sm:h-10 text-sm bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
-              />
+        {/* Floating Cart Button — Mobile only */}
+        {isMobile && cart.length > 0 && !checkoutOpen && !receiptOpen && (
+          <motion.button
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setMobileCartOpen(true)}
+            className="fixed bottom-20 right-4 z-40 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 active:scale-95 transition-transform"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            <div className="text-left">
+              <p className="text-[10px] font-medium opacity-90">{cart.length} item</p>
+              <p className="text-xs font-bold">{formatCurrency(total)}</p>
             </div>
-            {renderCategoryChips()}
-            <div className="grid grid-cols-2 gap-2">{renderProductGrid()}</div>
-            {renderPagination()}
-          </TabsContent>
+          </motion.button>
+        )}
+      </div>
 
-          <TabsContent value="cart" className="mt-3 space-y-3">
-            {renderCustomerSelector(true)}
-            <div className="space-y-2">
-              {cart.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="w-14 h-14 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-3">
-                    <ShoppingCart className="h-6 w-6 text-zinc-600" />
-                  </div>
-                  <p className="text-zinc-500 text-xs">Keranjang kosong</p>
-                </div>
-              ) : cart.map((item) => (
-                <div key={item.product.id} className="flex items-center gap-2 p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-zinc-200 font-medium truncate">{item.product.name}</p>
-                    <p className="text-[11px] text-zinc-500">{formatCurrency(item.product.price)} × {item.qty}</p>
-                  </div>
-                  <div className="flex items-center gap-0.5">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md min-w-[44px]"
-                      onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-4 w-4" /></Button>
-                    <span className="text-xs w-6 text-center text-zinc-200 font-bold">{item.qty}</span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md min-w-[44px]"
-                      onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-4 w-4" /></Button>
-                  </div>
-                  <p className="text-xs text-emerald-400 font-bold min-w-[70px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 rounded-md min-w-[44px]"
-                    onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-4 w-4" /></Button>
-                </div>
-              ))}
-            </div>
-
-            {/* Mobile Summary */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 space-y-3">
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span className="text-zinc-200">{formatCurrency(subtotal)}</span></div>
-                {settings.loyaltyEnabled && selectedCustomer && maxPointsToUse > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-400 text-[11px]">Poin</span>
-                    <Input type="number" min="0" max={maxPointsToUse} value={pointsToUse || ''} onChange={(e) => handlePointsChange(e.target.value)}
-                      placeholder="0" className="w-20 h-6 text-right text-[11px] bg-zinc-800 border-zinc-700 text-zinc-100 rounded-md" />
-                  </div>
-                )}
-                {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400 text-[11px]"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
-                {promoDiscount > 0 && selectedPromo && (
-                  <div className="flex justify-between text-amber-400 text-[11px]">
-                    <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
-                    <span>-{formatCurrency(promoDiscount)}</span>
-                  </div>
-                )}
-                <Separator className="bg-zinc-800" />
-                <div className="flex justify-between text-sm font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
+      {/* Mobile Cart Sheet */}
+      <Sheet open={mobileCartOpen} onOpenChange={(open) => { if (!open) setMobileCartOpen(false) }}>
+        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl max-h-[92vh] flex flex-col px-0">
+          {/* Drag handle */}
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-zinc-700" />
+          </div>
+          <SheetHeader className="px-5 pb-2">
+            <SheetTitle className="text-zinc-100 text-base font-bold flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                <ShoppingCart className="h-4 w-4 text-emerald-400" />
               </div>
+              Keranjang
+              {cart.length > 0 && (
+                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
+              )}
+            </SheetTitle>
+          </SheetHeader>
 
-              {renderPaymentButtons(true)}
+          <ScrollArea className="flex-1 px-5">
+            <div className="space-y-4 pb-4">
+              {renderCustomerSelector(true)}
 
-              {paymentMethod === 'CASH' && (
-                <div className="space-y-2">
-                  <Label className="text-[11px] text-zinc-400 font-medium">Jumlah Bayar</Label>
-                  <Input type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0"
-                    className="h-9 text-sm bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 rounded-lg text-right" />
-                  {Number(paidAmount) >= total && total > 0 && (
-                    <p className="text-[11px] text-emerald-400 text-right font-medium">Kembalian: {formatCurrency(change)}</p>
-                  )}
-                  <div className="flex flex-wrap gap-1.5">
-                    {getQuickNominals.map((nom) => (
-                      <button key={nom} onClick={() => setPaidAmount(String(nom))}
-                        className={`px-3 py-1.5 min-h-[36px] rounded-lg text-[11px] font-medium border transition-all ${
-                          Number(paidAmount) === nom ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-zinc-800 border-zinc-700 text-zinc-400'
-                        }`}>
-                        {nom >= 1000 ? `${nom / 1000}K` : nom}
-                      </button>
-                    ))}
+              {/* Cart Items */}
+              {cart.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
+                    <ShoppingCart className="h-7 w-7 text-zinc-700" />
                   </div>
+                  <p className="text-zinc-500 text-sm">Keranjang kosong</p>
+                  <p className="text-zinc-600 text-xs mt-1">Pilih produk untuk memulai</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {cart.map((item) => (
+                    <div key={item.product.id} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-zinc-200 font-medium truncate">{item.product.name}</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)} × {item.qty}</p>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
+                          onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
+                        <span className="text-xs w-7 text-center text-zinc-200 font-bold">{item.qty}</span>
+                        <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
+                          onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
+                      <button className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
                 </div>
               )}
 
+              {/* Mobile Summary */}
+              {cart.length > 0 && (
+                <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-4 space-y-3">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span className="text-zinc-200">{formatCurrency(subtotal)}</span></div>
+                    {settings.loyaltyEnabled && selectedCustomer && maxPointsToUse > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-400 text-[11px] flex items-center gap-1"><Coins className="h-3 w-3" /> Pakai Poin</span>
+                        <Input type="number" min="0" max={maxPointsToUse} value={pointsToUse || ''} onChange={(e) => handlePointsChange(e.target.value)}
+                          placeholder="0" className="w-20 h-8 text-right text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg" />
+                      </div>
+                    )}
+                    {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400 text-[11px]"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                    {promoDiscount > 0 && selectedPromo && (
+                      <div className="flex justify-between text-amber-400 text-[11px]">
+                        <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
+                        <span>-{formatCurrency(promoDiscount)}</span>
+                      </div>
+                    )}
+                    <Separator className="bg-zinc-800" />
+                    <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] text-zinc-500 font-medium tracking-wide uppercase mb-2 block">Metode Pembayaran</Label>
+                    {renderPaymentButtons(true)}
+                  </div>
+
+                  {paymentMethod === 'CASH' && (
+                    <div className="space-y-2">
+                      <Label className="text-[11px] text-zinc-400 font-medium">Jumlah Bayar</Label>
+                      <Input type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0"
+                        className="h-11 text-sm bg-zinc-800/50 border-zinc-700/60 text-zinc-100 placeholder:text-zinc-600 rounded-xl text-right font-semibold" />
+                      {Number(paidAmount) >= total && total > 0 && (
+                        <div className="flex justify-between text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 rounded-xl px-3 py-2">
+                          <span>Kembalian</span><span className="font-bold">{formatCurrency(change)}</span>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {getQuickNominals.map((nom) => (
+                          <button key={nom} onClick={() => setPaidAmount(String(nom))}
+                            className={cn(
+                              'px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-medium border transition-all',
+                              Number(paidAmount) === nom
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-sm'
+                                : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600'
+                            )}>
+                            {nom >= 1000 ? `${nom / 1000}K` : nom}
+                          </button>
+                        ))}
+                        {total > 0 && (
+                          <button onClick={() => setPaidAmount(String(Math.ceil(total / 1000) * 1000))}
+                            className="px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-medium border bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 transition-all">
+                            Uang Pas
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Sticky checkout footer */}
+          {cart.length > 0 && (
+            <div className="border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-5 -mx-6">
               <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
-                className={`w-full h-11 font-bold text-sm rounded-xl ${cart.length > 0 ? 'bg-emerald-500 hover:bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
+                className={`w-full h-12 font-bold text-sm rounded-2xl transition-all ${
+                  cart.length > 0
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
+                    : 'bg-zinc-800 text-zinc-500'
+                }`}>
                 <Check className="mr-2 h-4 w-4" /> Proses Pembayaran
               </Button>
             </div>
-          </TabsContent>
-        </Tabs>
-      </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* Checkout Confirmation — Sheet on mobile, Dialog on desktop */}
       {isMobile ? (
@@ -1748,13 +1914,13 @@ export default function PosPage() {
       </Dialog>
 
       {/* Add Customer Dialog */}
-      <Dialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+      <ResponsiveDialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen}>
+        <ResponsiveDialogContent desktopClassName="max-w-sm rounded-2xl">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-sm font-bold text-zinc-100 flex items-center gap-2">
               <UserPlus className="h-4 w-4 text-emerald-400" /> Tambah Customer Baru
-            </DialogTitle>
-          </DialogHeader>
+            </ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs text-zinc-300">Nama *</Label>
@@ -1771,15 +1937,15 @@ export default function PosPage() {
               <p className="text-[10px] text-zinc-600">Format: 81234567890 (tanpa 0 di depan). WhatsApp digunakan sebagai ID unik.</p>
             </div>
           </div>
-          <DialogFooter className="gap-2">
+          <ResponsiveDialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setAddCustomerOpen(false)} className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl">Batal</Button>
             <Button onClick={handleAddCustomer} disabled={addingCustomer || !newCustomer.name.trim() || !newCustomer.whatsapp.trim()}
               className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs rounded-xl font-medium">
               {addingCustomer && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Simpan
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   )
 }

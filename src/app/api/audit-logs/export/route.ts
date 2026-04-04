@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = request.nextUrl
     const action = searchParams.get('action') || ''
+    const entityType = searchParams.get('entityType') || ''
     const dateFrom = searchParams.get('from') || ''
     const dateTo = searchParams.get('to') || ''
     const search = searchParams.get('search') || ''
@@ -33,6 +34,9 @@ export async function GET(request: NextRequest) {
 
     if (action && action !== 'ALL') {
       where.action = action
+    }
+    if (entityType && entityType !== 'ALL') {
+      where.entityType = entityType
     }
     const dateFilter = buildDateFilter(dateFrom, dateTo)
     if (Object.keys(dateFilter).length > 0) {

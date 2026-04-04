@@ -5,13 +5,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle, ResponsiveDialogDescription, ResponsiveDialogFooter } from '@/components/ui/responsive-dialog'
 import { Loader2 } from 'lucide-react'
 
 interface Customer {
@@ -95,13 +89,13 @@ export default function CustomerFormDialog({ open, onOpenChange, customer, onSav
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 p-4">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-semibold text-zinc-100">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 p-4">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100">
             {isEdit ? 'Edit Customer' : 'Add Customer'}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3 py-1">
           <div className="space-y-1.5">
             <Label className="text-xs text-zinc-300">Customer Name *</Label>
@@ -128,7 +122,7 @@ export default function CustomerFormDialog({ open, onOpenChange, customer, onSav
             <p className="text-xs text-red-400">{error}</p>
           )}
 
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               type="button"
               variant="ghost"
@@ -145,9 +139,9 @@ export default function CustomerFormDialog({ open, onOpenChange, customer, onSav
               {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {isEdit ? 'Update' : 'Create'}
             </Button>
-          </DialogFooter>
+          </ResponsiveDialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   )
 }

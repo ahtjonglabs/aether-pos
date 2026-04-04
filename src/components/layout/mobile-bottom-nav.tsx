@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { usePageStore, type PageType } from '@/hooks/use-page-store'
+import { usePlan } from '@/hooks/use-plan'
 import { useSession } from 'next-auth/react'
+import { getPlanLabel, getPlanBadgeClass } from '@/lib/plan-config'
+import { Badge } from '@/components/ui/badge'
 import {
   LayoutDashboard,
   Package,
@@ -76,6 +79,7 @@ const allMoreMenuItems: MoreMenuItem[] = [
 export default function MobileBottomNav() {
   const { currentPage, setCurrentPage } = usePageStore()
   const { data: session } = useSession()
+  const { plan, isSuspended, isLoading: planLoading } = usePlan()
   const router = useRouter()
   const [moreOpen, setMoreOpen] = useState(false)
   const isOwner = session?.user?.role === 'OWNER'
@@ -237,9 +241,23 @@ export default function MobileBottomNav() {
                 : 'U'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-zinc-100 truncate">
-                {session?.user?.name || 'User'}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-zinc-100 truncate">
+                  {session?.user?.name || 'User'}
+                </p>
+                {!planLoading && plan && (
+                  <Badge
+                    variant="outline"
+                    className={`text-[9px] px-1.5 py-0 leading-none border shrink-0 ${
+                      isSuspended
+                        ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                        : getPlanBadgeClass(plan.type)
+                    }`}
+                  >
+                    {isSuspended ? 'Suspended' : getPlanLabel(plan.type)}
+                  </Badge>
+                )}
+              </div>
               <p className="text-[11px] text-zinc-500">
                 {session?.user?.role === 'OWNER' ? 'Owner' : 'Crew'}
               </p>

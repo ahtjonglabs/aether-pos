@@ -76,23 +76,102 @@ export function generateInvoiceNumber(): string {
 
 /**
  * Build a Prisma-compatible date filter from query params.
+ * Accepts both ISO datetime strings (e.g. "2025-07-12T00:00:00.000Z")
+ * and plain date strings (e.g. "2025-07-12").
+ * For plain dates, applies setHours which uses SERVER local time.
+ * For ISO strings, uses the exact timestamp (timezone-aware).
+ *
  * Returns an object like `{ gte: Date, lte: Date }` or empty object.
  */
 export function buildDateFilter(
   dateFrom: string | null,
-  dateTo: string | null
+  dateTo: string | null,
+  dateFromMs?: string | null,
+  dateToMs?: string | null,
 ): Record<string, Date> {
   const filter: Record<string, Date> = {}
-  if (dateFrom) {
-    const start = new Date(dateFrom)
-    start.setHours(0, 0, 0, 0)
-    filter.gte = start
+  
+  // Prefer millisecond timestamps (timezone-safe)
+  if (dateFromMs) {
+    const ms = Number(dateFromMs)
+    if (!isNaN(ms)) filter.gte = new Date(ms)
+  } else if (dateFrom) {
+    const d = new Date(dateFrom)
+    if (isNaN(d.getTime())) return filter
+    if (dateFrom.includes('T') || dateFrom.includes('Z') || dateFrom.includes('+')) {
+      filter.gte = d
+    } else {
+      d.setHours(0, 0, 0, 0)
+      filter.gte = d
+    }
   }
-  if (dateTo) {
-    const end = new Date(dateTo)
-    end.setHours(23, 59, 59, 999)
-    filter.lte = end
+  
+  if (dateToMs) {
+    const ms = Number(dateToMs)
+    if (!isNaN(ms)) filter.lte = new Date(ms)
+  } else if (dateTo) {
+    const d = new Date(dateTo)
+    if (isNaN(d.getTime())) return filter
+    if (dateTo.includes('T') || dateTo.includes('Z') || dateTo.includes('+')) {
+      filter.lte = d
+    } else {
+      d.setHours(23, 59, 59, 999)
+      filter.lte = d
+    }
   }
+  
+  return filter
+}
+
+// ============================================================
+// Timezone-Aware Date Range Builder
+// ============================================================
+
+/**
+ * Build a Prisma-compatible date filter that is explicitly timezone-aware.
+ * Accepts date strings (YYYY-MM-DD) and a timezone offset in minutes from
+ * getTimezoneOffset() (negative for east of UTC, positive for west).
+ *
+ * Constructs UTC Date ranges by converting client-local midnight to UTC.
+ * Falls back to legacy buildDateFilter behavior if no tzOffset is provided.
+ */
+export function buildDateFilterTz(
+  dateFrom: string | null,
+  dateTo: string | null,
+  tzOffsetMinutes?: number | null,
+): Record<string, Date> {
+  const filter: Record<string, Date> = {}
+
+  if (dateFrom && tzOffsetMinutes !== undefined && tzOffsetMinutes !== null) {
+    const [y, m, d] = dateFrom.split('-').map(Number)
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      // Midnight in client's timezone converted to UTC
+      const startMs = Date.UTC(y, m - 1, d, 0, 0, 0, 0) + tzOffsetMinutes * 60000
+      filter.gte = new Date(startMs)
+    }
+  } else if (dateFrom) {
+    // Fallback: use server local time (legacy behavior)
+    const d = new Date(dateFrom)
+    if (!isNaN(d.getTime())) {
+      d.setHours(0, 0, 0, 0)
+      filter.gte = d
+    }
+  }
+
+  if (dateTo && tzOffsetMinutes !== undefined && tzOffsetMinutes !== null) {
+    const [y, m, d] = dateTo.split('-').map(Number)
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      const endMs = Date.UTC(y, m - 1, d, 23, 59, 59, 999) + tzOffsetMinutes * 60000
+      filter.lte = new Date(endMs)
+    }
+  } else if (dateTo) {
+    const d = new Date(dateTo)
+    if (!isNaN(d.getTime())) {
+      d.setHours(23, 59, 59, 999)
+      filter.lte = d
+    }
+  }
+
   return filter
 }
 

@@ -6,13 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle, ResponsiveDialogDescription, ResponsiveDialogFooter } from '@/components/ui/responsive-dialog'
 import { Loader2 } from 'lucide-react'
 
 interface Product {
@@ -150,13 +144,13 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 p-4 max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-sm font-semibold text-zinc-100">
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 p-4 max-h-[90vh] overflow-y-auto" desktopClassName="max-w-lg">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100">
             {isEdit ? 'Edit Product' : 'Add Product'}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveDialogTitle>
+        </ResponsiveDialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3 py-1">
           <div className="space-y-1.5">
             <Label className="text-xs text-zinc-300">Product Name *</Label>
@@ -274,7 +268,7 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
             />
           </div>
 
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               type="button"
               variant="ghost"
@@ -291,9 +285,9 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
               {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               {isEdit ? 'Update' : 'Create'}
             </Button>
-          </DialogFooter>
+          </ResponsiveDialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   )
 }

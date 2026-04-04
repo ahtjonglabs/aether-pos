@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    const [customers, total] = await Promise.all([
+    const [customers, total, totalPointsResult, avgSpendResult, newThisMonthCount] = await Promise.all([
       db.customer.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -33,11 +33,31 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       db.customer.count({ where }),
+      db.customer.aggregate({
+        where: { outletId },
+        _sum: { points: true },
+      }),
+      db.customer.aggregate({
+        where: { outletId },
+        _avg: { totalSpend: true },
+      }),
+      db.customer.count({
+        where: {
+          outletId,
+          createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+        },
+      }),
     ])
 
     return safeJson({
       customers,
       totalPages: Math.ceil(total / limit) || 1,
+      stats: {
+        total,
+        totalPoints: totalPointsResult._sum.points || 0,
+        avgSpend: Math.round((avgSpendResult._avg.totalSpend || 0) / 100) * 100,
+        newThisMonth: newThisMonthCount,
+      },
     })
   } catch (error) {
     console.error('Customers GET error:', error)

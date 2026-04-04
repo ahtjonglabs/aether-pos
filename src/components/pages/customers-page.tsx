@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
 import { usePlan, useFeatureGate } from '@/hooks/use-plan'
@@ -12,12 +12,12 @@ import { Progress } from '@/components/ui/progress'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogFooter,
+} from '@/components/ui/responsive-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,12 +62,23 @@ import {
   Crown,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   History,
   Lock,
   Sparkles,
   MinusCircle,
   PlusCircle,
+  Users,
+  UserPlus,
+  Trophy,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import CustomerFormDialog from './customer-form-dialog'
 
 // ============================================================
@@ -82,9 +93,17 @@ interface Customer {
   points: number
 }
 
+interface CustomerStats {
+  total: number
+  totalPoints: number
+  avgSpend: number
+  newThisMonth: number
+}
+
 interface CustomerListResponse {
   customers: Customer[]
   totalPages: number
+  stats: CustomerStats
 }
 
 interface LoyaltyLog {
@@ -184,6 +203,32 @@ export default function CustomersPage() {
   const { plan, features } = usePlan()
   const isPro = plan?.type === 'pro' || plan?.type === 'enterprise'
 
+  // Stats from API
+  const [stats, setStats] = useState<CustomerStats>({ total: 0, totalPoints: 0, avgSpend: 0, newThisMonth: 0 })
+
+  // Analytics collapsible
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
+
+  // Computed analytics from customer list
+  const analytics = useMemo(() => {
+    const totalCustomers = customers.length
+    const newThisMonth = customers.filter((c) => {
+      // We don't have createdAt in Customer interface, so this is approximated
+      // Using tier=New as proxy for new customers
+      return getTier(c.totalSpend) === 'New'
+    }).length
+    const totalPoints = customers.reduce((sum, c) => sum + c.points, 0)
+    const topSpenders = [...customers]
+      .sort((a, b) => b.totalSpend - a.totalSpend)
+      .slice(0, 3)
+    const tierDistribution = {
+      New: customers.filter((c) => getTier(c.totalSpend) === 'New').length,
+      Regular: customers.filter((c) => getTier(c.totalSpend) === 'Regular').length,
+      VIP: customers.filter((c) => getTier(c.totalSpend) === 'VIP').length,
+    }
+    return { totalCustomers, newThisMonth, totalPoints, topSpenders, tierDistribution }
+  }, [customers])
+
   const fetchCustomers = useCallback(async () => {
     setLoading(true)
     try {
@@ -194,6 +239,7 @@ export default function CustomersPage() {
         const data: CustomerListResponse = await res.json()
         setCustomers(data.customers)
         setTotalPages(data.totalPages)
+        if (data.stats) setStats(data.stats)
       } else {
         toast.error('Failed to load customers')
       }
@@ -338,6 +384,170 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-4">
+      {/* Stats Cards */}
+      {!loading && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Total Customers */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <Users className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-zinc-500 truncate">Total Customers</p>
+                <p className="text-lg font-bold text-zinc-100 leading-tight">{formatNumber(stats.total)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Total Loyalty Points */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                <Coins className="h-4 w-4 text-amber-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-zinc-500 truncate">Total Loyalty Points</p>
+                <p className="text-lg font-bold text-zinc-100 leading-tight">{formatNumber(stats.totalPoints)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Average Spend */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                <TrendingUp className="h-4 w-4 text-blue-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-zinc-500 truncate">Average Spend</p>
+                <p className="text-lg font-bold text-zinc-100 leading-tight">{formatCurrency(stats.avgSpend)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* New This Month */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center shrink-0">
+                <UserPlus className="h-4 w-4 text-violet-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-zinc-500 truncate">New This Month</p>
+                <p className="text-lg font-bold text-zinc-100 leading-tight">{formatNumber(stats.newThisMonth)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Analytics Section */}
+      {!loading && customers.length > 0 && (
+        <Collapsible open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+            <CollapsibleTrigger className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 transition-colors">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-xs font-semibold text-zinc-200">Analitik</span>
+                <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0">
+                  {analytics.totalCustomers} customer
+                </Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <UserPlus className="h-3 w-3" />
+                    <span>{analytics.newThisMonth} baru</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <Coins className="h-3 w-3 text-amber-400" />
+                    <span>{formatNumber(analytics.totalPoints)} pts</span>
+                  </div>
+                </div>
+                {analyticsOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
+                )}
+              </div>
+            </CollapsibleTrigger>
+
+            <CollapsibleContent>
+              <div className="px-4 pb-3">
+                {/* Mobile mini stats */}
+                <div className="sm:hidden flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <UserPlus className="h-3 w-3" />
+                    <span>{analytics.newThisMonth} baru</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                    <Coins className="h-3 w-3 text-amber-400" />
+                    <span>{formatNumber(analytics.totalPoints)} pts</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Top Spenders */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <Trophy className="h-3 w-3 text-amber-400" />
+                      Top Spenders
+                    </h3>
+                    <div className="space-y-1.5">
+                      {analytics.topSpenders.length === 0 ? (
+                        <p className="text-[11px] text-zinc-500">Belum ada data</p>
+                      ) : (
+                        analytics.topSpenders.map((c, i) => (
+                          <div key={c.id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className={`text-[10px] font-bold w-4 text-center ${i === 0 ? 'text-amber-400' : i === 1 ? 'text-zinc-300' : 'text-orange-400'}`}>#{i + 1}</span>
+                              <span className="text-xs text-zinc-200 truncate">{c.name}</span>
+                            </div>
+                            <span className="text-xs font-medium text-zinc-300 ml-2 shrink-0">{formatCurrency(c.totalSpend)}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tier Distribution */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <Users className="h-3 w-3 text-emerald-400" />
+                      Distribusi Tier
+                    </h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge className={`${getTierBadgeClass('New')} text-[10px] font-medium border px-2 py-0.5`}>
+                        New: {analytics.tierDistribution.New}
+                      </Badge>
+                      <Badge className={`${getTierBadgeClass('Regular')} text-[10px] font-medium border px-2 py-0.5`}>
+                        Regular: {analytics.tierDistribution.Regular}
+                      </Badge>
+                      <Badge className={`${getTierBadgeClass('VIP')} text-[10px] font-medium border px-2 py-0.5`}>
+                        <Crown className="mr-0.5 h-2.5 w-2.5" />
+                        VIP: {analytics.tierDistribution.VIP}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Total Loyalty Points */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
+                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
+                      <Coins className="h-3 w-3 text-amber-400" />
+                      Total Poin Loyalti
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg font-bold text-amber-400">{formatNumber(analytics.totalPoints)}</span>
+                      <span className="text-[11px] text-zinc-500">poin tersebar di {analytics.totalCustomers} customer</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
@@ -845,14 +1055,14 @@ export default function CustomersPage() {
       </Sheet>
 
       {/* Manual Adjust Points Dialog */}
-      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 max-w-sm p-4">
-          <DialogHeader>
-            <DialogTitle className="text-zinc-100 text-sm font-semibold flex items-center gap-2">
+      <ResponsiveDialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800 p-4" desktopClassName="max-w-sm">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold flex items-center gap-2">
               <Coins className="h-4 w-4 text-amber-400" />
               Adjust Points — {adjustCustomer?.name}
-            </DialogTitle>
-          </DialogHeader>
+            </ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
           <div className="space-y-3 py-1">
             <div className="space-y-1.5">
               <Label className="text-zinc-300 text-xs">Tipe</Label>
@@ -927,7 +1137,7 @@ export default function CustomersPage() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button
               type="button"
               variant="ghost"
@@ -949,9 +1159,9 @@ export default function CustomersPage() {
               {adjusting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               {adjustType === 'ADD' ? 'Tambah' : 'Kurangi'} Poin
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   )
 }
