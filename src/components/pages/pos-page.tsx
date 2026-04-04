@@ -1057,7 +1057,14 @@ export default function PosPage() {
       )
     }
 
-    return products.map((product) => {
+    // Sort: in-stock products first, out-of-stock at the bottom
+    const sortedProducts = [...products].sort((a, b) => {
+      if (a.stock <= 0 && b.stock > 0) return 1
+      if (a.stock > 0 && b.stock <= 0) return -1
+      return 0
+    })
+
+    return sortedProducts.map((product) => {
       const cartItem = cart.find((i) => i.product.id === product.id)
       const outOfStock = product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color

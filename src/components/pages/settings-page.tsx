@@ -79,6 +79,11 @@ import {
   WifiOff,
   Link2,
   Unlink2,
+  CircleHelp,
+  ExternalLink,
+  MessageSquare,
+  UserCircle,
+  Bot,
 } from 'lucide-react'
 
 // ==================== TYPES ====================
@@ -1544,6 +1549,67 @@ function TelegramTab() {
 
   return (
     <div className="space-y-4">
+      {/* Setup Instructions */}
+      <Card className="bg-sky-500/5 border-sky-500/15">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0">
+              <CircleHelp className="h-4 w-4 text-sky-400" />
+            </div>
+            <h2 className="text-sm font-semibold text-zinc-100">Cara Setup Telegram Bot</h2>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-sky-400">1</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200">Buat Bot Token dari BotFather</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Buka Telegram, cari <span className="text-sky-300 font-medium">@BotFather</span>. Kirim pesan <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-sky-300">/newbot</code>, ikuti instruksi, lalu copy <span className="text-zinc-300">Bot Token</span> yang diberikan.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-sky-400">2</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200">Dapatkan Chat ID</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Kirim pesan apapun ke bot yang baru dibuat. Lalu buka browser, akses:{' '}
+                  <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-sky-300 break-all">
+                    https://api.telegram.org/bot{'{TOKEN}'}/getUpdates
+                  </code>
+                  {' '}Cari <span className="text-zinc-300">chat.id</span> di response JSON.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-sky-400">3</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200">Masukkan & Test Koneksi</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Paste <span className="text-zinc-300">Bot Token</span> dan <span className="text-zinc-300">Chat ID</span> di form bawah, lalu klik <span className="text-emerald-400 font-medium">Test Koneksi</span>. Jika berhasil, klik <span className="text-emerald-400 font-medium">Simpan</span>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-zinc-800/40 border border-zinc-700/40">
+            <MessageSquare className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-zinc-400">
+              <span className="text-amber-400 font-medium">Tips:</span> Pastikan bot sudah di-Start (klik Start di chat bot) sebelum test koneksi. Chat ID biasanya berupa angka (contoh: <span className="text-zinc-300">123456789</span>).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Connection Card */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">
