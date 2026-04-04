@@ -418,6 +418,33 @@ export default function PosPage() {
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
+  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
+  const [editingQtyValue, setEditingQtyValue] = useState('')
+  const qtyInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Inline QTY Edit Handlers ──
+  const startEditQty = (productId: string, currentQty: number) => {
+    setEditingQtyId(productId)
+    setEditingQtyValue(String(currentQty))
+    setTimeout(() => qtyInputRef.current?.focus(), 50)
+  }
+
+  const confirmEditQty = () => {
+    if (!editingQtyId) return
+    const val = parseInt(editingQtyValue, 10)
+    if (isNaN(val) || val <= 0) {
+      removeFromCart(editingQtyId)
+    } else {
+      updateQty(editingQtyId, val)
+    }
+    setEditingQtyId(null)
+    setEditingQtyValue('')
+  }
+
+  const cancelEditQty = () => {
+    setEditingQtyId(null)
+    setEditingQtyValue('')
+  }
 
   // Online/offline detection
   useEffect(() => {
@@ -1035,9 +1062,27 @@ export default function PosPage() {
           )}
         >
           {cartItem && (
-            <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10">
-              {cartItem.qty}
-            </div>
+            editingQtyId === cartItem.product.id ? (
+              <input
+                ref={qtyInputRef}
+                type="number"
+                min="0"
+                max={cartItem.product.stock}
+                value={editingQtyValue}
+                onChange={(e) => setEditingQtyValue(e.target.value)}
+                onBlur={confirmEditQty}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute -top-2 -right-2 w-10 h-6 rounded-full bg-emerald-500 text-white text-[11px] font-bold text-center border-2 border-white shadow-lg z-10 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            ) : (
+              <div
+                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10 cursor-pointer hover:scale-110 active:scale-95 transition-transform"
+                onClick={(e) => { e.stopPropagation(); startEditQty(cartItem.product.id, cartItem.qty) }}
+              >
+                {cartItem.qty}
+              </div>
+            )
           )}
           <p className="text-xs font-medium text-zinc-200 truncate mb-1.5 pr-6">{product.name}</p>
           <p className={`text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
@@ -1472,7 +1517,25 @@ export default function PosPage() {
                     <div className="flex items-center gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
-                      <span className="text-xs text-zinc-200 w-6 text-center font-bold">{item.qty}</span>
+                      {editingQtyId === item.product.id ? (
+                        <input
+                          ref={qtyInputRef}
+                          type="number"
+                          min="0"
+                          max={item.product.stock}
+                          value={editingQtyValue}
+                          onChange={(e) => setEditingQtyValue(e.target.value)}
+                          onBlur={confirmEditQty}
+                          onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
+                          className="text-xs text-zinc-200 w-10 text-center font-bold bg-zinc-700 border border-zinc-600 rounded-md h-8 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      ) : (
+                        <span
+                          className="text-xs text-zinc-200 w-6 text-center font-bold cursor-pointer hover:text-emerald-400 transition-colors"
+                          onClick={() => startEditQty(item.product.id, item.qty)}
+                          title="Klik untuk edit qty"
+                        >{item.qty}</span>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
@@ -1595,7 +1658,7 @@ export default function PosPage() {
         {cart.length > 0 && (
           <button
             onClick={() => setMobileCartOpen(true)}
-            className="fixed bottom-5 right-4 z-40 flex items-center gap-2.5 h-14 pl-4 pr-5 rounded-2xl bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all duration-150"
+            className="fixed bottom-20 right-4 z-40 flex items-center gap-2.5 h-14 pl-4 pr-5 rounded-2xl bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all duration-150"
           >
             <ShoppingCart className="h-5 w-5" />
             <span className="flex flex-col items-start leading-tight">
@@ -1625,8 +1688,8 @@ export default function PosPage() {
             </SheetTitle>
           </SheetHeader>
 
-          <ScrollArea className="flex-1 px-5">
-            <div className="space-y-4 pb-4">
+          <ScrollArea className="flex-1 overflow-hidden px-5" style={{ maxHeight: 'calc(92vh - 200px)' }}>
+            <div className="space-y-4 pb-2">
               {renderCustomerSelector(true)}
 
               {/* Cart Items */}
@@ -1649,7 +1712,24 @@ export default function PosPage() {
                       <div className="flex items-center gap-0.5">
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                           onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                        <span className="text-xs w-7 text-center text-zinc-200 font-bold">{item.qty}</span>
+                        {editingQtyId === item.product.id ? (
+                          <input
+                            ref={qtyInputRef}
+                            type="number"
+                            min="0"
+                            max={item.product.stock}
+                            value={editingQtyValue}
+                            onChange={(e) => setEditingQtyValue(e.target.value)}
+                            onBlur={confirmEditQty}
+                            onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
+                            className="text-xs text-zinc-200 w-12 text-center font-bold bg-zinc-700 border border-zinc-600 rounded-lg h-8 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        ) : (
+                          <span
+                            className="text-xs w-7 text-center text-zinc-200 font-bold cursor-pointer hover:text-emerald-400 transition-colors"
+                            onClick={() => startEditQty(item.product.id, item.qty)}
+                          >{item.qty}</span>
+                        )}
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                           onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
                       </div>
@@ -1727,7 +1807,7 @@ export default function PosPage() {
 
           {/* Sticky checkout footer */}
           {cart.length > 0 && (
-            <div className="border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-5 -mx-6">
+            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
               <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
                 className={`w-full h-12 font-bold text-sm rounded-2xl transition-all ${
                   cart.length > 0
