@@ -95,47 +95,24 @@ export async function GET(request: NextRequest) {
 
     const voidSet = new Set(voidLogs.map((l) => l.entityId))
 
-    // Build export rows: one row per transaction
-    const rows = transactions.map((t) => ({
-      'Invoice #': t.invoiceNumber,
-      'Tanggal': formatDate(t.createdAt),
-      'Kasir': t.user?.name || '-',
-      'Customer': t.customer?.name || 'Walk-in',
-      'Metode Pembayaran': t.paymentMethod,
-      'Subtotal': formatCurrency(t.subtotal),
-      'Diskon': formatCurrency(t.discount),
-      'Total': formatCurrency(t.total),
-      'Dibayar': formatCurrency(t.paidAmount),
-      'Kembalian': formatCurrency(t.change),
-      'Items': t.items.map((i) => `${i.productName} (${i.qty}x)`).join(', '),
-      'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
-    }))
-
-    const worksheet = XLSX.utils.json_to_sheet(rows)
-
-    // Auto-size columns
-    const colWidths = Object.keys(rows[0] || {}).map((key) => ({
-      wch: Math.max(
-        key.length + 2,
-        ...rows.map((r) => String(r[key as keyof typeof r] || '').length)
-      ),
-    }))
-    worksheet['!cols'] = colWidths
-
-    // === Sheet 2: Detail Items (Nama, SKU, QTY terpisah) ===
+    // === Sheet 1: Detail Transaksi (one row per item) ===
     const detailRows: Record<string, unknown>[] = []
     for (const t of transactions) {
       for (const item of t.items) {
         detailRows.push({
+          'No': detailRows.length + 1,
           'Invoice #': t.invoiceNumber,
           'Tanggal': formatDate(t.createdAt),
+          'Jam': t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          'Kasir': t.user?.name || '-',
+          'Customer': t.customer?.name || 'Walk-in',
           'Nama Produk': item.productName,
           'SKU': item.product?.sku || '-',
           'QTY': item.qty,
           'Harga Satuan': formatCurrency(item.price),
-          'Subtotal': formatCurrency(item.subtotal),
+          'Subtotal Item': formatCurrency(item.subtotal),
           'Metode Pembayaran': t.paymentMethod,
-          'Customer': t.customer?.name || 'Walk-in',
+          'Total Transaksi': formatCurrency(t.total),
           'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
         })
       }
@@ -150,9 +127,36 @@ export async function GET(request: NextRequest) {
     }))
     detailSheet['!cols'] = detailColWidths
 
+    // === Sheet 2: Ringkasan (one row per transaction, summary only) ===
+    const rows = transactions.map((t) => ({
+      'No': transactions.indexOf(t) + 1,
+      'Invoice #': t.invoiceNumber,
+      'Tanggal': formatDate(t.createdAt),
+      'Jam': t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      'Kasir': t.user?.name || '-',
+      'Customer': t.customer?.name || 'Walk-in',
+      'Jumlah Item': t.items.reduce((s, i) => s + i.qty, 0),
+      'Metode Pembayaran': t.paymentMethod,
+      'Subtotal': formatCurrency(t.subtotal),
+      'Diskon': formatCurrency(t.discount),
+      'Total': formatCurrency(t.total),
+      'Dibayar': formatCurrency(t.paidAmount),
+      'Kembalian': formatCurrency(t.change),
+      'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
+    }))
+
+    const summarySheet = XLSX.utils.json_to_sheet(rows)
+    const colWidths = Object.keys(rows[0] || {}).map((key) => ({
+      wch: Math.max(
+        key.length + 2,
+        ...rows.map((r) => String(r[key as keyof typeof r] || '').length)
+      ),
+    }))
+    summarySheet['!cols'] = colWidths
+
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Ringkasan')
-    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detail Items')
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detail Transaksi')
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Ringkasan')
 
     const dateRange = dateFrom && dateTo ? `${dateFrom}_to_${dateTo}` : 'all'
     const filename = `transactions_${dateRange}.xlsx`

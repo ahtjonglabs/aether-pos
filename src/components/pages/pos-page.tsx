@@ -1688,8 +1688,9 @@ export default function PosPage() {
             </SheetTitle>
           </SheetHeader>
 
-          <ScrollArea className="flex-1 overflow-hidden px-5" style={{ maxHeight: 'calc(92vh - 200px)' }}>
-            <div className="space-y-4 pb-2">
+          {/* Scrollable cart items area */}
+          <div className="flex-1 overflow-hidden px-5 min-h-0">
+            <div className="h-full overflow-y-auto overscroll-contain -mx-5 px-5 space-y-4 pb-2">
               {renderCustomerSelector(true)}
 
               {/* Cart Items */}
@@ -1740,82 +1741,27 @@ export default function PosPage() {
                   ))}
                 </div>
               )}
-
-              {/* Mobile Summary */}
-              {cart.length > 0 && (
-                <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-4 space-y-3">
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span className="text-zinc-200">{formatCurrency(subtotal)}</span></div>
-                    {settings.loyaltyEnabled && selectedCustomer && maxPointsToUse > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-zinc-400 text-[11px] flex items-center gap-1"><Coins className="h-3 w-3" /> Pakai Poin</span>
-                        <Input type="number" min="0" max={maxPointsToUse} value={pointsToUse || ''} onChange={(e) => handlePointsChange(e.target.value)}
-                          placeholder="0" className="w-20 h-8 text-right text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg" />
-                      </div>
-                    )}
-                    {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400 text-[11px]"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
-                    {promoDiscount > 0 && selectedPromo && (
-                      <div className="flex justify-between text-amber-400 text-[11px]">
-                        <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
-                        <span>-{formatCurrency(promoDiscount)}</span>
-                      </div>
-                    )}
-                    <Separator className="bg-zinc-800" />
-                    <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
-                  </div>
-
-                  <div>
-                    <Label className="text-[11px] text-zinc-500 font-medium tracking-wide uppercase mb-2 block">Metode Pembayaran</Label>
-                    {renderPaymentButtons(true)}
-                  </div>
-
-                  {paymentMethod === 'CASH' && (
-                    <div className="space-y-2">
-                      <Label className="text-[11px] text-zinc-400 font-medium">Jumlah Bayar</Label>
-                      <Input type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0"
-                        className="h-11 text-sm bg-zinc-800/50 border-zinc-700/60 text-zinc-100 placeholder:text-zinc-600 rounded-xl text-right font-semibold" />
-                      {Number(paidAmount) >= total && total > 0 && (
-                        <div className="flex justify-between text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 rounded-xl px-3 py-2">
-                          <span>Kembalian</span><span className="font-bold">{formatCurrency(change)}</span>
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-1.5">
-                        {getQuickNominals.map((nom) => (
-                          <button key={nom} onClick={() => setPaidAmount(String(nom))}
-                            className={cn(
-                              'px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-medium border transition-all',
-                              Number(paidAmount) === nom
-                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-sm'
-                                : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600'
-                            )}>
-                            {nom >= 1000 ? `${nom / 1000}K` : nom}
-                          </button>
-                        ))}
-                        {total > 0 && (
-                          <button onClick={() => setPaidAmount(String(Math.ceil(total / 1000) * 1000))}
-                            className="px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-medium border bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 transition-all">
-                            Uang Pas
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
-          </ScrollArea>
+          </div>
 
-          {/* Sticky checkout footer */}
+          {/* Sticky bottom: Summary + Payment + Checkout button */}
           {cart.length > 0 && (
             <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
-                className={`w-full h-12 font-bold text-sm rounded-2xl transition-all ${
-                  cart.length > 0
-                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
-                    : 'bg-zinc-800 text-zinc-500'
-                }`}>
-                <Check className="mr-2 h-4 w-4" /> Proses Pembayaran
-              </Button>
+              {/* Summary row */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex-1 min-w-0 mr-3">
+                  <p className="text-[11px] text-zinc-500">
+                    {cart.reduce((s, i) => s + i.qty, 0)} item
+                    {pointsDiscount > 0 && <span className="text-emerald-400 ml-1">(-{formatCurrency(pointsDiscount)})</span>}
+                    {promoDiscount > 0 && selectedPromo && <span className="text-amber-400 ml-1">(-{formatCurrency(promoDiscount)})</span>}
+                  </p>
+                  <p className="text-lg font-black text-zinc-100">{formatCurrency(total)}</p>
+                </div>
+                <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
+                  className="h-12 px-6 font-bold text-sm rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all shrink-0">
+                  <Check className="mr-2 h-4 w-4" /> Bayar
+                </Button>
+              </div>
             </div>
           )}
         </SheetContent>
