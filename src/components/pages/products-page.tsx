@@ -710,7 +710,7 @@ export default function ProductsPage() {
               {bulkMode ? 'Edit Massal Aktif' : 'Edit Massal'}
             </Button>
           )}
-          <ProGate feature="bulkUpload" label="Upload Excel" description="Upload produk massal via file Excel" minHeight="40px">
+          <ProGate feature="bulkUpload" label="Upload Excel" description="Upload produk massal via file Excel" variant="inline">
             <Button
               variant="outline"
               onClick={() => {

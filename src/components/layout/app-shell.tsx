@@ -7,7 +7,6 @@ import Sidebar from '@/components/layout/sidebar'
 import MobileBottomNav from '@/components/layout/mobile-bottom-nav'
 import AuthView from '@/components/auth/auth-view'
 import DashboardPage from '@/components/pages/dashboard-page'
-import InsightsPage from '@/components/pages/insights-page'
 import ProductsPage from '@/components/pages/products-page'
 import CustomersPage from '@/components/pages/customers-page'
 import PosPage from '@/components/pages/pos-page'
@@ -43,8 +42,6 @@ function AppContent() {
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage />
-      case 'insights':
-        return <InsightsPage />
       case 'products':
         return <ProductsPage />
       case 'customers':

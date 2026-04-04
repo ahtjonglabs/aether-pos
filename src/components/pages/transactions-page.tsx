@@ -109,6 +109,8 @@ interface CashierOption {
 
 interface SummaryData {
   totalRevenue: number
+  totalBrutto: number
+  totalDiscount: number
   totalTransactions: number
   avgTransaction: number
   totalItemsSold: number
@@ -577,6 +579,51 @@ export default function TransactionsPage() {
                 <p className="text-[10px] text-zinc-500 mt-1">Total unit</p>
               </CardContent>
             </Card>
+          </div>
+
+          {/* Brutto / Netto / Diskon Summary */}
+          <div className="grid grid-cols-3 gap-3">
+            {/* Brutto */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+              <span className="text-[10px] text-zinc-500 font-medium">Brutto</span>
+              <p className="text-base font-bold text-zinc-100 tracking-tight mt-1">
+                {formatCurrency(summary.totalBrutto)}
+              </p>
+              <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden mt-2.5">
+                <div
+                  className="h-full rounded-full bg-sky-500 transition-all duration-700"
+                  style={{ width: `${summary.totalBrutto > 0 ? 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Diskon */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+              <span className="text-[10px] text-red-400/70 font-medium">Diskon</span>
+              <p className="text-base font-bold text-red-400 tracking-tight mt-1">
+                - {formatCurrency(summary.totalDiscount)}
+              </p>
+              <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden mt-2.5">
+                <div
+                  className="h-full rounded-full bg-red-400 transition-all duration-700"
+                  style={{ width: `${summary.totalBrutto > 0 ? (summary.totalDiscount / summary.totalBrutto) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Netto */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+              <span className="text-[10px] text-emerald-500/70 font-medium">Netto</span>
+              <p className="text-base font-bold text-emerald-400 tracking-tight mt-1">
+                {formatCurrency(summary.totalRevenue)}
+              </p>
+              <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden mt-2.5">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                  style={{ width: `${summary.totalBrutto > 0 ? (summary.totalRevenue / summary.totalBrutto) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Two-column: Payment Breakdown + Hourly Breakdown */}

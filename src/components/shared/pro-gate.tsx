@@ -1,7 +1,7 @@
 'use client'
 
 import { usePlan } from '@/hooks/use-plan'
-import { Lock, Crown } from 'lucide-react'
+import { Lock, Crown, Sparkles } from 'lucide-react'
 
 interface ProGateProps {
   /** The feature key from PlanFeatures to check */
@@ -16,6 +16,13 @@ interface ProGateProps {
   blur?: number
   /** Minimum height for the blurred area */
   minHeight?: string
+  /** 
+   * Display variant:
+   * - 'card': Full card overlay (default) — for sections, panels, feature blocks
+   * - 'inline': Compact button-style — for inline buttons and actions
+   * - 'badge': Minimal pill badge — for small inline indicators
+   */
+  variant?: 'card' | 'inline' | 'badge'
 }
 
 /**
@@ -28,6 +35,10 @@ interface ProGateProps {
  *   <ProGate feature="exportExcel" label="Export Excel">
  *     <ExportButton />
  *   </ProGate>
+ *
+ *   <ProGate feature="bulkUpload" variant="inline" label="Upload Excel">
+ *     <UploadButton />
+ *   </ProGate>
  */
 export function ProGate({
   feature,
@@ -36,6 +47,7 @@ export function ProGate({
   description,
   blur = 6,
   minHeight = '120px',
+  variant = 'card',
 }: ProGateProps) {
   const { features, plan, isLoading } = usePlan()
 
@@ -72,8 +84,65 @@ export function ProGate({
   const displayLabel = label || getFeatureLabel(feature)
   const displayDescription = description || 'Fitur ini tersedia untuk akun Pro'
 
+  // ── INLINE variant: compact button-style lock ──
+  if (variant === 'inline') {
+    return (
+      <div className="relative inline-flex">
+        {/* Blurred button underneath */}
+        <div
+          className="pointer-events-none select-none"
+          style={{ filter: `blur(${blur}px)`, opacity: 0.4 }}
+        >
+          {children}
+        </div>
+
+        {/* Inline lock overlay */}
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <button
+            className="flex items-center gap-1.5 h-9 px-3 rounded-lg
+              bg-gradient-to-r from-violet-500/15 to-purple-500/15
+              border border-violet-500/25
+              backdrop-blur-sm cursor-default select-none"
+            title={`${displayLabel} — ${displayDescription}`}
+          >
+            <Crown className="h-3.5 w-3.5 text-violet-400" />
+            <span className="text-[11px] font-semibold text-violet-300">{displayLabel}</span>
+            <Lock className="h-3 w-3 text-violet-500/60" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── BADGE variant: minimal pill ──
+  if (variant === 'badge') {
+    return (
+      <div className="relative inline-flex">
+        <div
+          className="pointer-events-none select-none"
+          style={{ filter: `blur(${blur}px)`, opacity: 0.35 }}
+        >
+          {children}
+        </div>
+
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <span
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+              bg-violet-500/10 border border-violet-500/20 text-violet-400
+              text-[10px] font-semibold select-none cursor-default"
+            title={`${displayLabel} — ${displayDescription}`}
+          >
+            <Sparkles className="h-3 w-3" />
+            Pro
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  // ── CARD variant (default): full overlay with upgrade CTA ──
   return (
-    <div className="relative" style={{ minHeight }}>
+    <div className="relative group" style={{ minHeight }}>
       {/* Blurred content underneath */}
       <div
         className="pointer-events-none select-none"
@@ -83,18 +152,23 @@ export function ProGate({
       </div>
 
       {/* Overlay with upgrade prompt */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-zinc-900/60 backdrop-blur-[2px] border border-dashed border-zinc-700/50 z-10">
-        <div className="flex flex-col items-center gap-2 px-4 text-center">
-          <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center">
+      <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-zinc-900/70 backdrop-blur-[2px] border border-dashed border-zinc-700/40 z-10">
+        <div className="flex flex-col items-center gap-3 px-5 py-4 text-center max-w-[200px]">
+          {/* Icon */}
+          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-500/15 to-purple-500/10 border border-violet-500/20 flex items-center justify-center">
             <Crown className="h-5 w-5 text-violet-400" />
           </div>
+
+          {/* Label & description */}
           <div>
-            <p className="text-xs font-semibold text-zinc-200">{displayLabel}</p>
-            <p className="text-[11px] text-zinc-400 mt-0.5">{displayDescription}</p>
+            <p className="text-xs font-semibold text-zinc-200 leading-tight">{displayLabel}</p>
+            <p className="text-[11px] text-zinc-500 mt-1 leading-snug">{displayDescription}</p>
           </div>
-          <div className="flex items-center gap-1.5 mt-1 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
-            <Lock className="h-3 w-3 text-violet-400" />
-            <span className="text-[11px] font-medium text-violet-400">Pro</span>
+
+          {/* Pro badge */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-500/10 to-purple-500/10 border border-violet-500/20">
+            <Sparkles className="h-3 w-3 text-violet-400" />
+            <span className="text-[11px] font-semibold text-violet-300">Upgrade Pro</span>
           </div>
         </div>
       </div>

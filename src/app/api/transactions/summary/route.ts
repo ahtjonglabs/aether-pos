@@ -79,6 +79,8 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         total: true,
+        subtotal: true,
+        discount: true,
         paymentMethod: true,
         createdAt: true,
         items: {
@@ -95,6 +97,8 @@ export async function GET(request: NextRequest) {
 
     // Calculate summary metrics
     const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0)
+    const totalBrutto = transactions.reduce((sum, t) => sum + t.subtotal, 0)
+    const totalDiscount = transactions.reduce((sum, t) => sum + t.discount, 0)
     const totalTransactions = transactions.length
     const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
 
@@ -158,6 +162,8 @@ export async function GET(request: NextRequest) {
 
     return safeJson({
       totalRevenue,
+      totalBrutto,
+      totalDiscount,
       totalTransactions,
       avgTransaction,
       totalItemsSold,

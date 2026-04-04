@@ -46,6 +46,8 @@ import {
   Megaphone,
   Cpu,
   RefreshCw,
+  CheckCircle2,
+  Activity,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -167,6 +169,114 @@ function InsightContent({ text, accentColor }: { text: string; accentColor: 'eme
   )
 }
 
+// ── Insight Bisnis Types ──
+interface BizInsightItem {
+  title: string
+  description: string
+  type: 'positive' | 'warning' | 'info' | 'critical'
+  metric?: string
+}
+
+interface BizInsightResult {
+  insights: BizInsightItem[]
+  score: number
+}
+
+interface BizInsightData {
+  data: {
+    today: { revenue: number; transactions: number; avgOrder: number }
+    yesterday: { revenue: number; transactions: number; avgOrder: number }
+    products: {
+      total: number; outOfStock: number; lowStock: number
+      topSelling: { name: string; qty: number; revenue: number }[]
+    }
+    customers: { total: number; newThisWeek: number }
+    transactions: { paymentMethods: { method: string; count: number; total: number }[] }
+    dataQuality: {
+      productsWithoutCategory: number; productsWithoutSku: number
+      productsWithoutImage: number; deadStockCount: number; deadStockValue: number
+    }
+  }
+  cmo: BizInsightResult
+  cto: BizInsightResult
+  generatedAt: string
+}
+
+// ── Insight Bisnis Helpers ──
+function getBizScoreColor(score: number): string {
+  if (score >= 75) return 'text-emerald-400'
+  if (score >= 50) return 'text-amber-400'
+  return 'text-red-400'
+}
+
+function getBizScoreBg(score: number): string {
+  if (score >= 75) return 'from-emerald-500/20 to-emerald-500/5 border-emerald-500/20'
+  if (score >= 50) return 'from-amber-500/20 to-amber-500/5 border-amber-500/20'
+  return 'from-red-500/20 to-red-500/5 border-red-500/20'
+}
+
+function getBizScoreRing(score: number): string {
+  if (score >= 75) return 'stroke-emerald-400'
+  if (score >= 50) return 'stroke-amber-400'
+  return 'stroke-red-400'
+}
+
+// ── Score Ring Component (for Insight Bisnis) ──
+function BizScoreRing({ score, label }: { score: number; label: string }) {
+  const radius = 40
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (score / 100) * circumference
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative w-24 h-24">
+        <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="currentColor" className="text-zinc-800" strokeWidth="6" />
+          <circle
+            cx="50" cy="50" r={radius} fill="none"
+            className={getBizScoreRing(score)}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className={`text-xl font-bold ${getBizScoreColor(score)}`}>{score}</span>
+          <span className="text-[9px] text-zinc-500">/100</span>
+        </div>
+      </div>
+      <span className="text-[11px] font-semibold text-zinc-300">{label}</span>
+    </div>
+  )
+}
+
+// ── Data Quality Row (for Insight Bisnis) ──
+function BizDataQualityRow({ label, count, total, color }: { label: string; count: number; total: number; color?: string }) {
+  const pct = total > 0 ? (count / total) * 100 : 0
+  const isBad = pct > 30
+
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-[11px] text-zinc-400 w-28 shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${
+            color === 'rose' || isBad ? 'bg-rose-500/60' : count > 0 ? 'bg-amber-500/40' : 'bg-emerald-500/60'
+          }`}
+          style={{ width: count > 0 ? `${Math.max(pct, 3)}%` : '0%' }}
+        />
+      </div>
+      <span className={`text-[10px] w-6 text-right font-medium ${
+        color === 'rose' || isBad ? 'text-rose-400' : count > 0 ? 'text-amber-400' : 'text-emerald-400'
+      }`}>
+        {count}
+      </span>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession()
   const { plan, features, isSuspended, isLoading: planLoading } = usePlan()
@@ -182,6 +292,11 @@ export default function DashboardPage() {
   const [aiInsights, setAiInsights] = useState<{ cmo: string; cto: string; generatedAt: string } | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+
+  // Code-based Insight Bisnis state (ALL OWNER users)
+  const [bizData, setBizData] = useState<BizInsightData | null>(null)
+  const [bizLoading, setBizLoading] = useState(false)
+  const [bizError, setBizError] = useState<string | null>(null)
 
   const generateInsights = useCallback(async () => {
     setAiLoading(true)
@@ -218,9 +333,32 @@ export default function DashboardPage() {
     }
   }, [])
 
+  const fetchBizInsights = useCallback(async () => {
+    setBizLoading(true)
+    setBizError(null)
+    try {
+      const res = await fetch('/api/insights/analyze')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Gagal memuat insight')
+      }
+      const json = await res.json()
+      setBizData(json)
+    } catch (e) {
+      setBizError(e instanceof Error ? e.message : 'Terjadi kesalahan')
+    } finally {
+      setBizLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchStats()
   }, [fetchStats])
+
+  // Fetch biz insights for OWNER users
+  useEffect(() => {
+    if (isOwner) fetchBizInsights()
+  }, [isOwner, fetchBizInsights])
 
   // Auto-refresh every 30s
   useEffect(() => {
@@ -963,6 +1101,289 @@ export default function DashboardPage() {
                   </TabsContent>
                 </Tabs>
               )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════
+          SECTION 3c — Insight Bisnis (OWNER only — ALL plans)
+      ═══════════════════════════════════════════════════ */}
+      {isOwner && (
+        <motion.div variants={itemVariants}>
+          <Card className="bg-zinc-900 border border-zinc-800/60">
+            <CardContent className="p-4">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <BarChart3 className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-zinc-200">Insight Bisnis</h2>
+                    <p className="text-[10px] text-zinc-500">Analisis bisnis real-time dari data outlet</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={fetchBizInsights}
+                  disabled={bizLoading}
+                  className="h-8 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 gap-1.5"
+                >
+                  <RefreshCw className={`h-3 w-3 ${bizLoading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+
+              {/* Error state */}
+              {bizError && (
+                <div className="rounded-xl bg-red-500/[0.06] border border-red-500/15 p-4">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                    <p className="text-xs text-red-400">{bizError}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Loading skeleton */}
+              {bizLoading && !bizData && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Skeleton key={i} className="h-24 rounded-xl bg-zinc-800/60" />
+                    ))}
+                  </div>
+                  <Skeleton className="h-36 rounded-xl bg-zinc-800/60" />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <Skeleton className="h-48 rounded-xl bg-zinc-800/60" />
+                    <Skeleton className="h-48 rounded-xl bg-zinc-800/60" />
+                  </div>
+                </div>
+              )}
+
+              {/* Data loaded */}
+              {bizData && !bizLoading && !bizError && (() => {
+                const d = bizData.data
+                const revenueTrend = d.yesterday.revenue > 0
+                  ? ((d.today.revenue - d.yesterday.revenue) / d.yesterday.revenue) * 100
+                  : 0
+
+                return (
+                  <div className="space-y-4">
+                    {/* Stat Cards */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* Revenue Hari Ini */}
+                      <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/15 p-3.5">
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="p-1.5 rounded-lg bg-zinc-900/60 text-emerald-400">
+                            <Zap className="h-3.5 w-3.5" />
+                          </span>
+                          <div className={`flex items-center gap-0.5 text-[10px] font-semibold ${
+                            revenueTrend > 5 ? 'text-emerald-400' : revenueTrend < -5 ? 'text-red-400' : 'text-zinc-500'
+                          }`}>
+                            {revenueTrend > 5 ? <TrendingUp className="h-3 w-3" /> : revenueTrend < -5 ? <TrendingDown className="h-3 w-3" /> : null}
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 font-medium mb-0.5">Revenue Hari Ini</p>
+                        <p className="text-sm font-bold text-zinc-100">{formatCurrency(d.today.revenue)}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{d.today.transactions} transaksi</p>
+                      </div>
+
+                      {/* AOV */}
+                      <div className="rounded-xl bg-gradient-to-br from-violet-500/10 to-violet-500/5 border border-violet-500/15 p-3.5">
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="p-1.5 rounded-lg bg-zinc-900/60 text-violet-400">
+                            <ShoppingCart className="h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 font-medium mb-0.5">AOV (Avg Order)</p>
+                        <p className="text-sm font-bold text-zinc-100">{formatCurrency(d.today.avgOrder)}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Kemarin: {formatCurrency(d.yesterday.avgOrder)}</p>
+                      </div>
+
+                      {/* Stok Bermasalah */}
+                      <div className={`rounded-xl bg-gradient-to-br ${
+                        d.products.outOfStock > 0 ? 'from-rose-500/10 to-rose-500/5 border-rose-500/15' : 'from-emerald-500/10 to-emerald-500/5 border-emerald-500/15'
+                      } border p-3.5`}>
+                        <div className="flex items-start justify-between mb-2">
+                          <span className={`p-1.5 rounded-lg bg-zinc-900/60 ${d.products.outOfStock > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            <Package className="h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 font-medium mb-0.5">Stok Bermasalah</p>
+                        <p className="text-sm font-bold text-zinc-100">{d.products.outOfStock + d.products.lowStock}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{d.products.outOfStock} habis, {d.products.lowStock} rendah</p>
+                      </div>
+
+                      {/* Customer */}
+                      <div className="rounded-xl bg-gradient-to-br from-sky-500/10 to-sky-500/5 border border-sky-500/15 p-3.5">
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="p-1.5 rounded-lg bg-zinc-900/60 text-sky-400">
+                            <Users className="h-3.5 w-3.5" />
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-zinc-500 font-medium mb-0.5">Customer</p>
+                        <p className="text-sm font-bold text-zinc-100">{formatNumber(d.customers.total)}</p>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">+{d.customers.newThisWeek} minggu ini</p>
+                      </div>
+                    </div>
+
+                    {/* CMO Score & CTO Score */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* CMO Score */}
+                      <div className={`rounded-xl bg-gradient-to-br ${getBizScoreBg(bizData.cmo.score)} border p-4`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <TrendingUp className={`h-4 w-4 ${getBizScoreColor(bizData.cmo.score)}`} />
+                              <h3 className="text-xs font-semibold text-zinc-200">CMO Score</h3>
+                            </div>
+                            <p className="text-[10px] text-zinc-400 leading-relaxed mt-1">
+                              Performa marketing & penjualan.
+                            </p>
+                            <div className="flex gap-1.5 mt-2">
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                {bizData.cmo.insights.filter(i => i.type === 'positive').length} positif
+                              </Badge>
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                {bizData.cmo.insights.filter(i => i.type === 'warning' || i.type === 'critical').length} perlu atensi
+                              </Badge>
+                            </div>
+                          </div>
+                          <BizScoreRing score={bizData.cmo.score} label="Marketing" />
+                        </div>
+                      </div>
+
+                      {/* CTO Score */}
+                      <div className={`rounded-xl bg-gradient-to-br ${getBizScoreBg(bizData.cto.score)} border p-4`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <Activity className={`h-4 w-4 ${getBizScoreColor(bizData.cto.score)}`} />
+                              <h3 className="text-xs font-semibold text-zinc-200">CTO Score</h3>
+                            </div>
+                            <p className="text-[10px] text-zinc-400 leading-relaxed mt-1">
+                              Kesehatan operasional.
+                            </p>
+                            <div className="flex gap-1.5 mt-2">
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                {bizData.cto.insights.filter(i => i.type === 'positive').length} positif
+                              </Badge>
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                {bizData.cto.insights.filter(i => i.type === 'warning' || i.type === 'critical').length} perlu atensi
+                              </Badge>
+                            </div>
+                          </div>
+                          <BizScoreRing score={bizData.cto.score} label="Operasional" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top 5 Products & Payment Methods */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {/* Top 5 Products */}
+                      <Card className="bg-zinc-900 border border-zinc-800/60">
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Package className="h-3.5 w-3.5 text-zinc-400" />
+                            <h3 className="text-xs font-semibold text-zinc-200">Produk Terlaris</h3>
+                          </div>
+                          {d.products.topSelling.length === 0 ? (
+                            <p className="text-xs text-zinc-500 text-center py-4">Belum ada data penjualan</p>
+                          ) : (
+                            <div className="space-y-2 max-h-52 overflow-y-auto">
+                              {d.products.topSelling.slice(0, 5).map((p, i) => (
+                                <div key={i} className="flex items-center gap-3">
+                                  <span className="text-[10px] text-zinc-600 w-4 font-bold">{i + 1}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-zinc-200 truncate">{p.name}</p>
+                                    <p className="text-[10px] text-zinc-500">{p.qty} unit · {formatCurrency(p.revenue)}</p>
+                                  </div>
+                                  <div className="w-16 h-1.5 bg-zinc-800 rounded-full overflow-hidden shrink-0">
+                                    <div
+                                      className="h-full bg-emerald-500/60 rounded-full"
+                                      style={{ width: `${d.products.topSelling[0].qty > 0 ? (p.qty / d.products.topSelling[0].qty) * 100 : 0}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Payment Methods */}
+                      <Card className="bg-zinc-900 border border-zinc-800/60">
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <ShoppingCart className="h-3.5 w-3.5 text-zinc-400" />
+                            <h3 className="text-xs font-semibold text-zinc-200">Metode Pembayaran</h3>
+                          </div>
+                          {d.transactions.paymentMethods.length === 0 ? (
+                            <p className="text-xs text-zinc-500 text-center py-4">Belum ada data</p>
+                          ) : (
+                            <div className="space-y-2 max-h-52 overflow-y-auto">
+                              {d.transactions.paymentMethods.map((pm) => {
+                                const totalTx = d.transactions.paymentMethods.reduce((s, p) => s + p.count, 0)
+                                const pct = totalTx > 0 ? (pm.count / totalTx) * 100 : 0
+                                return (
+                                  <div key={pm.method} className="flex items-center gap-3">
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] px-2 py-0 shrink-0 ${
+                                        pm.method === 'CASH' ? 'border-emerald-500/20 text-emerald-400 bg-emerald-500/5' :
+                                        pm.method === 'QRIS' ? 'border-violet-500/20 text-violet-400 bg-violet-500/5' :
+                                        'border-sky-500/20 text-sky-400 bg-sky-500/5'
+                                      }`}
+                                    >
+                                      {pm.method}
+                                    </Badge>
+                                    <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-zinc-600 rounded-full"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-zinc-400 w-8 text-right">{pct.toFixed(0)}%</span>
+                                    <span className="text-[10px] text-zinc-500 w-16 text-right">{formatCurrency(pm.total)}</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Data Quality */}
+                    <Card className="bg-zinc-900 border border-zinc-800/60">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-zinc-400" />
+                          <h3 className="text-xs font-semibold text-zinc-200">Kualitas Data</h3>
+                        </div>
+                        <div className="space-y-2.5">
+                          <BizDataQualityRow label="Tanpa Kategori" count={d.dataQuality.productsWithoutCategory} total={d.products.total} />
+                          <BizDataQualityRow label="Tanpa SKU" count={d.dataQuality.productsWithoutSku} total={d.products.total} />
+                          <BizDataQualityRow label="Tanpa Foto" count={d.dataQuality.productsWithoutImage} total={d.products.total} />
+                          <BizDataQualityRow label="Potensi Dead Stock" count={d.dataQuality.deadStockCount} total={d.products.total} color={d.dataQuality.deadStockCount > d.products.total * 0.3 ? 'rose' : undefined} />
+                        </div>
+                        {d.dataQuality.deadStockValue > 0 && (
+                          <div className="mt-3 pt-2.5 border-t border-zinc-800/60">
+                            <p className="text-[10px] text-zinc-500">Nilai Dead Stock</p>
+                            <p className="text-xs font-semibold text-amber-400">{formatCurrency(d.dataQuality.deadStockValue)}</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <p className="text-[10px] text-zinc-600 text-center">
+                      Diperbarui: {new Date(bizData.generatedAt).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}
+                    </p>
+                  </div>
+                )
+              })()}
             </CardContent>
           </Card>
         </motion.div>
