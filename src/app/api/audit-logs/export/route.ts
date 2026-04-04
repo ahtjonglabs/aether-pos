@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
     if (!user) return unauthorized()
+    // Security: Only OWNER can export audit logs (contain sensitive user data)
+    if (user.role !== 'OWNER') {
+      return safeJsonError('Hanya pemilik yang dapat export audit log', 403)
+    }
     const outletId = user.outletId
 
     // K2: Plan gating — only Pro/Enterprise can export Excel

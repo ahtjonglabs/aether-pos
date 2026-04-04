@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   DollarSign,
   Receipt,
@@ -42,6 +43,9 @@ import {
   CircleDot,
   Check,
   ShieldAlert,
+  Megaphone,
+  Cpu,
+  RefreshCw,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -125,6 +129,44 @@ function formatDateNow(): string {
   }).format(new Date())
 }
 
+// ── Insight Content Renderer ──
+function InsightContent({ text, accentColor }: { text: string; accentColor: 'emerald' | 'violet' }) {
+  const lines = text.split('\n').filter((l) => l.trim())
+  const colorMap = {
+    emerald: { bullet: 'bg-emerald-400', text: 'text-emerald-400' },
+    violet: { bullet: 'bg-violet-400', text: 'text-violet-400' },
+  }
+  const colors = colorMap[accentColor]
+
+  return (
+    <div className="space-y-2.5">
+      {lines.map((line, i) => {
+        const trimmed = line.trim()
+        // Skip empty lines
+        if (!trimmed) return null
+        // Handle bullet points (•, -, *, or numbered)
+        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') || /^\d+\./.test(trimmed)
+        const content = isBullet
+          ? trimmed.replace(/^[•\-*]\s*/, '').replace(/^\d+\.\s*/, '')
+          : trimmed
+        // Skip header-like lines (## or ###)
+        if (/^#{1,3}\s/.test(content)) return null
+
+        return (
+          <div key={i} className="flex items-start gap-2.5">
+            {isBullet ? (
+              <div className={`w-1.5 h-1.5 rounded-full ${colors.bullet} mt-1.5 shrink-0`} />
+            ) : null}
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              {content}
+            </p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession()
   const { plan, features, isSuspended, isLoading: planLoading } = usePlan()
@@ -134,6 +176,33 @@ export default function DashboardPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isOwner = session?.user?.role === 'OWNER'
   const isPro = features?.apiAccess === true
+
+  // AI Insight state
+  const [aiTab, setAiTab] = useState<'cmo' | 'cto'>('cmo')
+  const [aiInsights, setAiInsights] = useState<{ cmo: string; cto: string; generatedAt: string } | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+
+  const generateInsights = useCallback(async () => {
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const res = await fetch('/api/insights/generate', { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Gagal menghasilkan insight')
+      }
+      const data = await res.json()
+      setAiInsights(data)
+      setAiTab('cmo')
+      toast.success('AI Insight berhasil di-generate')
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Terjadi kesalahan')
+      toast.error('Gagal menghasilkan AI Insight')
+    } finally {
+      setAiLoading(false)
+    }
+  }, [])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -637,154 +706,266 @@ export default function DashboardPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════
-          SECTION 3 — Peak Hours + AI Insight Row (OWNER only)
+          SECTION 3 — Peak Hours (OWNER only)
       ═══════════════════════════════════════════════════ */}
       {isOwner && (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Peak Hours Chart — Pro-gated */}
-          <motion.div variants={itemVariants} className="lg:col-span-3">
-            <Card className="bg-zinc-900 border border-zinc-800/60 h-full">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-violet-400" />
-                    <h2 className="text-sm font-semibold text-zinc-200">
-                      Jam Ramai Hari Ini
-                    </h2>
-                    {busiestHour && busiestHour.transactionCount > 0 && (
-                      <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px]">
-                        Puncak: {String(busiestHour.hour).padStart(2, '0')}:00
-                      </Badge>
-                    )}
-                  </div>
-                  {!isPro && (
-                    <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] gap-1">
-                      <Crown className="h-3 w-3" />
-                      PRO
+        <motion.div variants={itemVariants}>
+          <Card className="bg-zinc-900 border border-zinc-800/60">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-violet-400" />
+                  <h2 className="text-sm font-semibold text-zinc-200">
+                    Jam Ramai Hari Ini
+                  </h2>
+                  {busiestHour && busiestHour.transactionCount > 0 && (
+                    <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px]">
+                      Puncak: {String(busiestHour.hour).padStart(2, '0')}:00
                     </Badge>
                   )}
                 </div>
+                {!isPro && (
+                  <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] gap-1">
+                    <Crown className="h-3 w-3" />
+                    PRO
+                  </Badge>
+                )}
+              </div>
 
-                {!isPro ? (
-                  <div className="h-28 sm:h-36 flex flex-col items-center justify-center text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
-                    <Crown className="h-8 w-8 text-amber-400/40 mb-2" />
-                    <p className="text-xs text-zinc-400 font-medium">
-                      Upgrade ke Pro untuk Peak Hours
-                    </p>
-                    <p className="text-[11px] text-zinc-600 mt-0.5">
-                      Analisa jam tersibuk untuk optimasi shift karyawan
-                    </p>
+              {!isPro ? (
+                <div className="h-28 sm:h-36 flex flex-col items-center justify-center text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
+                  <Crown className="h-8 w-8 text-amber-400/40 mb-2" />
+                  <p className="text-xs text-zinc-400 font-medium">
+                    Upgrade ke Pro untuk Peak Hours
+                  </p>
+                  <p className="text-[11px] text-zinc-600 mt-0.5">
+                    Analisa jam tersibuk untuk optimasi shift karyawan
+                  </p>
+                </div>
+              ) : (
+                <div className="relative h-28 sm:h-36">
+                  {/* Y-axis label */}
+                  <div className="absolute left-0 top-0 bottom-6 w-7 flex flex-col justify-between text-[10px] text-zinc-600">
+                    <span>{maxTxCount}</span>
+                    <span>{Math.round(maxTxCount / 2)}</span>
+                    <span>0</span>
                   </div>
-                ) : (
-                  <div className="relative h-28 sm:h-36">
-                    {/* Y-axis label */}
-                    <div className="absolute left-0 top-0 bottom-6 w-7 flex flex-col justify-between text-[10px] text-zinc-600">
-                      <span>{maxTxCount}</span>
-                      <span>{Math.round(maxTxCount / 2)}</span>
-                      <span>0</span>
-                    </div>
-                    {/* Chart area */}
-                    <div className="ml-9 h-full flex items-end gap-[3px]">
-                      {stats?.peakHours?.map((bucket) => {
-                        const heightPct =
-                          maxTxCount > 0
-                            ? (bucket.transactionCount / maxTxCount) * 100
-                            : 0
-                        const isPeak =
-                          busiestHour?.hour === bucket.hour &&
-                          bucket.transactionCount > 0
-                        return (
-                          <div
-                            key={bucket.hour}
-                            className="flex-1 flex flex-col items-center gap-1 group relative"
-                          >
-                            {/* Tooltip */}
-                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
-                              <p className="text-zinc-300 font-medium">
-                                {String(bucket.hour).padStart(2, '0')}:00 —{' '}
-                                {bucket.transactionCount} trx
-                              </p>
-                              <p className="text-emerald-400">
-                                {formatCurrency(bucket.revenue)}
-                              </p>
-                            </div>
-                            <motion.div
-                              className={`w-full rounded-t transition-colors duration-150 ${
-                                isPeak
-                                  ? 'bg-gradient-to-t from-violet-600 to-violet-400'
-                                  : bucket.transactionCount > 0
-                                    ? 'bg-emerald-500/50 hover:bg-emerald-400/70'
-                                    : 'bg-zinc-800/80'
-                              }`}
-                              initial={{ height: 0 }}
-                              animate={{ height: `${Math.max(heightPct, 2)}%` }}
-                              transition={{ duration: 0.6, ease: 'easeOut' }}
-                            />
-                            {/* Hour labels (show every 3h) */}
-                            {bucket.hour % 3 === 0 && (
-                              <span className="text-[9px] text-zinc-600 -mt-0.5">
-                                {String(bucket.hour).padStart(2, '0')}
-                              </span>
-                            )}
+                  {/* Chart area */}
+                  <div className="ml-9 h-full flex items-end gap-[3px]">
+                    {stats?.peakHours?.map((bucket) => {
+                      const heightPct =
+                        maxTxCount > 0
+                          ? (bucket.transactionCount / maxTxCount) * 100
+                          : 0
+                      const isPeak =
+                        busiestHour?.hour === bucket.hour &&
+                        bucket.transactionCount > 0
+                      return (
+                        <div
+                          key={bucket.hour}
+                          className="flex-1 flex flex-col items-center gap-1 group relative"
+                        >
+                          {/* Tooltip */}
+                          <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
+                            <p className="text-zinc-300 font-medium">
+                              {String(bucket.hour).padStart(2, '0')}:00 —{' '}
+                              {bucket.transactionCount} trx
+                            </p>
+                            <p className="text-emerald-400">
+                              {formatCurrency(bucket.revenue)}
+                            </p>
                           </div>
-                        )
-                      })}
-                    </div>
-                    {/* X-axis line */}
-                    <div className="ml-9 mt-0 h-px bg-zinc-800" />
+                          <motion.div
+                            className={`w-full rounded-t transition-colors duration-150 ${
+                              isPeak
+                                ? 'bg-gradient-to-t from-violet-600 to-violet-400'
+                                : bucket.transactionCount > 0
+                                  ? 'bg-emerald-500/50 hover:bg-emerald-400/70'
+                                  : 'bg-zinc-800/80'
+                            }`}
+                            initial={{ height: 0 }}
+                            animate={{ height: `${Math.max(heightPct, 2)}%` }}
+                            transition={{ duration: 0.6, ease: 'easeOut' }}
+                          />
+                          {/* Hour labels (show every 3h) */}
+                          {bucket.hour % 3 === 0 && (
+                            <span className="text-[9px] text-zinc-600 -mt-0.5">
+                              {String(bucket.hour).padStart(2, '0')}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
+                  {/* X-axis line */}
+                  <div className="ml-9 mt-0 h-px bg-zinc-800" />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
-          {/* AI Insight — Pro-gated */}
-          <motion.div variants={itemVariants} className="lg:col-span-2">
-            <Card className="bg-zinc-900 border border-zinc-800/60 h-full">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
+      {/* ═══════════════════════════════════════════════════
+          SECTION 3b — AI Insight (OWNER + Pro only)
+      ═══════════════════════════════════════════════════ */}
+      {isOwner && isPro && (
+        <motion.div variants={itemVariants}>
+          <Card className="bg-zinc-900 border border-zinc-800/60 overflow-hidden relative">
+            {/* Gradient border accents */}
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
+
+            <CardContent className="p-4">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/15 to-violet-500/15 flex items-center justify-center">
                     <Sparkles className="h-4 w-4 text-amber-400" />
-                    <h2 className="text-sm font-semibold text-zinc-200">
-                      AI Insight
-                    </h2>
                   </div>
-                  {!isPro && (
-                    <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] gap-1">
-                      <Crown className="h-3 w-3" />
-                      PRO
-                    </Badge>
-                  )}
+                  <div>
+                    <h2 className="text-sm font-semibold text-zinc-200">AI Insight</h2>
+                    <p className="text-[10px] text-zinc-500">Analisa cerdas berbasis data penjualan kamu</p>
+                  </div>
                 </div>
 
-                {!isPro ? (
-                  <div className="flex flex-col items-center justify-center h-28 text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
-                    <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0 mb-2">
-                      <Sparkles className="h-5 w-5 text-amber-400/50" />
-                    </div>
-                    <p className="text-xs text-zinc-400 font-medium">
-                      Upgrade ke Pro untuk AI Insight
-                    </p>
-                    <p className="text-[11px] text-zinc-600 mt-0.5">
-                      Rekomendasi cerdas berbasis data penjualan
-                    </p>
+                <div className="flex items-center gap-2">
+                  {aiInsights && (
+                    <span className="text-[10px] text-zinc-500 hidden sm:inline">
+                      {new Date(aiInsights.generatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-amber-500/90 to-violet-500/90 hover:from-amber-500 hover:to-violet-500 text-white text-xs font-medium h-8 px-3 rounded-lg gap-1.5 shadow-lg shadow-amber-500/10"
+                    onClick={generateInsights}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : aiInsights ? (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    {aiLoading ? 'Menganalisa...' : aiInsights ? 'Refresh' : 'Generate'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Content */}
+              {!aiInsights && !aiLoading && !aiError && (
+                <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/10 to-violet-500/10 flex items-center justify-center mb-3">
+                    <Sparkles className="h-7 w-7 text-amber-400/60" />
                   </div>
-                ) : (
-                  <div className="flex items-start gap-3 rounded-xl bg-gradient-to-br from-amber-500/5 via-transparent to-violet-500/5 border border-amber-500/10 p-4 h-28">
-                    <div className="w-9 h-9 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <Sparkles className="h-4.5 w-4.5 text-amber-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-zinc-300 leading-relaxed">
-                        {stats?.aiInsight ?? 'Memuat insight...'}
-                      </p>
-                    </div>
+                  <p className="text-sm text-zinc-300 font-medium mb-1">
+                    Belum ada insight
+                  </p>
+                  <p className="text-xs text-zinc-500 max-w-xs">
+                    Klik "Generate" untuk mendapatkan rekomendasi AI berbasis data penjualan kamu
+                  </p>
+                </div>
+              )}
+
+              {aiLoading && (
+                <div className="space-y-4 py-2">
+                  {/* Tab skeleton */}
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 w-24 bg-zinc-800 rounded-lg" />
+                    <Skeleton className="h-8 w-24 bg-zinc-800 rounded-lg" />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
-        </div>
+                  {/* Content skeleton */}
+                  <div className="space-y-3">
+                    <Skeleton className="h-4 w-full bg-zinc-800 rounded" />
+                    <Skeleton className="h-4 w-[90%] bg-zinc-800 rounded" />
+                    <Skeleton className="h-4 w-[85%] bg-zinc-800 rounded" />
+                    <Skeleton className="h-4 w-[75%] bg-zinc-800 rounded" />
+                  </div>
+                  <p className="text-[11px] text-zinc-500 text-center mt-2">
+                    AI sedang menganalisa data penjualan kamu...
+                  </p>
+                </div>
+              )}
+
+              {aiError && (
+                <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl bg-red-500/5 border border-red-500/15">
+                  <AlertTriangle className="h-7 w-7 text-red-400/60 mb-2" />
+                  <p className="text-sm text-zinc-300 font-medium mb-1">Gagal menghasilkan insight</p>
+                  <p className="text-xs text-zinc-500 mb-3 max-w-xs">{aiError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg"
+                    onClick={generateInsights}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Coba Lagi
+                  </Button>
+                </div>
+              )}
+
+              {aiInsights && !aiLoading && !aiError && (
+                <Tabs value={aiTab} onValueChange={(v) => setAiTab(v as 'cmo' | 'cto')}>
+                  <TabsList className="bg-zinc-800/60 border border-zinc-700/40 h-9 p-[3px]">
+                    <TabsTrigger
+                      value="cmo"
+                      className={`text-xs font-medium gap-1.5 rounded-md px-3 data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-sm`}
+                    >
+                      <Megaphone className="h-3.5 w-3.5" />
+                      CMO
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="cto"
+                      className={`text-xs font-medium gap-1.5 rounded-md px-3 data-[state=active]:bg-violet-500/15 data-[state=active]:text-violet-400 data-[state=active]:border-violet-500/20 data-[state=active]:shadow-sm`}
+                    >
+                      <Cpu className="h-3.5 w-3.5" />
+                      CTO
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="cmo">
+                    <div className={`rounded-xl border p-4 mt-1 ${
+                      aiTab === 'cmo'
+                        ? 'bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent border-emerald-500/10'
+                        : 'bg-zinc-800/20 border-zinc-700/30'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-md bg-emerald-500/15 flex items-center justify-center">
+                          <Megaphone className="h-3.5 w-3.5 text-emerald-400" />
+                        </div>
+                        <h3 className="text-xs font-semibold text-emerald-400">
+                          Chief Marketing Officer
+                        </h3>
+                        <span className="text-[10px] text-zinc-500">— Strategi Marketing & Revenue</span>
+                      </div>
+                      <InsightContent text={aiInsights.cmo} accentColor="emerald" />
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="cto">
+                    <div className={`rounded-xl border p-4 mt-1 ${
+                      aiTab === 'cto'
+                        ? 'bg-gradient-to-br from-violet-500/5 via-transparent to-transparent border-violet-500/10'
+                        : 'bg-zinc-800/20 border-zinc-700/30'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-6 h-6 rounded-md bg-violet-500/15 flex items-center justify-center">
+                          <Cpu className="h-3.5 w-3.5 text-violet-400" />
+                        </div>
+                        <h3 className="text-xs font-semibold text-violet-400">
+                          Chief Technology Officer
+                        </h3>
+                        <span className="text-[10px] text-zinc-500">— Operasional & Teknologi</span>
+                      </div>
+                      <InsightContent text={aiInsights.cto} accentColor="violet" />
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
       )}
 
       {/* ═══════════════════════════════════════════════════

@@ -50,13 +50,11 @@ export async function PUT(
     }
 
     if (password !== undefined) {
-      if (password.length < 6) {
-        return safeJsonError('Password minimal 6 karakter', 400)
+      if (password.length < 8) {
+        return safeJsonError('Password minimal 8 karakter', 400)
       }
-      if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10)
-        updateData.password = hashedPassword
-      }
+      const hashedPassword = await bcrypt.hash(password, 10)
+      updateData.password = hashedPassword
     }
 
     if (Object.keys(updateData).length === 0) {

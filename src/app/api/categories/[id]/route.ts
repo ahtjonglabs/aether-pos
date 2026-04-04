@@ -57,6 +57,9 @@ export async function DELETE(
   try {
     const user = await getAuthUser(request)
     if (!user) return unauthorized()
+    if (user.role !== 'OWNER') {
+      return safeJsonError('Hanya pemilik yang dapat menghapus kategori', 403)
+    }
     const { id } = await params
 
     // Verify ownership

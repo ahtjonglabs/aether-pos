@@ -11,6 +11,28 @@
 import { type PrismaClient } from '@prisma/client'
 
 // ============================================================
+// Validation Helpers
+// ============================================================
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Validate email format. Returns error message or null if valid. */
+export function validateEmail(email: string): string | null {
+  if (!email) return 'Email wajib diisi'
+  if (!EMAIL_REGEX.test(email)) return 'Format email tidak valid'
+  return null
+}
+
+const MIN_PASSWORD_LENGTH = 8
+
+/** Validate password minimum length. Returns error message or null if valid. */
+export function validatePassword(password: string): string | null {
+  if (!password) return 'Password wajib diisi'
+  if (password.length < MIN_PASSWORD_LENGTH) return `Password minimal ${MIN_PASSWORD_LENGTH} karakter`
+  return null
+}
+
+// ============================================================
 // Pagination
 // ============================================================
 

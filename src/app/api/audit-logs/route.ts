@@ -10,10 +10,14 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return unauthorized()
     }
+    // Security: Only OWNER can view full audit logs (contain sensitive user actions)
+    if (user.role !== 'OWNER') {
+      return safeJsonError('Hanya pemilik yang dapat melihat audit log', 403)
+    }
     const outletId = user.outletId
 
     const { searchParams } = request.nextUrl
-    const { page, limit, skip } = parsePagination(searchParams)
+    const { limit, skip } = parsePagination(searchParams)
     const action = searchParams.get('action') || ''
     const entityType = searchParams.get('entityType') || ''
     const dateFrom = searchParams.get('from') || ''

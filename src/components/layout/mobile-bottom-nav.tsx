@@ -18,6 +18,7 @@ import {
   UserCog,
   LogOut,
   Lock,
+  Brain,
 } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -70,6 +71,7 @@ interface MoreMenuItem {
 }
 
 const allMoreMenuItems: MoreMenuItem[] = [
+  { page: 'insights', icon: <Brain className="h-4 w-4" />, label: 'Insight', section: 'Main' },
   { page: 'customers', icon: <Users className="h-4 w-4" />, label: 'Customers', section: 'Main' },
   { page: 'audit-log', icon: <ClipboardList className="h-4 w-4" />, label: 'Audit Log', section: 'Admin' },
   { page: 'crew', icon: <UserCog className="h-4 w-4" />, label: 'Kelola Crew', section: 'Admin' },

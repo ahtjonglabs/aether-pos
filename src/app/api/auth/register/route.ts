@@ -1,21 +1,24 @@
 import { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
+import { validateEmail, validatePassword } from '@/lib/api-helpers';
 import { safeJsonCreated, safeJsonError } from '@/lib/safe-response';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { outletName, ownerName, email, password, accountType } = body;
+    const { outletName, ownerName, email, password } = body;
 
     // Validate required fields
     if (!outletName || !ownerName || !email || !password) {
       return safeJsonError('All fields are required', 400);
     }
 
-    if (password.length < 6) {
-      return safeJsonError('Password must be at least 6 characters', 400);
-    }
+    const emailErr = validateEmail(email);
+    if (emailErr) return safeJsonError(emailErr, 400);
+
+    const passwordErr = validatePassword(password);
+    if (passwordErr) return safeJsonError(passwordErr, 400);
 
     // Check if email already exists (use findFirst since email is part of compound unique [email, outletId])
     const existingUser = await db.user.findFirst({ where: { email } });
@@ -26,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Determine account type (always default to "free")
+    // All new outlets start with free plan
     const finalAccountType = 'free';
 
     // Create outlet + owner in transaction

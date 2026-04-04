@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { validateEmail } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 /**
@@ -22,11 +23,8 @@ export async function POST(request: NextRequest) {
       return safeJsonError('Email dan password saat ini wajib diisi', 400)
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      return safeJsonError('Format email tidak valid', 400)
-    }
+    const emailErr = validateEmail(email)
+    if (emailErr) return safeJsonError(emailErr, 400)
 
     // Fetch user with password
     const dbUser = await db.user.findUnique({

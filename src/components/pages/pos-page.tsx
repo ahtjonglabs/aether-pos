@@ -466,10 +466,20 @@ export default function PosPage() {
               }
               toast.success(`${data.synced} transaction(s) auto-synced!`)
             }
+            // Check for auth error on transaction sync
+            if (res.status === 401 || res.status === 403) {
+              toast.error('Sesi telah berakhir. Silakan login ulang untuk sync transaksi.', { duration: 5000 })
+              syncingRef.current = false
+              setDataSyncing(false)
+              return
+            }
           }
 
           setDataSyncing(true)
           const result = await syncAllData()
+          if (result.hasAuthError) {
+            toast.error('Sesi telah berakhir. Silakan login ulang untuk sync data.', { duration: 5000 })
+          }
           syncSettingsFromServer() // cache settings for offline (fire-and-forget)
           fetchProducts(productSearch, productPage, selectedCategoryId)
           loadCategoriesFromCache()
@@ -501,7 +511,9 @@ export default function PosPage() {
           loadCustomersFromCache()
           const times = await getAllSyncTimes()
           setLastSyncTimes(times)
-          if (result.products.count > 0 || result.customers.count > 0) {
+          if (result.hasAuthError) {
+            toast.error('Sesi telah berakhir. Silakan login ulang untuk sync data.', { duration: 5000 })
+          } else if (result.products.count > 0 || result.customers.count > 0) {
             toast.success(`Data synced: ${result.products.count} produk, ${result.categories.count} kategori, ${result.customers.count} customer`)
           }
         } catch {
@@ -937,6 +949,10 @@ export default function PosPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: pending }),
       })
+      if (res.status === 401 || res.status === 403) {
+        toast.error('Sesi telah berakhir. Silakan login ulang untuk sync transaksi.', { duration: 5000 })
+        return
+      }
       const data = await res.json()
 
       if (res.ok) {

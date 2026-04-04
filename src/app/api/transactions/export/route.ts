@@ -125,7 +125,9 @@ export async function GET(request: NextRequest) {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions')
 
     const dateRange = dateFrom && dateTo ? `${dateFrom}_to_${dateTo}` : 'all'
-    const filename = `transactions_${dateRange}.xlsx`
+    // Sanitize filename to prevent header injection
+    const sanitizedRange = dateRange.replace(/[^\w.-]/g, '_')
+    const filename = `transactions_${sanitizedRange}.xlsx`
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
 

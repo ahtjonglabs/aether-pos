@@ -49,10 +49,10 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
 
     // Decrypt the JWE token
     const { payload } = await jwtDecrypt(tokenCookie.value, encryptionKey, {
-      clockTolerance: 15,
+      clockTolerance: 900, // 15 minutes — important for offline→online time drift
     })
 
-    if (!payload?.email) {
+    if (!payload?.email || !payload?.role) {
       return null
     }
 
@@ -60,7 +60,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       id: (payload.id as string) || (payload.sub as string) || '',
       name: (payload.name as string) || null,
       email: (payload.email as string) || null,
-      role: (payload.role as string) || 'CREW',
+      role: (payload.role as string) || null,
       outletId: (payload.outletId as string) || '',
     }
   } catch (error) {

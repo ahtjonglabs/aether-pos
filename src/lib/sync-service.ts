@@ -14,17 +14,30 @@
 import { localDB } from './local-db'
 import type { CachedProduct, CachedCustomer, CachedPromo, CachedCategory } from './local-db'
 
+// ==================== HELPERS ====================
+
+/**
+ * Check if a fetch response indicates an authentication error.
+ */
+function isAuthError(res: Response): boolean {
+  return res.status === 401 || res.status === 403
+}
+
+/** Common sync result type with optional authError flag */
+interface SyncResultBase {
+  success: boolean
+  error?: string
+  authError?: boolean
+}
+
 // ==================== SYNC FUNCTIONS ====================
 
 /**
  * Download ALL products from server (paginated) and save to IndexedDB.
- * Replaces entire local cache (full overwrite).
+ * Returns `authError: true` if session expired so the caller can
+ * show a user-friendly "please re-login" message.
  */
-export async function syncProductsFromServer(): Promise<{
-  success: boolean
-  count: number
-  error?: string
-}> {
+export async function syncProductsFromServer(): Promise<SyncResultBase & { count: number }> {
   try {
     const allProducts: CachedProduct[] = []
     let page = 1
@@ -33,6 +46,9 @@ export async function syncProductsFromServer(): Promise<{
 
     while (hasMore) {
       const res = await fetch(`/api/products?limit=${limit}&page=${page}`)
+      if (isAuthError(res)) {
+        return { success: false, count: 0, error: 'Sesi telah berakhir. Silakan login ulang.', authError: true }
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
       const data = await res.json()
@@ -56,7 +72,6 @@ export async function syncProductsFromServer(): Promise<{
 
       allProducts.push(...products)
 
-      // Check if there are more pages
       const totalPages = data.totalPages || 1
       hasMore = page < totalPages
       page++
@@ -67,12 +82,7 @@ export async function syncProductsFromServer(): Promise<{
       await localDB.products.bulkPut(allProducts)
     }
 
-    // Record sync timestamp
-    await localDB.syncMeta.put({
-      key: 'lastProductSync',
-      value: Date.now(),
-    })
-
+    await localDB.syncMeta.put({ key: 'lastProductSync', value: Date.now() })
     return { success: true, count: allProducts.length }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -83,13 +93,12 @@ export async function syncProductsFromServer(): Promise<{
 /**
  * Download ALL categories from server and save to IndexedDB.
  */
-export async function syncCategoriesFromServer(): Promise<{
-  success: boolean
-  count: number
-  error?: string
-}> {
+export async function syncCategoriesFromServer(): Promise<SyncResultBase & { count: number }> {
   try {
     const res = await fetch('/api/categories')
+    if (isAuthError(res)) {
+      return { success: false, count: 0, error: 'Sesi telah berakhir. Silakan login ulang.', authError: true }
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
     const data = await res.json()
@@ -107,11 +116,7 @@ export async function syncCategoriesFromServer(): Promise<{
       await localDB.categories.bulkPut(categories)
     }
 
-    await localDB.syncMeta.put({
-      key: 'lastCategorySync',
-      value: Date.now(),
-    })
-
+    await localDB.syncMeta.put({ key: 'lastCategorySync', value: Date.now() })
     return { success: true, count: categories.length }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -122,11 +127,7 @@ export async function syncCategoriesFromServer(): Promise<{
 /**
  * Download ALL customers from server (paginated) and save to IndexedDB.
  */
-export async function syncCustomersFromServer(): Promise<{
-  success: boolean
-  count: number
-  error?: string
-}> {
+export async function syncCustomersFromServer(): Promise<SyncResultBase & { count: number }> {
   try {
     const allCustomers: CachedCustomer[] = []
     let page = 1
@@ -135,6 +136,9 @@ export async function syncCustomersFromServer(): Promise<{
 
     while (hasMore) {
       const res = await fetch(`/api/customers?limit=${limit}&page=${page}`)
+      if (isAuthError(res)) {
+        return { success: false, count: 0, error: 'Sesi telah berakhir. Silakan login ulang.', authError: true }
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
       const data = await res.json()
@@ -161,11 +165,7 @@ export async function syncCustomersFromServer(): Promise<{
       await localDB.customers.bulkPut(allCustomers)
     }
 
-    await localDB.syncMeta.put({
-      key: 'lastCustomerSync',
-      value: Date.now(),
-    })
-
+    await localDB.syncMeta.put({ key: 'lastCustomerSync', value: Date.now() })
     return { success: true, count: allCustomers.length }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -176,13 +176,12 @@ export async function syncCustomersFromServer(): Promise<{
 /**
  * Download all promos from server and save to IndexedDB.
  */
-export async function syncPromosFromServer(): Promise<{
-  success: boolean
-  count: number
-  error?: string
-}> {
+export async function syncPromosFromServer(): Promise<SyncResultBase & { count: number }> {
   try {
     const res = await fetch('/api/settings/promos')
+    if (isAuthError(res)) {
+      return { success: false, count: 0, error: 'Sesi telah berakhir. Silakan login ulang.', authError: true }
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
     const data = await res.json()
@@ -204,11 +203,7 @@ export async function syncPromosFromServer(): Promise<{
       await localDB.promos.bulkPut(promos)
     }
 
-    await localDB.syncMeta.put({
-      key: 'lastPromoSync',
-      value: Date.now(),
-    })
-
+    await localDB.syncMeta.put({ key: 'lastPromoSync', value: Date.now() })
     return { success: true, count: promos.length }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -218,17 +213,19 @@ export async function syncPromosFromServer(): Promise<{
 
 // ==================== MASTER SYNC ====================
 
-/**
- * Sync all master data (products, categories, customers, promos) in parallel.
- * Called on app open when online.
- */
 export interface SyncAllResult {
-  products: { success: boolean; count: number; error?: string }
-  categories: { success: boolean; count: number; error?: string }
-  customers: { success: boolean; count: number; error?: string }
-  promos: { success: boolean; count: number; error?: string }
+  products: { success: boolean; count: number; error?: string; authError?: boolean }
+  categories: { success: boolean; count: number; error?: string; authError?: boolean }
+  customers: { success: boolean; count: number; error?: string; authError?: boolean }
+  promos: { success: boolean; count: number; error?: string; authError?: boolean }
+  /** True if any sync returned auth error (session expired) */
+  hasAuthError: boolean
 }
 
+/**
+ * Sync all master data in parallel.
+ * Returns `hasAuthError: true` if session expired during sync.
+ */
 export async function syncAllData(): Promise<SyncAllResult> {
   const [products, categories, customers, promos] = await Promise.all([
     syncProductsFromServer(),
@@ -237,17 +234,18 @@ export async function syncAllData(): Promise<SyncAllResult> {
     syncPromosFromServer(),
   ])
 
-  return { products, categories, customers, promos }
+  return {
+    products, categories, customers, promos,
+    hasAuthError: !!(products.authError || categories.authError || customers.authError || promos.authError),
+  }
 }
 
-// ==================== HELPERS ====================
+// ==================== UTILITY ====================
 
 /**
  * Get the last sync timestamp for a given key.
  */
-export async function getLastSyncTime(
-  key: string
-): Promise<number | null> {
+export async function getLastSyncTime(key: string): Promise<number | null> {
   const meta = await localDB.syncMeta.get(key)
   return meta ? meta.value : null
 }
@@ -286,9 +284,13 @@ export async function hasCachedData(): Promise<boolean> {
 export async function syncSettingsFromServer(): Promise<{
   success: boolean
   error?: string
+  authError?: boolean
 }> {
   try {
     const res = await fetch('/api/settings')
+    if (isAuthError(res)) {
+      return { success: false, error: 'Sesi telah berakhir. Silakan login ulang.', authError: true }
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
     const data = await res.json()

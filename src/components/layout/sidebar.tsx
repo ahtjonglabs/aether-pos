@@ -23,6 +23,7 @@ import {
   ShieldAlert,
   PanelLeftClose,
   PanelLeft,
+  Brain,
   UserCog,
   Lock,
 } from 'lucide-react'
@@ -62,6 +63,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', shortLabel: 'Dash', icon: <LayoutDashboard className="h-4 w-4" />, page: 'dashboard', section: 'main' },
+  { label: 'Insight', shortLabel: 'Ins', icon: <Brain className="h-4 w-4" />, page: 'insights', section: 'main' },
   { label: 'Products', shortLabel: 'Prod', icon: <Package className="h-4 w-4" />, page: 'products', section: 'main' },
   { label: 'Customers', shortLabel: 'Cust', icon: <Users className="h-4 w-4" />, page: 'customers', section: 'main' },
   { label: 'POS', shortLabel: 'POS', icon: <ShoppingCart className="h-4 w-4" />, page: 'pos', section: 'operations' },

@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     const dateFromMs = searchParams.get('dateFromMs') || ''
     const dateToMs = searchParams.get('dateToMs') || ''
     const tzOffset = searchParams.get('tzOffset') ? Number(searchParams.get('tzOffset')) : null
-    const filterOutletId = searchParams.get('outletId') || outletId
+    // Security: Always use authenticated user's outlet — ignore query param to prevent IDOR
+    const filterOutletId = outletId
 
     // Use timezone-aware filter if tzOffset is provided, else fall back to legacy
     let dateFilter: Record<string, Date>

@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth-utils';
+import { getPlanFeatures, isUnlimited } from '@/lib/plan-config';
 import type { PaginatedResult } from '@/lib/types';
 
 const PAGE_SIZE = 20;
@@ -69,12 +70,19 @@ export async function createProduct(data: {
 }) {
   const user = await getCurrentUser();
 
-  // Check max 100 products per outlet
-  const count = await db.product.count({
-    where: { outletId: user.outletId },
+  // Check plan-based product limit
+  const outlet = await db.outlet.findUnique({
+    where: { id: user.outletId },
+    select: { accountType: true },
   });
-  if (count >= 100) {
-    throw new Error('Maximum 100 products per outlet reached');
+  const features = getPlanFeatures(outlet?.accountType || 'free');
+  if (!isUnlimited(features.maxProducts)) {
+    const count = await db.product.count({
+      where: { outletId: user.outletId },
+    });
+    if (count >= features.maxProducts) {
+      throw new Error(`Batas produk untuk paket ${(outlet?.accountType || 'free')} sudah tercapai (${features.maxProducts}). Upgrade ke Pro untuk unlimited!`);
+    }
   }
 
   // Check unique name per outlet

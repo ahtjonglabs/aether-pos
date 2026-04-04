@@ -526,11 +526,11 @@ export default function AuthView() {
                         <Input
                           id="reg-password"
                           type="password"
-                          placeholder="Minimal 6 karakter"
+                          placeholder="Minimal 8 karakter"
                           value={regPassword}
                           onChange={(e) => setRegPassword(e.target.value)}
                           required
-                          minLength={6}
+                          minLength={8}
                           className={inputClasses}
                         />
                       </div>

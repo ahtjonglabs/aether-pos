@@ -179,8 +179,8 @@ function CrewManagement() {
       toast.error('Nama, email, dan password wajib diisi')
       return
     }
-    if (formData.password.length < 6) {
-      toast.error('Password minimal 6 karakter')
+    if (formData.password.length < 8) {
+      toast.error('Password minimal 8 karakter')
       return
     }
     setSaving(true)
@@ -229,8 +229,8 @@ function CrewManagement() {
       toast.error('Nama dan email wajib diisi')
       return
     }
-    if (formData.password && formData.password.length < 6) {
-      toast.error('Password minimal 6 karakter')
+    if (formData.password && formData.password.length < 8) {
+      toast.error('Password minimal 8 karakter')
       return
     }
 
@@ -529,7 +529,7 @@ function CrewManagement() {
                   type={formData.showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
-                  placeholder="Minimal 6 karakter"
+                  placeholder="Minimal 8 karakter"
                   className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm pr-9"
                 />
                 <button
@@ -544,8 +544,8 @@ function CrewManagement() {
                   )}
                 </button>
               </div>
-              {formData.password && formData.password.length < 6 && (
-                <p className="text-[11px] text-red-400">Password minimal 6 karakter</p>
+              {formData.password && formData.password.length < 8 && (
+                <p className="text-[11px] text-red-400">Password minimal 8 karakter</p>
               )}
             </div>
           </div>
@@ -560,7 +560,7 @@ function CrewManagement() {
             </Button>
             <Button
               onClick={handleAdd}
-              disabled={saving || !formData.name.trim() || !formData.email.trim() || formData.password.length < 6}
+              disabled={saving || !formData.name.trim() || !formData.email.trim() || formData.password.length < 8}
               className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
             >
               {saving && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
@@ -632,8 +632,8 @@ function CrewManagement() {
                   )}
                 </button>
               </div>
-              {formData.password && formData.password.length < 6 && (
-                <p className="text-[11px] text-red-400">Password minimal 6 karakter</p>
+              {formData.password && formData.password.length < 8 && (
+                <p className="text-[11px] text-red-400">Password minimal 8 karakter</p>
               )}
             </div>
           </div>
@@ -651,7 +651,7 @@ function CrewManagement() {
             </Button>
             <Button
               onClick={handleEdit}
-              disabled={saving || !formData.name.trim() || !formData.email.trim() || (formData.password.length > 0 && formData.password.length < 6)}
+              disabled={saving || !formData.name.trim() || !formData.email.trim() || (formData.password.length > 0 && formData.password.length < 8)}
               className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
             >
               {saving && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}

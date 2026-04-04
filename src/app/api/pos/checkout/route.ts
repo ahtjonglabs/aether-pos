@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       // 1. Validate all products exist and have enough stock
       const productIds = items.map((item: { productId: string }) => item.productId)
       const products = await tx.product.findMany({
-        where: { id: { in: productIds } },
+        where: { id: { in: productIds }, outletId },
       })
 
       const productMap = new Map(products.map((p) => [p.id, p]))

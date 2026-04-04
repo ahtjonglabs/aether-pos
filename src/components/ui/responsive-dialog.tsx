@@ -1,9 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { useIsMobile } from "@/hooks/use-mobile"
 
-// Dialog components (desktop)
+// Dialog components (always centered, both mobile and desktop)
 import {
   Dialog,
   DialogContent,
@@ -13,20 +12,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
-// Sheet components (mobile bottom sheet)
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-
 import { cn } from "@/lib/utils"
 
 // ============================================================
-// Root — transparent wrapper
+// Root — transparent wrapper, always uses Dialog
 // ============================================================
 function ResponsiveDialog({
   open,
@@ -37,16 +26,6 @@ function ResponsiveDialog({
   onOpenChange: (open: boolean) => void
   children: React.ReactNode
 }) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        {children}
-      </Sheet>
-    )
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children}
@@ -55,40 +34,25 @@ function ResponsiveDialog({
 }
 
 // ============================================================
-// Content — Sheet (bottom) on mobile, Dialog (center) on desktop
+// Content — always centered DialogContent, mobile-optimized
 // ============================================================
 function ResponsiveDialogContent({
   className,
   children,
-  desktopClassName,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogContent> & {
-  desktopClassName?: string
-} & React.ComponentProps<typeof SheetContent> & {
   showCloseButton?: boolean
 }) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return (
-      <SheetContent
-        side="bottom"
-        className={cn(
-          "bg-zinc-900 border-zinc-800 rounded-t-2xl max-h-[85vh] overflow-y-auto p-0",
-          className
-        )}
-        {...props}
-      >
-        {children}
-      </SheetContent>
-    )
-  }
-
   return (
     <DialogContent
       showCloseButton={showCloseButton}
-      className={cn("bg-zinc-900 border-zinc-800 rounded-xl", desktopClassName || className)}
+      className={cn(
+        "bg-zinc-900 border-zinc-800 rounded-xl max-h-[85vh] overflow-y-auto",
+        // Mobile: full-width with small margin, smaller padding
+        "w-[calc(100%-1rem)] sm:max-w-lg",
+        className
+      )}
       {...props}
     >
       {children}
@@ -97,82 +61,42 @@ function ResponsiveDialogContent({
 }
 
 // ============================================================
-// Header — SheetHeader / DialogHeader
+// Header — always DialogHeader
 // ============================================================
 function ResponsiveDialogHeader({
   className,
   ...props
-}: React.ComponentProps<typeof DialogHeader> & React.ComponentProps<typeof SheetHeader>) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return (
-      <SheetHeader
-        className={cn("px-5 pt-5 pb-2", className)}
-        {...props}
-      />
-    )
-  }
-
+}: React.ComponentProps<typeof DialogHeader>) {
   return <DialogHeader className={className} {...props} />
 }
 
 // ============================================================
-// Title — SheetTitle / DialogTitle
+// Title — always DialogTitle
 // ============================================================
 function ResponsiveDialogTitle({
   className,
   ...props
-}: React.ComponentProps<typeof DialogTitle> & React.ComponentProps<typeof SheetTitle>) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return <SheetTitle className={cn("text-zinc-100 text-sm font-semibold", className)} {...props} />
-  }
-
+}: React.ComponentProps<typeof DialogTitle>) {
   return <DialogTitle className={className} {...props} />
 }
 
 // ============================================================
-// Description — SheetDescription / DialogDescription
+// Description — always DialogDescription
 // ============================================================
 function ResponsiveDialogDescription({
   className,
   ...props
-}: React.ComponentProps<typeof DialogDescription> &
-  React.ComponentProps<typeof SheetDescription>) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return (
-      <SheetDescription className={cn("text-zinc-400 text-xs", className)} {...props} />
-    )
-  }
-
+}: React.ComponentProps<typeof DialogDescription>) {
   return <DialogDescription className={className} {...props} />
 }
 
 // ============================================================
-// Footer — SheetFooter / DialogFooter
+// Footer — always DialogFooter
 // ============================================================
 function ResponsiveDialogFooter({
   className,
   ...props
-}: React.ComponentProps<typeof DialogFooter> & React.ComponentProps<typeof SheetFooter>) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return (
-      <SheetFooter
-        className={cn(
-          "px-5 pb-5 pt-3 border-t border-zinc-800/60 flex-row gap-2",
-          className
-        )}
-        {...props}
-      />
-    )
-  }
-
+}: React.ComponentProps<typeof DialogFooter>) {
   return <DialogFooter className={className} {...props} />
 }
 

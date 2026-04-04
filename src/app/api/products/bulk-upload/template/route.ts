@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     // Headers with sample data
     const data = [
-      ['Nama*', 'SKU', 'HPP', 'Harga Jual*', 'Stok', 'Satuan', 'Kategori'],
+      ['Nama', 'SKU', 'HPP', 'Harga Jual', 'Stok', 'Satuan', 'Kategori'],
       ['Nasi Goreng Spesial', 'SKU-001', 10000, 25000, 50, 'porsi', 'Makanan'],
       ['Es Teh Manis', 'SKU-002', 3000, 8000, 100, 'gelas', 'Minuman'],
       ['Ayam Geprek', 'SKU-003', 12000, 20000, 30, 'porsi', 'Makanan'],

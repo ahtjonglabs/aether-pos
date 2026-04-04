@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import bcrypt from 'bcryptjs'
 import { resolvePlanType } from '@/lib/api-helpers'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'

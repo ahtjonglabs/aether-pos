@@ -85,6 +85,9 @@ export async function DELETE(
     if (!user) {
       return unauthorized()
     }
+    if (user.role !== 'OWNER') {
+      return safeJsonError('Hanya pemilik yang dapat menghapus customer', 403)
+    }
     const outletId = user.outletId
     const userId = user.id
 

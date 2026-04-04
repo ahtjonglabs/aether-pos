@@ -80,6 +80,7 @@ export function usePlan(): UsePlanReturn {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const hasFetchedOnce = useRef(false)
 
   const fetchPlan = useCallback(async () => {
     try {
@@ -93,15 +94,15 @@ export function usePlan(): UsePlanReturn {
       const data = (await res.json()) as PlanData
       setPlanData(data)
       setError(null)
+      hasFetchedOnce.current = true
     } catch (err) {
-      // Only show error on first fetch if planData is still null
-      if (!planData) {
+      // Only show error on first fetch attempt (not on polling/focus retries)
+      if (!hasFetchedOnce.current) {
         setError(err instanceof Error ? err.message : 'Unknown error')
       }
     } finally {
       setIsLoading(false)
     }
-     
   }, [])
 
   // Initial fetch

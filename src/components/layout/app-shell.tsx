@@ -7,6 +7,7 @@ import Sidebar from '@/components/layout/sidebar'
 import MobileBottomNav from '@/components/layout/mobile-bottom-nav'
 import AuthView from '@/components/auth/auth-view'
 import DashboardPage from '@/components/pages/dashboard-page'
+import InsightsPage from '@/components/pages/insights-page'
 import ProductsPage from '@/components/pages/products-page'
 import CustomersPage from '@/components/pages/customers-page'
 import PosPage from '@/components/pages/pos-page'
@@ -17,7 +18,12 @@ import SettingsPage from '@/components/pages/settings-page'
 import { Loader2 } from 'lucide-react'
 
 function AppContent() {
-  const { data: session, status } = useSession()
+  // Reduce session polling to every 5 minutes to prevent premature session expiry detection
+  // during offline→online transitions (default is every 5s which is too aggressive)
+  const { data: session, status } = useSession({
+    refetchInterval: 5 * 60 * 1000, // Poll every 5 minutes instead of default 5s
+    refetchOnWindowFocus: true,
+  })
   const { currentPage } = usePageStore()
   const { collapsed } = useSidebarStore()
 
@@ -37,6 +43,8 @@ function AppContent() {
     switch (currentPage) {
       case 'dashboard':
         return <DashboardPage />
+      case 'insights':
+        return <InsightsPage />
       case 'products':
         return <ProductsPage />
       case 'customers':

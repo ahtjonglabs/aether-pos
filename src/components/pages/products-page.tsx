@@ -67,7 +67,7 @@ import {
   ArrowUpDown,
   Package,
   TrendingUp,
-  TrendingDown,
+  // TrendingDown removed — unused after redesign
   DollarSign,
   BarChart3,
   Clock,
@@ -87,11 +87,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+// Collapsible removed — analytics section removed in redesign
 import { ProGate } from '@/components/shared/pro-gate'
 import ProductFormDialog from './product-form-dialog'
 
@@ -676,22 +672,7 @@ export default function ProductsPage() {
     })
   }, [detailData, movementFilter])
 
-  // Product analytics
-  const productAnalytics = useMemo(() => {
-    const totalProducts = products.length
-    const totalInventoryValue = products.reduce((sum, p) => sum + p.price * p.stock, 0)
-    const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= p.lowStockAlert).length
-    const outOfStockCount = products.filter((p) => p.stock === 0).length
-    const categoryDist: Record<string, number> = {}
-    products.forEach((p) => {
-      const catName = p.category?.name || 'Tanpa Kategori'
-      categoryDist[catName] = (categoryDist[catName] || 0) + 1
-    })
-    return { totalProducts, totalInventoryValue, lowStockCount, outOfStockCount, categoryDist }
-  }, [products])
-
-  // Analytics collapsible
-  const [analyticsOpen, setAnalyticsOpen] = useState(false)
+  // Analytics collapsible state removed — section removed in redesign
 
   // Stock aging calculation
   const stockAgingDays = useMemo(() => {
@@ -703,136 +684,13 @@ export default function ProductsPage() {
   }, [detailData])
 
   return (
-    <div className="space-y-4">
-      {/* Analytics Section */}
-      {!loading && products.length > 0 && (
-        <Collapsible open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
-            <CollapsibleTrigger className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 transition-colors">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
-                <span className="text-xs font-semibold text-zinc-200">Analitik</span>
-                <Badge className="bg-emerald-500/10 border-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0">
-                  {productAnalytics.totalProducts} produk
-                </Badge>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="hidden sm:flex items-center gap-3">
-                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
-                    <DollarSign className="h-3 w-3" />
-                    <span>Nilai: {formatCurrency(productAnalytics.totalInventoryValue)}</span>
-                  </div>
-                  {productAnalytics.lowStockCount > 0 && (
-                    <div className="flex items-center gap-1 text-[11px] text-amber-400">
-                      <AlertTriangle className="h-3 w-3" />
-                      <span>{productAnalytics.lowStockCount} stok rendah</span>
-                    </div>
-                  )}
-                  {productAnalytics.outOfStockCount > 0 && (
-                    <div className="flex items-center gap-1 text-[11px] text-red-400">
-                      <PackageX className="h-3 w-3" />
-                      <span>{productAnalytics.outOfStockCount} habis</span>
-                    </div>
-                  )}
-                </div>
-                {analyticsOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
-                )}
-              </div>
-            </CollapsibleTrigger>
-
-            <CollapsibleContent>
-              <div className="px-4 pb-3">
-                {/* Mobile mini stats */}
-                <div className="sm:hidden flex flex-wrap items-center gap-3 mb-3">
-                  <div className="flex items-center gap-1 text-[11px] text-zinc-400">
-                    <DollarSign className="h-3 w-3" />
-                    <span>Nilai: {formatCurrency(productAnalytics.totalInventoryValue)}</span>
-                  </div>
-                  {productAnalytics.lowStockCount > 0 && (
-                    <div className="flex items-center gap-1 text-[11px] text-amber-400">
-                      <AlertTriangle className="h-3 w-3" />
-                      <span>{productAnalytics.lowStockCount} rendah</span>
-                    </div>
-                  )}
-                  {productAnalytics.outOfStockCount > 0 && (
-                    <div className="flex items-center gap-1 text-[11px] text-red-400">
-                      <PackageX className="h-3 w-3" />
-                      <span>{productAnalytics.outOfStockCount} habis</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Inventory Value */}
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
-                      <DollarSign className="h-3 w-3 text-emerald-400" />
-                      Total Nilai Inventori
-                    </h3>
-                    <span className="text-lg font-bold text-zinc-100">
-                      {formatCurrency(productAnalytics.totalInventoryValue)}
-                    </span>
-                    <p className="text-[10px] text-zinc-500">harga × stok semua produk</p>
-                  </div>
-
-                  {/* Stock Alerts */}
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
-                      <AlertTriangle className="h-3 w-3 text-amber-400" />
-                      Peringatan Stok
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      {productAnalytics.lowStockCount > 0 ? (
-                        <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] font-medium border px-2 py-0.5">
-                          {productAnalytics.lowStockCount} Stok Rendah
-                        </Badge>
-                      ) : null}
-                      {productAnalytics.outOfStockCount > 0 ? (
-                        <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] font-medium border px-2 py-0.5">
-                          <PackageX className="mr-0.5 h-2.5 w-2.5" />
-                          {productAnalytics.outOfStockCount} Habis
-                        </Badge>
-                      ) : null}
-                      {productAnalytics.lowStockCount === 0 && productAnalytics.outOfStockCount === 0 && (
-                        <span className="text-xs text-emerald-400">Semua stok aman ✓</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Category Distribution */}
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-800/30 p-3 space-y-2">
-                    <h3 className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1.5">
-                      <Tags className="h-3 w-3 text-emerald-400" />
-                      Distribusi Kategori
-                    </h3>
-                    <div className="flex flex-wrap gap-1.5">
-                      {Object.entries(productAnalytics.categoryDist).map(([name, count]) => {
-                        const cat = categories.find((c) => c.name === name)
-                        const dotColor = cat ? getColorDotClasses(cat.color) : 'bg-zinc-400'
-                        return (
-                          <Badge key={name} className="bg-zinc-800/60 border-zinc-700/50 text-zinc-300 text-[10px] font-medium border px-2 py-0.5">
-                            <span className={`inline-block h-2 w-2 rounded-full mr-1 ${dotColor}`} />
-                            {name}: {count}
-                          </Badge>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </CollapsibleContent>
-          </div>
-        </Collapsible>
-      )}
+    <div className="space-y-6">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-100">Products</h1>
-          <p className="text-xs text-zinc-500 mt-0.5">Manage your product inventory</p>
+          <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Produk</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">Kelola inventori produk kamu</p>
         </div>
         <div className="flex items-center gap-2">
           {isPro && isOwner && (
@@ -844,8 +702,8 @@ export default function ProductsPage() {
               }}
               className={
                 bulkMode
-                  ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500 h-8 text-xs'
-                  : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs'
+                  ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500 h-9 text-xs font-medium'
+                  : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-9 text-xs font-medium'
               }
             >
               <ListChecks className="mr-1.5 h-3.5 w-3.5" />
@@ -860,15 +718,15 @@ export default function ProductsPage() {
                 setUploadFile(null)
                 setUploadResult(null)
               }}
-              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs"
+              className="bg-zinc-800/80 border-zinc-700/80 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-9 text-xs font-medium"
             >
               <Upload className="mr-1.5 h-3.5 w-3.5" />
               Upload Excel
             </Button>
           </ProGate>
-          <Button onClick={handleAdd} className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs">
+          <Button onClick={handleAdd} className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs font-medium shadow-lg shadow-emerald-500/20">
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Add Product
+            Tambah Produk
           </Button>
         </div>
       </div>
@@ -877,61 +735,67 @@ export default function ProductsPage() {
       {!loading && stats.total > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Total Products */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
-                <Package className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="relative rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3 overflow-hidden group">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-emerald-500/40" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-zinc-400">Total Produk</span>
+              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <Package className="h-4 w-4 text-emerald-400" />
               </div>
-              <span className="text-[11px] font-medium text-zinc-400">Total Produk</span>
             </div>
-            <p className="text-xl font-bold text-zinc-100">{formatNumber(stats.total)}</p>
+            <p className="text-2xl font-bold text-zinc-100 tracking-tight">{formatNumber(stats.total)}</p>
           </div>
 
           {/* Total Categories */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
-                <Tags className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="relative rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3 overflow-hidden group">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-500 to-violet-500/40" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-zinc-400">Kategori</span>
+              <div className="h-8 w-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                <Tags className="h-4 w-4 text-violet-400" />
               </div>
-              <span className="text-[11px] font-medium text-zinc-400">Kategori</span>
             </div>
-            <p className="text-xl font-bold text-zinc-100">{formatNumber(stats.categories)}</p>
+            <p className="text-2xl font-bold text-zinc-100 tracking-tight">{formatNumber(stats.categories)}</p>
           </div>
 
           {/* Low Stock Items */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
-            <div className="flex items-center gap-2">
-              <div className={`h-7 w-7 rounded-md flex items-center justify-center ${stats.lowStock > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
-                <AlertTriangle className={`h-3.5 w-3.5 ${stats.lowStock > 0 ? 'text-amber-400' : 'text-emerald-400'}`} />
+          <div className="relative rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3 overflow-hidden group">
+            <div className={`absolute top-0 left-0 right-0 h-0.5 ${stats.lowStock > 0 ? 'bg-gradient-to-r from-amber-500 to-amber-500/40' : 'bg-gradient-to-r from-emerald-500 to-emerald-500/40'}`} />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-zinc-400">Stok Rendah</span>
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${stats.lowStock > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10'}`}>
+                <AlertTriangle className={`h-4 w-4 ${stats.lowStock > 0 ? 'text-amber-400' : 'text-emerald-400'}`} />
               </div>
-              <span className="text-[11px] font-medium text-zinc-400">Stok Rendah</span>
             </div>
-            <p className={`text-xl font-bold ${stats.lowStock > 0 ? 'text-amber-400' : 'text-zinc-100'}`}>
+            <p className={`text-2xl font-bold tracking-tight ${stats.lowStock > 0 ? 'text-amber-400' : 'text-zinc-100'}`}>
               {formatNumber(stats.lowStock)}
             </p>
           </div>
 
           {/* Total Inventory Value */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-3 space-y-1">
-            <div className="flex items-center gap-2">
-              <div className="h-7 w-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
-                <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="relative rounded-xl border border-zinc-800 bg-zinc-900 p-4 space-y-3 overflow-hidden group">
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-sky-500 to-sky-500/40" />
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-zinc-400">Nilai Inventori</span>
+              <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center">
+                <DollarSign className="h-4 w-4 text-sky-400" />
               </div>
-              <span className="text-[11px] font-medium text-zinc-400">Nilai Inventori</span>
             </div>
-            <p className="text-xl font-bold text-zinc-100">{formatCurrency(stats.inventoryValue)}</p>
+            <p className="text-2xl font-bold text-zinc-100 tracking-tight">{formatCurrency(stats.inventoryValue)}</p>
           </div>
         </div>
       )}
 
       {/* Category Management Section */}
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+      <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 overflow-hidden">
         <button
           onClick={() => setCategorySectionOpen(!categorySectionOpen)}
-          className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-800/50 transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/30 transition-colors"
         >
-          <div className="flex items-center gap-2">
-            <Tags className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-6 w-6 rounded-md bg-violet-500/10 flex items-center justify-center">
+              <Tags className="h-3 w-3 text-violet-400" />
+            </div>
             <span className="text-xs font-semibold text-zinc-200">Kategori</span>
             {!categoriesLoading && categories.length > 0 && (
               <span className="text-[11px] text-zinc-500">({categories.length})</span>
@@ -952,7 +816,7 @@ export default function ProductsPage() {
             <Button
               size="sm"
               onClick={(e) => { e.stopPropagation(); openCategoryDialog(null) }}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white h-6 text-[11px] px-2"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px] px-2.5 rounded-lg"
             >
               <Plus className="mr-1 h-3 w-3" />
               Tambah
@@ -983,27 +847,27 @@ export default function ProductsPage() {
                   return (
                     <div
                       key={cat.id}
-                      className={`group flex items-center gap-1.5 rounded-full border px-2.5 py-1 flex-shrink-0 cursor-pointer transition-all ${
+                      className={`group flex items-center gap-1.5 rounded-full border px-3 py-1.5 flex-shrink-0 cursor-pointer transition-all duration-150 ${
                         isActive
-                          ? `${colors.chipBg} ${colors.text} ring-1 ${colors.border}`
-                          : 'bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 hover:border-zinc-600'
+                          ? `${colors.chipBg} ${colors.text} ring-1 ${colors.border} shadow-sm`
+                          : 'bg-zinc-800/40 border-zinc-700/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 hover:border-zinc-600'
                       }`}
                       onClick={() => setActiveCategoryId(isActive ? null : cat.id)}
                     >
-                      <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${getColorDotClasses(cat.color)}`} />
+                      <div className={`h-2 w-2 rounded-full flex-shrink-0 transition-colors ${getColorDotClasses(cat.color)}`} />
                       <span className="text-[11px] font-medium whitespace-nowrap">{cat.name}</span>
-                      <span className="text-[10px] opacity-60">{cat._count?.products || 0}</span>
-                      <div className="flex items-center gap-0 ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] opacity-50">{cat._count?.products || 0}</span>
+                      <div className="flex items-center gap-0.5 ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                         <button
                           onClick={(e) => { e.stopPropagation(); openCategoryDialog(cat) }}
-                          className="hover:text-emerald-400 text-zinc-500 hover:bg-zinc-700 rounded p-0.5"
+                          className="hover:text-emerald-400 text-zinc-500 hover:bg-zinc-700/80 rounded p-0.5"
                           title="Edit"
                         >
                           <Edit className="h-2.5 w-2.5" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); openDeleteCategory(cat) }}
-                          className="hover:text-red-400 text-zinc-500 hover:bg-zinc-700 rounded p-0.5"
+                          className="hover:text-red-400 text-zinc-500 hover:bg-zinc-700/80 rounded p-0.5"
                           title="Hapus"
                         >
                           <Trash2 className="h-2.5 w-2.5" />
@@ -1019,20 +883,20 @@ export default function ProductsPage() {
       </div>
 
       {/* Search & Sort */}
-      <div className="flex flex-col sm:flex-row gap-2">
+      <div className="flex flex-col sm:flex-row gap-2.5">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
           <Input
-            placeholder="Search products..."
+            placeholder="Cari produk..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+            className="pl-9 h-9 text-xs bg-zinc-800/60 border-zinc-700/80 text-zinc-100 placeholder:text-zinc-500 rounded-lg focus-visible:ring-zinc-600"
           />
         </div>
         <Select value={sort} onValueChange={(val) => setSort(val as SortOption)}>
-          <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+          <SelectTrigger className="w-full sm:w-[180px] h-9 text-xs bg-zinc-800/60 border-zinc-700/80 text-zinc-100 rounded-lg">
             <ArrowUpDown className="mr-2 h-3.5 w-3.5 text-zinc-500" />
-            <SelectValue placeholder="Sort by" />
+            <SelectValue placeholder="Urutkan" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-800 border-zinc-700">
             {SORT_OPTIONS.map((option) => (
@@ -1053,20 +917,21 @@ export default function ProductsPage() {
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 bg-zinc-900 rounded" />
+              <Skeleton key={i} className="h-12 bg-zinc-900 rounded-lg" />
             ))}
           </div>
         ) : products.length === 0 ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6 text-center">
-            <p className="text-xs text-zinc-500">No products found</p>
+          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900 p-8 text-center">
+            <Package className="mx-auto h-8 w-8 text-zinc-700 mb-2" />
+            <p className="text-sm text-zinc-500">Tidak ada produk ditemukan</p>
           </div>
         ) : (
-          <div className="rounded-lg border border-zinc-800 overflow-x-auto">
+          <div className="rounded-xl border border-zinc-800/80 overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow className="border-zinc-800 hover:bg-transparent">
+                <TableRow className="border-zinc-800/80 hover:bg-transparent bg-zinc-900/80">
                   {bulkMode && (
-                    <TableHead className="text-zinc-500 text-[11px] font-medium w-10">
+                    <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider w-10">
                       <Checkbox
                         checked={selectedIds.size === products.length && products.length > 0}
                         onCheckedChange={toggleSelectAll}
@@ -1074,16 +939,16 @@ export default function ProductsPage() {
                       />
                     </TableHead>
                   )}
-                  <TableHead className="text-zinc-500 text-[11px] font-medium">Name</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium">Kategori</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium">SKU</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium">Satuan</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">Nama</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">Kategori</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">SKU</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">Satuan</TableHead>
                   {isOwner && (
-                    <TableHead className="text-zinc-500 text-[11px] font-medium text-right">HPP</TableHead>
+                    <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right">HPP</TableHead>
                   )}
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Price</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Stock</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-[120px]">Actions</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right">Harga</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right">Stok</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right w-[130px]">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1092,19 +957,19 @@ export default function ProductsPage() {
                   const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
                   const isSelected = selectedIds.has(product.id)
 
-                  let rowClass = 'border-zinc-800 hover:bg-zinc-800/50'
+                  let rowClass = 'border-zinc-800/60 hover:bg-zinc-800/40 transition-colors'
                   if (isPro) {
                     if (isOutOfStock) {
-                      rowClass = 'border-zinc-800 bg-red-500/5 hover:bg-red-500/10'
+                      rowClass = 'border-zinc-800/60 bg-red-500/[0.03] hover:bg-red-500/[0.06] transition-colors'
                     } else if (isLowStock) {
-                      rowClass = 'border-zinc-800 bg-amber-500/5 hover:bg-amber-500/10'
+                      rowClass = 'border-zinc-800/60 bg-amber-500/[0.03] hover:bg-amber-500/[0.06] transition-colors'
                     }
                   }
 
                   return (
                     <TableRow key={product.id} className={rowClass}>
                       {bulkMode && (
-                        <TableCell className="w-10 py-2.5 px-3">
+                        <TableCell className="w-10 py-3 px-3">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelect(product.id)}
@@ -1112,24 +977,37 @@ export default function ProductsPage() {
                           />
                         </TableCell>
                       )}
-                      <TableCell className="text-xs text-zinc-200 font-medium py-2.5 px-3">
-                        <div className="flex items-center gap-1.5">
-                          {isPro && isOutOfStock && (
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                            </span>
+                      <TableCell className="text-xs text-zinc-100 font-medium py-3 px-3">
+                        <div className="flex items-center gap-2">
+                          {product.image ? (
+                            <div className="h-8 w-8 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0">
+                              <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="h-8 w-8 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                              <Package className="h-3.5 w-3.5 text-zinc-600" />
+                            </div>
                           )}
-                          {isPro && isLowStock && !isOutOfStock && (
-                            <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                          <div className="flex flex-col gap-0.5">
+                            <span className="flex items-center gap-1.5">
+                              {isPro && isOutOfStock && (
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+                                </span>
+                              )}
+                              {isPro && isLowStock && !isOutOfStock && (
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500" />
+                                </span>
+                              )}
+                              {product.name}
                             </span>
-                          )}
-                          {product.name}
+                          </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs py-2.5 px-3">
+                      <TableCell className="text-xs py-3 px-3">
                         {product.category ? (
                           <div className="flex items-center gap-1.5">
                             <div className={`h-2 w-2 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
@@ -1141,26 +1019,26 @@ export default function ProductsPage() {
                           <span className="text-[11px] text-zinc-600">-</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-zinc-400 py-2.5 px-3">{product.sku || '-'}</TableCell>
-                      <TableCell className="text-xs py-2.5 px-3">
+                      <TableCell className="text-xs text-zinc-500 font-mono py-3 px-3">{product.sku || '-'}</TableCell>
+                      <TableCell className="text-xs py-3 px-3">
                         <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0">
                           {product.unit || 'pcs'}
                         </Badge>
                       </TableCell>
                       {isOwner && (
-                        <TableCell className="text-xs text-zinc-300 text-right py-2.5 px-3">{formatCurrency(product.hpp)}</TableCell>
+                        <TableCell className="text-xs text-zinc-400 text-right py-3 px-3">{formatCurrency(product.hpp)}</TableCell>
                       )}
-                      <TableCell className="text-xs text-zinc-200 text-right py-2.5 px-3">{formatCurrency(product.price)}</TableCell>
-                      <TableCell className="text-xs text-right py-2.5 px-3">
+                      <TableCell className="text-xs text-zinc-100 font-medium text-right py-3 px-3">{formatCurrency(product.price)}</TableCell>
+                      <TableCell className="text-xs text-right py-3 px-3">
                         {isPro ? (
                           <div className="flex items-center justify-end gap-1.5">
                             {isOutOfStock ? (
-                              <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                              <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-2 py-0.5">
                                 <PackageX className="mr-0.5 h-2.5 w-2.5" />
                                 HABIS
                               </Badge>
                             ) : isLowStock ? (
-                              <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">
+                              <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] px-2 py-0.5">
                                 {formatNumber(product.stock)}
                               </Badge>
                             ) : (
@@ -1168,19 +1046,19 @@ export default function ProductsPage() {
                             )}
                           </div>
                         ) : product.stock <= product.lowStockAlert ? (
-                          <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                          <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-2 py-0.5">
                             {formatNumber(product.stock)}
                           </Badge>
                         ) : (
                           <span className="text-zinc-200">{formatNumber(product.stock)}</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right py-2.5 px-3">
-                        <div className="flex items-center justify-end gap-0.5">
+                      <TableCell className="text-right py-3 px-3">
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-zinc-400 hover:text-sky-400 hover:bg-sky-500/10"
+                            className="h-7 w-7 text-zinc-500 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg"
                             onClick={() => openDetail(product)}
                           >
                             <Eye className="h-3.5 w-3.5" />
@@ -1188,7 +1066,7 @@ export default function ProductsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
+                            className="h-7 w-7 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg"
                             onClick={() => {
                               setRestockProduct(product)
                               setRestockQty('')
@@ -1200,7 +1078,7 @@ export default function ProductsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
+                            className="h-7 w-7 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-lg"
                             onClick={() => handleEdit(product)}
                           >
                             <Edit className="h-3.5 w-3.5" />
@@ -1208,7 +1086,7 @@ export default function ProductsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                            className="h-7 w-7 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
                             onClick={() => setDeleteId(product.id)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -1229,12 +1107,17 @@ export default function ProductsPage() {
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-3">
-                <Skeleton className="h-4 w-3/4 bg-zinc-800 rounded mb-2" />
-                <Skeleton className="h-3 w-1/2 bg-zinc-800 rounded mb-3" />
+              <div key={i} className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <Skeleton className="h-10 w-10 bg-zinc-800 rounded-lg flex-shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-3/4 bg-zinc-800 rounded" />
+                    <Skeleton className="h-3 w-1/2 bg-zinc-800 rounded" />
+                  </div>
+                </div>
                 <div className="flex justify-between items-center">
                   <Skeleton className="h-3 w-16 bg-zinc-800 rounded" />
-                  <Skeleton className="h-4 w-20 bg-zinc-800 rounded" />
+                  <Skeleton className="h-5 w-24 bg-zinc-800 rounded" />
                 </div>
               </div>
             ))}
@@ -1242,10 +1125,10 @@ export default function ProductsPage() {
         ) : products.length === 0 ? (
           <div className="rounded-xl border border-zinc-800/60 bg-zinc-900 p-8 text-center">
             <Package className="mx-auto h-8 w-8 text-zinc-600 mb-2" />
-            <p className="text-xs text-zinc-500">No products found</p>
+            <p className="text-sm text-zinc-500">Tidak ada produk ditemukan</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {products.map((product) => {
               const isOutOfStock = product.stock === 0
               const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
@@ -1265,62 +1148,87 @@ export default function ProductsPage() {
               return (
                 <div
                   key={product.id}
-                  className={`touch-card rounded-xl ${cardBg} border ${cardBorder} p-3 transition-colors active:bg-zinc-800/80`}
+                  className={`rounded-xl ${cardBg} border ${cardBorder} p-4 transition-colors active:bg-zinc-800/80`}
                 >
-                  {/* Top: Name + Stock status indicator */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {bulkMode && (
-                        <Checkbox
-                          checked={selectedIds.has(product.id)}
-                          onCheckedChange={() => toggleSelect(product.id)}
-                          className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 flex-shrink-0"
-                        />
+                  {/* Main: Image + Info row */}
+                  <div className="flex items-start gap-3 mb-3">
+                    {/* Thumbnail */}
+                    <div className="flex-shrink-0">
+                      {bulkMode ? (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <Checkbox
+                            checked={selectedIds.has(product.id)}
+                            onCheckedChange={() => toggleSelect(product.id)}
+                            className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                          />
+                          {product.image ? (
+                            <div className="h-10 w-10 rounded-lg bg-zinc-800 overflow-hidden">
+                              <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="h-10 w-10 rounded-lg bg-zinc-800/60 flex items-center justify-center">
+                              <Package className="h-4 w-4 text-zinc-600" />
+                            </div>
+                          )}
+                        </div>
+                      ) : product.image ? (
+                        <div className="h-11 w-11 rounded-lg bg-zinc-800 overflow-hidden">
+                          <img src={product.image} alt={product.name} className="h-full w-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="h-11 w-11 rounded-lg bg-zinc-800/60 flex items-center justify-center">
+                          <Package className="h-4.5 w-4.5 text-zinc-600" />
+                        </div>
                       )}
-                      <span className="text-sm font-medium text-zinc-100 truncate">
-                        {product.name}
-                      </span>
                     </div>
-                    {isPro && (
-                      <div className="flex-shrink-0">
-                        {isOutOfStock ? (
-                          <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
-                            <PackageX className="mr-0.5 h-2.5 w-2.5" />
-                            HABIS
-                          </Badge>
-                        ) : isLowStock ? (
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                          </span>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Middle: Category + SKU + Unit */}
-                  <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                    {product.category ? (
-                      <div className="flex items-center gap-1 bg-zinc-800/50 rounded-md px-1.5 py-0.5">
-                        <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
-                        <span className={`text-[10px] font-medium ${getColorClasses(product.category.color).text}`}>
-                          {product.category.name}
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-between gap-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-semibold text-zinc-100 truncate leading-tight">
+                          {product.name}
                         </span>
+                        {isPro && (
+                          <div className="flex-shrink-0">
+                            {isOutOfStock ? (
+                              <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px] px-1.5 py-0">
+                                <PackageX className="mr-0.5 h-2.5 w-2.5" />
+                                HABIS
+                              </Badge>
+                            ) : isLowStock ? (
+                              <span className="relative flex h-2 w-2 mt-1">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
                       </div>
-                    ) : null}
-                    {product.sku && (
-                      <span className="text-[10px] text-zinc-500 font-mono">{product.sku}</span>
-                    )}
-                    <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0 ml-auto">
-                      {product.unit || 'pcs'}
-                    </Badge>
+                      {/* Category + Unit */}
+                      <div className="flex items-center gap-1.5 mt-1">
+                        {product.category ? (
+                          <div className="flex items-center gap-1 bg-zinc-800/40 rounded-md px-1.5 py-0.5">
+                            <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${getColorDotClasses(product.category.color)}`} />
+                            <span className={`text-[10px] font-medium ${getColorClasses(product.category.color).text}`}>
+                              {product.category.name}
+                            </span>
+                          </div>
+                        ) : null}
+                        {product.sku && (
+                          <span className="text-[10px] text-zinc-600 font-mono">{product.sku}</span>
+                        )}
+                        <Badge className="bg-sky-500/10 border-sky-500/20 text-sky-400 text-[10px] px-1.5 py-0 ml-auto">
+                          {product.unit || 'pcs'}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Bottom: Price + Stock count */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
+                  {/* Price + Stock + Actions row */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-baseline gap-2">
                       {isOwner && (
-                        <span className="text-[10px] text-zinc-500 block mb-0.5">
+                        <span className="text-[10px] text-zinc-500">
                           HPP {formatCurrency(product.hpp)}
                         </span>
                       )}
@@ -1328,70 +1236,70 @@ export default function ProductsPage() {
                         {formatCurrency(product.price)}
                       </span>
                     </div>
-                    {isPro ? (
-                      isOutOfStock ? null : (
+                    <div className="flex items-center gap-2">
+                      {isPro ? (
+                        isOutOfStock ? null : (
+                          <Badge
+                            className={
+                              isLowStock
+                                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 text-[11px] px-2 py-0.5 font-medium'
+                                : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 text-[11px] px-2 py-0.5 font-medium'
+                            }
+                          >
+                            {formatNumber(product.stock)}
+                          </Badge>
+                        )
+                      ) : (
                         <Badge
                           className={
-                            isLowStock
-                              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400 text-[11px] px-2 py-0.5'
-                              : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300 text-[11px] px-2 py-0.5'
+                            product.stock <= product.lowStockAlert
+                              ? 'bg-red-500/10 border-red-500/20 text-red-400 text-[11px] px-2 py-0.5 font-medium'
+                              : 'bg-zinc-800/50 border-zinc-700/50 text-zinc-400 text-[11px] px-2 py-0.5 font-medium'
                           }
                         >
-                          Stock: {formatNumber(product.stock)}
+                          {formatNumber(product.stock)}
                         </Badge>
-                      )
-                    ) : (
-                      <Badge
-                        className={
-                          product.stock <= product.lowStockAlert
-                            ? 'bg-red-500/10 border-red-500/20 text-red-400 text-[11px] px-2 py-0.5'
-                            : 'bg-zinc-800/60 border-zinc-700/50 text-zinc-300 text-[11px] px-2 py-0.5'
-                        }
-                      >
-                        Stock: {formatNumber(product.stock)}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* Action buttons */}
-                  <Separator className="bg-zinc-800/60 mb-2" />
-                  <div className="flex items-center justify-end gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-400 hover:text-sky-400 hover:bg-sky-500/10"
-                      onClick={() => openDetail(product)}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10"
-                      onClick={() => {
-                        setRestockProduct(product)
-                        setRestockQty('')
-                        setRestockOpen(true)
-                      }}
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-                      onClick={() => handleEdit(product)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
-                      onClick={() => setDeleteId(product.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      )}
+                      {/* Action buttons - compact */}
+                      <div className="flex items-center gap-0.5 bg-zinc-800/40 rounded-lg p-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-zinc-500 hover:text-sky-400 hover:bg-sky-500/10 rounded-md"
+                          onClick={() => openDetail(product)}
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
+                          onClick={() => {
+                            setRestockProduct(product)
+                            setRestockQty('')
+                            setRestockOpen(true)
+                          }}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md"
+                          onClick={() => handleEdit(product)}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-md"
+                          onClick={() => setDeleteId(product.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )
@@ -1871,7 +1779,7 @@ export default function ProductsPage() {
           <ResponsiveDialogHeader>
             <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Upload Produk Excel</ResponsiveDialogTitle>
             <ResponsiveDialogDescription className="text-zinc-400 text-xs">
-              Upload file Excel (.xlsx) untuk menambahkan produk secara massal (maks. 500 baris)
+              Upload file Excel (.xlsx/.xls) atau CSV untuk menambahkan produk secara massal (maks. 500 baris)
             </ResponsiveDialogDescription>
           </ResponsiveDialogHeader>
 
@@ -1901,10 +1809,10 @@ export default function ProductsPage() {
                   e.preventDefault()
                   setUploadDragOver(false)
                   const file = e.dataTransfer.files[0]
-                  if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
+                  if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
                     setUploadFile(file)
                   } else {
-                    toast.error('Format file tidak didukung. Gunakan .xlsx atau .xls')
+                    toast.error('Format file tidak didukung. Gunakan .xlsx, .xls, atau .csv')
                   }
                 }}
                 className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
@@ -1932,7 +1840,7 @@ export default function ProductsPage() {
                 ) : (
                   <>
                     <Upload className="h-8 w-8 mx-auto mb-2 text-zinc-600" />
-                    <p className="text-xs text-zinc-400">Drag & drop file Excel di sini</p>
+                    <p className="text-xs text-zinc-400">Drag & drop file Excel/CSV di sini</p>
                     <p className="text-[11px] text-zinc-500 mt-1">atau</p>
                   </>
                 )}
@@ -1942,7 +1850,7 @@ export default function ProductsPage() {
                 <label className="block">
                   <input
                     type="file"
-                    accept=".xlsx,.xls"
+                    accept=".xlsx,.xls,.csv"
                     onChange={(e) => {
                       const file = e.target.files?.[0]
                       if (file) setUploadFile(file)
@@ -1957,7 +1865,7 @@ export default function ProductsPage() {
 
               <div className="space-y-1">
                 <p className="text-[11px] text-zinc-500 font-medium">Kolom yang dibutuhkan:</p>
-                <p className="text-[11px] text-zinc-400">Nama* (wajib), Harga Jual* (wajib), SKU, HPP, Stok, Satuan, Kategori</p>
+                <p className="text-[11px] text-zinc-400">Nama (wajib), Harga Jual (wajib), SKU, HPP, Stok, Satuan, Kategori</p>
               </div>
             </div>
           ) : (
