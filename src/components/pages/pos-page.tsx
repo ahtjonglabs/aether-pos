@@ -23,7 +23,6 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet'
-import { motion } from 'framer-motion'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -339,7 +338,6 @@ export default function PosPage() {
   // Cart
   const [cart, setCart] = useState<CartItem[]>([])
   const [pointsToUse, setPointsToUse] = useState(0)
-  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
 
   // Promo
   const [selectedPromo, setSelectedPromo] = useState<{ id: string; name: string; type: string; discount: number; description: string } | null>(null)
@@ -467,20 +465,10 @@ export default function PosPage() {
               }
               toast.success(`${data.synced} transaction(s) auto-synced!`)
             }
-            // Check for auth error on transaction sync
-            if (res.status === 401 || res.status === 403) {
-              toast.error('Sesi telah berakhir. Silakan login ulang untuk sync transaksi.', { duration: 5000 })
-              syncingRef.current = false
-              setDataSyncing(false)
-              return
-            }
           }
 
           setDataSyncing(true)
           const result = await syncAllData()
-          if (result.hasAuthError) {
-            toast.error('Sesi telah berakhir. Silakan login ulang untuk sync data.', { duration: 5000 })
-          }
           syncSettingsFromServer() // cache settings for offline (fire-and-forget)
           fetchProducts(productSearch, productPage, selectedCategoryId)
           loadCategoriesFromCache()
@@ -512,9 +500,7 @@ export default function PosPage() {
           loadCustomersFromCache()
           const times = await getAllSyncTimes()
           setLastSyncTimes(times)
-          if (result.hasAuthError) {
-            toast.error('Sesi telah berakhir. Silakan login ulang untuk sync data.', { duration: 5000 })
-          } else if (result.products.count > 0 || result.customers.count > 0) {
+          if (result.products.count > 0 || result.customers.count > 0) {
             toast.success(`Data synced: ${result.products.count} produk, ${result.categories.count} kategori, ${result.customers.count} customer`)
           }
         } catch {
@@ -648,26 +634,16 @@ export default function PosPage() {
   const total = Math.max(0, subtotal - pointsDiscount - promoDiscount)
   const change = paymentMethod === 'CASH' ? Math.max(0, Number(paidAmount) - total) : 0
 
-  const addToCart = (product: Product, qty: number = 1) => {
+  const addToCart = (product: Product) => {
     if (product.stock <= 0) return
-    if (qty <= 0) return
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id)
       if (existing) {
-        const newQty = existing.qty + qty
-        if (newQty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
-        return prev.map((item) => item.product.id === product.id ? { ...item, qty: newQty } : item)
+        if (existing.qty >= product.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return prev.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item)
       }
-      if (qty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
-      return [...prev, { product, qty }]
+      return [...prev, { product, qty: 1 }]
     })
-  }
-
-  const setCartItemQty = (productId: string, qty: number) => {
-    if (qty <= 0) { removeFromCart(productId); return }
-    const item = cart.find((i) => i.product.id === productId)
-    if (item && qty > item.product.stock) { toast.warning('Stok tidak cukup'); return }
-    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty } : i)))
   }
 
   const updateQty = (productId: string, newQty: number) => {
@@ -694,38 +670,6 @@ export default function PosPage() {
 
   const handlePointsChange = (value: string) => {
     setPointsToUse(Math.min(Number(value) || 0, maxPointsToUse))
-  }
-
-  const handleQtyInputChange = (productId: string, value: string) => {
-    const qty = parseInt(value)
-    if (!isNaN(qty) && qty > 0) {
-      const item = cart.find((i) => i.product.id === productId)
-      if (item && qty <= item.product.stock) {
-        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty } : i)))
-      } else if (item && qty > item.product.stock) {
-        toast.warning('Stok tidak cukup')
-        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty: item.product.stock } : i)))
-      }
-    } else if (value === '' || value === '0') {
-      removeFromCart(productId)
-      setEditingQtyId(null)
-    }
-  }
-
-  const handleQtyInputBlur = (productId: string, value: string) => {
-    const qty = parseInt(value)
-    if (!isNaN(qty) && qty > 0) {
-      setCartItemQty(productId, qty)
-    }
-    setEditingQtyId(null)
-  }
-
-  const handleQtyInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, productId: string, value: string) => {
-    if (e.key === 'Enter') {
-      handleQtyInputBlur(productId, value)
-    } else if (e.key === 'Escape') {
-      setEditingQtyId(null)
-    }
   }
 
   // ==================== QUICK NOMINAL ====================
@@ -820,108 +764,69 @@ export default function PosPage() {
         promoDiscount,
       }
 
-      if (isOnline) {
-        // ─── ONLINE: Use direct checkout API ───
-        try {
-          const res = await fetch('/api/pos/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(checkoutPayload),
-          })
-          const data = await res.json()
+      // STEP 1: Save to IndexedDB first
+      const localId = await localDB.transactions.add({
+        payload: checkoutPayload,
+        isSynced: 0,
+        createdAt: Date.now(),
+        retryCount: 0,
+      })
 
-          if (res.ok && data.success) {
-            // Save to IndexedDB as already synced (for local history)
-            await localDB.transactions.add({
-              payload: checkoutPayload,
-              isSynced: 1,
-              createdAt: Date.now(),
-              syncedAt: Date.now(),
-              invoiceNumber: data.invoiceNumber,
-              serverTransactionId: null,
-              retryCount: 0,
-            })
-
-            setCheckoutResult({ success: true, invoiceNumber: data.invoiceNumber })
-            toast.success(`Pembayaran berhasil! Invoice: ${data.invoiceNumber}`)
-          } else {
-            // Online checkout failed — check if it's a retryable error
-            const isServerError = res.status >= 500
-            const error = data.error || 'Checkout gagal'
-
-            if (isServerError) {
-              // Server error — fall back to offline mode
-              const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-              await localDB.transactions.add({
-                payload: checkoutPayload,
-                isSynced: 0,
-                createdAt: Date.now(),
-                retryCount: 0,
-              })
-              // Decrement stock locally
-              for (const item of cart) {
-                await localDB.products.where('id').equals(item.product.id).modify((p) => {
-                  p.stock = Math.max(0, (p.stock || 0) - item.qty)
-                  p.updatedAt = new Date().toISOString()
-                })
-              }
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: error })
-              toast.warning('Server error — tersimpan offline', { description: error })
-            } else {
-              // Validation error (4xx) — DON'T fall back to offline, show error to user
-              toast.error(error, { description: 'Periksa data dan coba lagi' })
-              setCheckingOut(false)
-              return  // Exit without proceeding to receipt
-            }
-          }
-        } catch {
-          // Network error — fall back to offline mode
-          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-          await localDB.transactions.add({
-            payload: checkoutPayload,
-            isSynced: 0,
-            createdAt: Date.now(),
-            retryCount: 0,
-          })
-          for (const item of cart) {
-            await localDB.products.where('id').equals(item.product.id).modify((p) => {
-              p.stock = Math.max(0, (p.stock || 0) - item.qty)
-              p.updatedAt = new Date().toISOString()
-            })
-          }
-          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
-          toast.warning('Offline — transaksi tersimpan lokal')
-        }
-      } else {
-        // ─── OFFLINE: Save locally and queue for sync ───
-        const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-        await localDB.transactions.add({
-          payload: checkoutPayload,
-          isSynced: 0,
-          createdAt: Date.now(),
-          retryCount: 0,
-        })
-        // Decrement stock locally to prevent overselling
-        for (const item of cart) {
-          await localDB.products.where('id').equals(item.product.id).modify((p) => {
+      // STEP 1b: Decrement stock locally in IndexedDB to prevent overselling while offline
+      for (const item of cart) {
+        await localDB.products
+          .where('id')
+          .equals(item.product.id)
+          .modify((p) => {
             p.stock = Math.max(0, (p.stock || 0) - item.qty)
             p.updatedAt = new Date().toISOString()
           })
+      }
+
+      // STEP 2: If online, sync immediately
+      if (isOnline) {
+        try {
+          const unsyncedTx = await localDB.transactions.get(localId)
+          if (unsyncedTx) {
+            const syncRes = await fetch('/api/transactions/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ transactions: [unsyncedTx] }),
+            })
+            const syncData = await syncRes.json()
+            if (syncRes.ok && syncData.synced > 0) {
+              await localDB.transactions.update(localId, {
+                isSynced: 1,
+                syncedAt: Date.now(),
+                invoiceNumber: syncData.results?.[0]?.invoiceNumber,
+                serverTransactionId: syncData.results?.[0]?.serverId,
+              })
+              const invoiceNum = syncData.results?.[0]?.invoiceNumber || `OFF-${Date.now().toString(36).toUpperCase()}`
+              setCheckoutResult({ success: true, invoiceNumber: invoiceNum })
+              toast.success(`Pembayaran berhasil! Invoice: ${invoiceNum}`)
+            } else {
+              const error = syncData.results?.[0]?.error || 'Gagal sync ke server'
+              const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan lokal', syncError: error })
+              toast.warning('Tersimpan lokal — akan sync otomatis', { description: error })
+            }
+          }
+        } catch (syncErr) {
+          console.error('Immediate sync failed:', syncErr)
+          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
+          toast.warning('Tersimpan offline — akan sync otomatis')
         }
+      } else {
+        const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
         setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Transaksi offline' })
         toast.warning('Offline — transaksi tersimpan lokal', { duration: 5000 })
       }
 
       setCheckoutOpen(false)
       setReceiptOpen(true)
-
-      // Refresh data from server (online) or local cache (offline)
-      if (isOnline) {
-        syncAllData().catch(() => {})
-      } else {
-        fetchProducts(productSearch, productPage, selectedCategoryId)
-        loadCustomersFromCache()
-      }
+      fetchProducts(productSearch, productPage, selectedCategoryId)
+      loadCustomersFromCache()
     } catch {
       toast.error('Checkout gagal')
     } finally {
@@ -992,10 +897,6 @@ export default function PosPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: pending }),
       })
-      if (res.status === 401 || res.status === 403) {
-        toast.error('Sesi telah berakhir. Silakan login ulang untuk sync transaksi.', { duration: 5000 })
-        return
-      }
       const data = await res.json()
 
       if (res.ok) {
@@ -1046,11 +947,10 @@ export default function PosPage() {
   // ==================== RENDER HELPERS ====================
 
   const renderCategoryChips = () => (
-    <div className="bg-zinc-900/30 md:bg-transparent rounded-2xl md:rounded-none p-2 md:p-0 mb-1 md:mb-0">
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
+    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
       <button
         onClick={() => handleCategorySelect(null)}
-        className={`shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
+        className={`shrink-0 px-3 py-1.5 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
           !selectedCategoryId
             ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border} shadow-sm`
             : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
@@ -1066,7 +966,7 @@ export default function PosPage() {
           <button
             key={cat.id}
             onClick={() => handleCategorySelect(cat.id)}
-            className={`shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
+            className={`shrink-0 px-3 py-1.5 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
               isActive
                 ? `${colors.activeBg} ${colors.text} ${colors.border} shadow-sm`
                 : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
@@ -1076,7 +976,6 @@ export default function PosPage() {
           </button>
         )
       })}
-      </div>
     </div>
   )
 
@@ -1106,91 +1005,42 @@ export default function PosPage() {
       const lowStock = product.stock > 0 && product.stock <= 5
 
       return (
-        <div
+        <button
           key={product.id}
+          onClick={() => !outOfStock && addToCart(product)}
+          disabled={outOfStock}
           className={cn(
-            'relative group min-h-[68px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200',
+            'relative group p-3.5 md:p-3 min-h-[80px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200 active:scale-[0.98]',
             outOfStock
-              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30 p-2.5 md:p-3'
+              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30'
               : cartItem
-              ? `${accentColor.border} ${accentColor.bg} ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
-              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm cursor-pointer active:scale-[0.98]'
+              ? `${accentColor.border} ${accentColor.bg} hover:shadow-lg hover:shadow-emerald-500/5 ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
+              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm'
           )}
         >
-          {/* Product info — clickable area */}
-          {!outOfStock && !cartItem && (
-            <button
-              className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
-              onClick={() => addToCart(product)}
-            />
+          {cartItem && (
+            <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10">
+              {cartItem.qty}
+            </div>
           )}
-          <div className={cn(
-            'relative z-[1]',
-            cartItem ? 'p-2 md:p-2.5' : 'p-2.5 md:p-3'
-          )}>
-            <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate mb-1 md:mb-1.5">{product.name}</p>
-            <p className={`text-xs md:text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
-            {!cartItem && (
-              <div className="flex items-center justify-between mt-1.5">
-                {outOfStock ? (
-                  <span className="text-[10px] text-red-400 font-medium">Habis</span>
-                ) : (
-                  <span className={cn(
-                    'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
-                    lowStock
-                      ? 'bg-amber-500/10 text-amber-400'
-                      : 'bg-zinc-800/80 text-zinc-500'
-                  )}>
-                    <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
-                    {product.stock}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* In-cart QTY stepper */}
-            {cartItem && (
-              <div className="flex items-center justify-between mt-2 gap-1.5">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setCartItemQty(product.id, cartItem.qty - 1) }}
-                  className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-95 shrink-0"
-                >
-                  {cartItem.qty === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                </button>
-                <div className="flex-1 text-center">
-                  {editingQtyId === product.id ? (
-                    <input
-                      type="number"
-                      min="1"
-                      max={product.stock}
-                      value={cartItem.qty}
-                      onChange={(e) => handleQtyInputChange(product.id, e.target.value)}
-                      onBlur={(e) => handleQtyInputBlur(product.id, e.target.value)}
-                      onKeyDown={(e) => handleQtyInputKeyDown(e, product.id, (e.target as HTMLInputElement).value)}
-                      autoFocus
-                      className="w-full text-center text-sm font-bold text-zinc-100 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setEditingQtyId(product.id) }}
-                      className="w-full text-center focus:outline-none cursor-pointer group"
-                    >
-                      <span className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{cartItem.qty}</span>
-                      <span className="text-[9px] text-zinc-500 block leading-none">/ {product.stock}</span>
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); addToCart(product) }}
-                  disabled={cartItem.qty >= product.stock}
-                  className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-              </div>
+          <p className="text-xs font-medium text-zinc-200 truncate mb-1.5 pr-6">{product.name}</p>
+          <p className={`text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
+          <div className="flex items-center justify-between mt-1.5">
+            {outOfStock ? (
+              <span className="text-[10px] text-red-400 font-medium">Habis</span>
+            ) : (
+              <span className={cn(
+                'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                lowStock
+                  ? 'bg-amber-500/10 text-amber-400'
+                  : 'bg-zinc-800/80 text-zinc-500'
+              )}>
+                <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
+                {product.stock}
+              </span>
             )}
           </div>
-        </div>
+        </button>
       )
     })
   }
@@ -1561,21 +1411,7 @@ export default function PosPage() {
               </div>
               Keranjang
               {cart.length > 0 && (
-                <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)}</span>
-              )}
-              {selectedCustomer && (
-                <div className="ml-auto flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <User className="h-3 w-3 text-emerald-400" />
-                    <span className="text-[11px] text-emerald-300 font-semibold max-w-[100px] truncate">{selectedCustomer.name}</span>
-                  </div>
-                  {selectedCustomer.points > 0 && (
-                    <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] rounded-lg px-1.5 py-0">
-                      <Coins className="mr-0.5 h-2.5 w-2.5" />
-                      {selectedCustomer.points}
-                    </Badge>
-                  )}
-                </div>
+                <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)}</span>
               )}
             </h2>
           </div>
@@ -1603,26 +1439,7 @@ export default function PosPage() {
                     <div className="flex items-center gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
-                      {editingQtyId === item.product.id ? (
-                        <input
-                          type="number"
-                          min="1"
-                          max={item.product.stock}
-                          value={item.qty}
-                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
-                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
-                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
-                          autoFocus
-                          className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-md h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => setEditingQtyId(item.product.id)}
-                          className="text-xs text-zinc-200 w-6 text-center font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
-                        >
-                          {item.qty}
-                        </button>
-                      )}
+                      <span className="text-xs text-zinc-200 w-6 text-center font-bold">{item.qty}</span>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
@@ -1734,47 +1551,25 @@ export default function PosPage() {
             value={productSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={handleSearchKeyDown}
-            className="pl-10 h-11 text-sm bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/50 ring-1 ring-inset ring-zinc-700/50 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
+            className="pl-10 h-11 text-sm bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
           />
         </div>
-        {/* Mobile Customer Indicator */}
-        {selectedCustomer && (
-          <div className="flex items-center justify-between mb-3 px-1">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <User className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-xs text-emerald-300 font-semibold">{selectedCustomer.name}</span>
-              {selectedCustomer.points > 0 && (
-                <span className="text-[10px] text-amber-400 font-medium flex items-center gap-0.5">
-                  <Coins className="h-2.5 w-2.5" />{selectedCustomer.points} poin
-                </span>
-              )}
-            </div>
-            <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); setPointsToUse(0) }}
-              className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
         {renderCategoryChips()}
         <div className="grid grid-cols-2 gap-2.5 pb-24">{renderProductGrid()}</div>
         {renderPagination()}
 
-        {/* Floating Cart Button — Mobile only */}
-        {isMobile && cart.length > 0 && !checkoutOpen && !receiptOpen && (
-          <motion.button
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            whileTap={{ scale: 0.9 }}
+        {/* Floating Cart Button */}
+        {cart.length > 0 && (
+          <button
             onClick={() => setMobileCartOpen(true)}
-            className="fixed bottom-20 right-4 z-40 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 active:scale-95 transition-transform"
+            className="fixed bottom-5 right-4 z-40 flex items-center gap-2.5 h-14 pl-4 pr-5 rounded-2xl bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all duration-150"
           >
-            <ShoppingCart className="h-4 w-4" />
-            <div className="text-left">
-              {selectedCustomer && <p className="text-[9px] font-medium opacity-80 max-w-[100px] truncate">{selectedCustomer.name}</p>}
-              <p className="text-[10px] font-medium opacity-90">{cart.reduce((s, i) => s + i.qty, 0)} item</p>
-              <p className="text-xs font-bold">{formatCurrency(total)}</p>
-            </div>
-          </motion.button>
+            <ShoppingCart className="h-5 w-5" />
+            <span className="flex flex-col items-start leading-tight">
+              <span className="text-[10px] font-medium text-emerald-100">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
+              <span className="text-sm">{formatCurrency(total)}</span>
+            </span>
+          </button>
         )}
       </div>
 
@@ -1821,26 +1616,7 @@ export default function PosPage() {
                       <div className="flex items-center gap-0.5">
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                           onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                        {editingQtyId === item.product.id ? (
-                          <input
-                            type="number"
-                            min="1"
-                            max={item.product.stock}
-                            value={item.qty}
-                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
-                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
-                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
-                            autoFocus
-                            className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                        ) : (
-                          <button
-                            onClick={() => setEditingQtyId(item.product.id)}
-                            className="text-xs w-7 text-center text-zinc-200 font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
-                          >
-                            {item.qty}
-                          </button>
-                        )}
+                        <span className="text-xs w-7 text-center text-zinc-200 font-bold">{item.qty}</span>
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                           onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
                       </div>
