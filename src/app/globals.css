@@ -204,11 +204,9 @@ table { border-collapse: separate; border-spacing: 0; }
 }
 
 /* ── Dialog emerald accent line (top glow) ── */
-[data-slot="dialog-content"],
-[data-slot="alert-dialog-content"] {
-  position: relative;
-  overflow: hidden;
-}
+/* NOTE: Do NOT set position:relative here — it overrides the dialog's
+   fixed centering (top-50% left-50% translate). The ::before uses
+   absolute positioning which works with the existing fixed position. */
 [data-slot="dialog-content"]::before,
 [data-slot="alert-dialog-content"]::before {
   content: '';
