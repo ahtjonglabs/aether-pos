@@ -29,14 +29,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
-    const dateFromMs = searchParams.get('dateFromMs') || ''
-    const dateToMs = searchParams.get('dateToMs') || ''
     const cashierId = searchParams.get('cashierId') || ''
     const paymentMethod = searchParams.get('paymentMethod') || ''
 
     const where: Record<string, unknown> = { outletId }
 
-    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null, dateFromMs || null, dateToMs || null)
+    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
     if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter
     }
@@ -72,6 +70,9 @@ export async function GET(request: NextRequest) {
             price: true,
             qty: true,
             subtotal: true,
+            product: {
+              select: { sku: true },
+            },
           },
         },
         createdAt: true,
@@ -121,13 +122,40 @@ export async function GET(request: NextRequest) {
     }))
     worksheet['!cols'] = colWidths
 
+    // === Sheet 2: Detail Items (Nama, SKU, QTY terpisah) ===
+    const detailRows: Record<string, unknown>[] = []
+    for (const t of transactions) {
+      for (const item of t.items) {
+        detailRows.push({
+          'Invoice #': t.invoiceNumber,
+          'Tanggal': formatDate(t.createdAt),
+          'Nama Produk': item.productName,
+          'SKU': item.product?.sku || '-',
+          'QTY': item.qty,
+          'Harga Satuan': formatCurrency(item.price),
+          'Subtotal': formatCurrency(item.subtotal),
+          'Metode Pembayaran': t.paymentMethod,
+          'Customer': t.customer?.name || 'Walk-in',
+          'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
+        })
+      }
+    }
+
+    const detailSheet = XLSX.utils.json_to_sheet(detailRows)
+    const detailColWidths = Object.keys(detailRows[0] || {}).map((key) => ({
+      wch: Math.max(
+        key.length + 2,
+        ...detailRows.map((r) => String(r[key as keyof typeof r] || '').length)
+      ),
+    }))
+    detailSheet['!cols'] = detailColWidths
+
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions')
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Ringkasan')
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detail Items')
 
     const dateRange = dateFrom && dateTo ? `${dateFrom}_to_${dateTo}` : 'all'
-    // Sanitize filename to prevent header injection
-    const sanitizedRange = dateRange.replace(/[^\w.-]/g, '_')
-    const filename = `transactions_${sanitizedRange}.xlsx`
+    const filename = `transactions_${dateRange}.xlsx`
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
 
