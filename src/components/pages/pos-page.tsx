@@ -1671,7 +1671,7 @@ export default function PosPage() {
 
       {/* Mobile Cart Sheet */}
       <Sheet open={mobileCartOpen} onOpenChange={(open) => { if (!open) setMobileCartOpen(false) }}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl max-h-[92vh] flex flex-col px-0">
+        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl h-[92vh] max-h-[92vh] overflow-hidden flex flex-col px-0 gap-0">
           {/* Drag handle */}
           <div className="flex justify-center pt-3 pb-1">
             <div className="w-10 h-1 rounded-full bg-zinc-700" />
@@ -1689,9 +1689,8 @@ export default function PosPage() {
           </SheetHeader>
 
           {/* Scrollable cart items area */}
-          <div className="flex-1 overflow-hidden px-5 min-h-0">
-            <div className="h-full overflow-y-auto overscroll-contain -mx-5 px-5 space-y-4 pb-2">
-              {renderCustomerSelector(true)}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 space-y-4 pb-2">
+            {renderCustomerSelector(true)}
 
               {/* Cart Items */}
               {cart.length === 0 ? (
@@ -1741,12 +1740,11 @@ export default function PosPage() {
                   ))}
                 </div>
               )}
-            </div>
           </div>
 
           {/* Sticky bottom: Summary + Payment + Checkout button */}
           {cart.length > 0 && (
-            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 mt-2 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
               {/* Summary row */}
               <div className="flex items-center justify-between mb-3">
                 <div className="flex-1 min-w-0 mr-3">
