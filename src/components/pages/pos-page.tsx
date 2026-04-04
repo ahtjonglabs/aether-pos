@@ -845,31 +845,47 @@ export default function PosPage() {
   const handleReceiptPrint = () => {
     const content = receiptContentRef.current?.innerHTML
     if (!content) return
-    const win = window.open('', '_blank', 'width=320,height=600')
+    const win = window.open('', '_blank', 'width=320,height=800')
     if (!win) { toast.error('Gagal membuka jendela cetak'); return }
     win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title>
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Courier New', monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; color: #000; }
+        body { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 13px; width: 300px; margin: 0 auto; padding: 12px 10px; color: #000; font-weight: 600; line-height: 1.5; }
         .text-center { text-align: center; }
         .text-right { text-align: right; }
-        .font-bold { font-weight: bold; }
-        .text-sm { font-size: 11px; }
-        .text-xs { font-size: 10px; }
-        .space-y-1 > * + * { margin-top: 4px; }
-        .space-y-2 > * + * { margin-top: 8px; }
-        .py-2 { padding-top: 8px; padding-bottom: 8px; }
-        .py-1 { padding-top: 4px; padding-bottom: 4px; }
-        .mt-2 { margin-top: 8px; }
-        .border-t { border-top: 1px dashed #999; }
-        .flex { display: flex; justify-content: space-between; }
-        .text-zinc-500 { color: #666; }
-        .text-zinc-400 { color: #999; }
+        .font-bold { font-weight: 800; }
+        .font-semibold { font-weight: 700; }
+        .font-medium { font-weight: 600; }
+        .text-sm { font-size: 12px; }
+        .text-xs { font-size: 11px; }
+        .text-[11px] { font-size: 11px; font-weight: 600; }
+        .space-y-1 > * + * { margin-top: 5px; }
+        .space-y-0\.5 > * + * { margin-top: 2px; }
+        .space-y-1\.5 > * + * { margin-top: 7px; }
+        .space-y-2 > * + * { margin-top: 10px; }
+        .py-2 { padding-top: 10px; padding-bottom: 10px; }
+        .py-1 { padding-top: 5px; padding-bottom: 5px; }
+        .my-2 { margin-top: 10px; margin-bottom: 10px; }
+        .mt-2 { margin-top: 10px; }
+        .border-t, .border-dashed { border-top: 1.5px dashed #555; }
+        .border-zinc-300 { border-color: #555; }
+        .flex { display: flex; justify-content: space-between; align-items: baseline; }
+        .text-zinc-500 { color: #444; font-weight: 600; }
+        .text-zinc-600 { color: #555; font-weight: 600; }
+        .text-zinc-400 { color: #777; }
         .text-emerald-600 { color: #059669; }
-        .text-base { font-size: 16px; }
-        .font-medium { font-weight: 500; }
-        .text-amber-600 { color: #d97706; }
-        @media print { body { margin: 0; padding: 5px; } }
+        .text-zinc-900 { color: #000; font-weight: 700; }
+        .text-base { font-size: 18px; }
+        .text-amber-600 { color: #b45309; }
+        .uppercase { text-transform: uppercase; }
+        .items-center { align-items: center; }
+        .gap-1 { gap: 4px; }
+        .inline-flex { display: inline-flex; }
+        @media print {
+          body { margin: 0; padding: 8px 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { margin: 0; size: 80mm auto; }
+        }
       </style>
     </head><body>${content}</body></html>`)
     win.document.close()
@@ -1143,32 +1159,46 @@ export default function PosPage() {
   const renderReceiptContent = () => {
     if (!checkoutResult) return null
     return (
-      <div ref={receiptContentRef} className="space-y-1">
-        <div className="text-center space-y-1 py-2">
-          {settings.receiptLogo && <p className="text-base">LOGO</p>}
-          <p className="text-base font-bold">{settings.receiptBusinessName}</p>
-          {settings.receiptAddress && <p className="text-[11px] text-zinc-500">{settings.receiptAddress}</p>}
-          {settings.receiptPhone && <p className="text-[11px] text-zinc-500">{settings.receiptPhone}</p>}
+      <div ref={receiptContentRef} className="space-y-2">
+        {/* Header — Business Info */}
+        <div className="text-center space-y-2 py-3">
+          {settings.receiptLogo && <p className="text-lg font-bold">LOGO</p>}
+          <p className="text-lg font-bold">{settings.receiptBusinessName}</p>
+          {settings.receiptAddress && <p className="text-xs text-zinc-500">{settings.receiptAddress}</p>}
+          {settings.receiptPhone && <p className="text-xs text-zinc-500">{settings.receiptPhone}</p>}
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        <div className="space-y-0.5 py-2">
+        {/* Transaction Info */}
+        <div className="space-y-1 py-2">
           <div className="flex"><span className="text-zinc-500">Invoice</span><span className="font-bold">{checkoutResult.invoiceNumber}</span></div>
-          <div className="flex"><span className="text-zinc-500">Tanggal</span><span>{formatReceiptDateTime()}</span></div>
-          <div className="flex"><span className="text-zinc-500">Customer</span><span>{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
-          {isOfflineReceipt && <div className="flex"><span className="text-amber-600 text-xs">Status</span><span className="text-amber-600 text-xs font-medium">Offline — Pending Sync</span></div>}
+          <div className="flex"><span className="text-zinc-500">Tanggal</span><span className="font-medium">{formatReceiptDateTime()}</span></div>
+          <div className="flex"><span className="text-zinc-500">Customer</span><span className="font-medium">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
+          {isOfflineReceipt && <div className="flex"><span className="text-amber-600 text-xs">Status</span><span className="text-amber-600 text-xs font-semibold">Offline — Pending Sync</span></div>}
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        <div className="space-y-1.5 py-2">
+        {/* Items Table Header */}
+        <div className="flex items-center py-1">
+          <span className="flex-1 text-xs font-bold text-zinc-500">ITEM</span>
+          <span className="w-12 text-center text-xs font-bold text-zinc-500">QTY</span>
+          <span className="w-16 text-right text-xs font-bold text-zinc-500">HARGA</span>
+          <span className="w-20 text-right text-xs font-bold text-zinc-500">SUBTOTAL</span>
+        </div>
+        <div className="border-t border-dashed border-zinc-300" />
+
+        {/* Items */}
+        <div className="space-y-2 py-2">
           {cart.map((item) => (
             <div key={item.product.id} className="space-y-0.5">
-              <p className="font-medium text-[11px]">{item.product.name}</p>
-              <div className="flex text-[11px] text-zinc-600">
-                <span>{item.qty} x {formatCurrency(item.product.price)}</span>
-                <span className="font-medium text-zinc-900">{formatCurrency(item.product.price * item.qty)}</span>
+              <p className="font-semibold text-xs">{item.product.name}</p>
+              <div className="flex items-center">
+                <span className="flex-1 text-[11px] text-zinc-600">{formatCurrency(item.product.price)}/pcs</span>
+                <span className="w-12 text-center text-[11px] font-bold">{item.qty}</span>
+                <span className="w-16 text-right text-[11px] text-zinc-600">{formatCurrency(item.product.price)}</span>
+                <span className="w-20 text-right text-xs font-bold">{formatCurrency(item.product.price * item.qty)}</span>
               </div>
             </div>
           ))}
@@ -1176,27 +1206,30 @@ export default function PosPage() {
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        <div className="space-y-0.5 py-2">
-          <div className="flex"><span className="text-zinc-500">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-          {pointsDiscount > 0 && <div className="flex text-emerald-600"><span>Poin Diskon</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
-          {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span><span>-{formatCurrency(promoDiscount)}</span></div>}
+        {/* Totals */}
+        <div className="space-y-1 py-2">
+          <div className="flex"><span className="text-zinc-500">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
+          {pointsDiscount > 0 && <div className="flex text-emerald-600"><span className="font-medium">Poin Diskon</span><span className="font-bold">-{formatCurrency(pointsDiscount)}</span></div>}
+          {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="font-medium">Promo: {selectedPromo.name}</span><span className="font-bold">-{formatCurrency(promoDiscount)}</span></div>}
           <div className="border-t border-dashed border-zinc-300 my-2" />
-          <div className="flex text-sm font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
+          <div className="flex text-base font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        <div className="space-y-0.5 py-2">
+        {/* Payment */}
+        <div className="space-y-1 py-2">
           <div className="flex"><span className="text-zinc-500">Pembayaran</span><span className="font-bold uppercase">{paymentMethod}</span></div>
-          <div className="flex"><span className="text-zinc-500">Dibayar</span><span>{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
+          <div className="flex"><span className="text-zinc-500">Dibayar</span><span className="font-medium">{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
           {paymentMethod === 'CASH' && change > 0 && <div className="flex font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>}
         </div>
 
+        {/* Footer */}
         {settings.receiptFooter && (
           <>
             <div className="border-t border-dashed border-zinc-300 my-2" />
-            <div className="text-center py-2">
-              <p className="text-[11px] text-zinc-400">{settings.receiptFooter}</p>
+            <div className="text-center py-3">
+              <p className="text-xs text-zinc-400">{settings.receiptFooter}</p>
             </div>
           </>
         )}
@@ -1849,9 +1882,11 @@ export default function PosPage() {
                     </div>
                   )}
 
-                  {/* Receipt content */}
-                  <div className="font-mono text-xs">
-                    {renderReceiptContent()}
+                  {/* Receipt content — thermal preview */}
+                  <div className="bg-white border border-zinc-200 rounded-lg shadow-inner mx-auto max-w-[300px]">
+                    <div className="font-mono text-xs" style={{ fontWeight: 600 }}>
+                      {renderReceiptContent()}
+                    </div>
                   </div>
                 </div>
               </ScrollArea>
