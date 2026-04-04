@@ -339,6 +339,7 @@ export default function PosPage() {
   // Cart
   const [cart, setCart] = useState<CartItem[]>([])
   const [pointsToUse, setPointsToUse] = useState(0)
+  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
 
   // Promo
   const [selectedPromo, setSelectedPromo] = useState<{ id: string; name: string; type: string; discount: number; description: string } | null>(null)
@@ -647,16 +648,26 @@ export default function PosPage() {
   const total = Math.max(0, subtotal - pointsDiscount - promoDiscount)
   const change = paymentMethod === 'CASH' ? Math.max(0, Number(paidAmount) - total) : 0
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, qty: number = 1) => {
     if (product.stock <= 0) return
+    if (qty <= 0) return
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id)
       if (existing) {
-        if (existing.qty >= product.stock) { toast.warning('Stok tidak cukup'); return prev }
-        return prev.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item)
+        const newQty = existing.qty + qty
+        if (newQty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return prev.map((item) => item.product.id === product.id ? { ...item, qty: newQty } : item)
       }
-      return [...prev, { product, qty: 1 }]
+      if (qty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
+      return [...prev, { product, qty }]
     })
+  }
+
+  const setCartItemQty = (productId: string, qty: number) => {
+    if (qty <= 0) { removeFromCart(productId); return }
+    const item = cart.find((i) => i.product.id === productId)
+    if (item && qty > item.product.stock) { toast.warning('Stok tidak cukup'); return }
+    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty } : i)))
   }
 
   const updateQty = (productId: string, newQty: number) => {
@@ -683,6 +694,38 @@ export default function PosPage() {
 
   const handlePointsChange = (value: string) => {
     setPointsToUse(Math.min(Number(value) || 0, maxPointsToUse))
+  }
+
+  const handleQtyInputChange = (productId: string, value: string) => {
+    const qty = parseInt(value)
+    if (!isNaN(qty) && qty > 0) {
+      const item = cart.find((i) => i.product.id === productId)
+      if (item && qty <= item.product.stock) {
+        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty } : i)))
+      } else if (item && qty > item.product.stock) {
+        toast.warning('Stok tidak cukup')
+        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty: item.product.stock } : i)))
+      }
+    } else if (value === '' || value === '0') {
+      removeFromCart(productId)
+      setEditingQtyId(null)
+    }
+  }
+
+  const handleQtyInputBlur = (productId: string, value: string) => {
+    const qty = parseInt(value)
+    if (!isNaN(qty) && qty > 0) {
+      setCartItemQty(productId, qty)
+    }
+    setEditingQtyId(null)
+  }
+
+  const handleQtyInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, productId: string, value: string) => {
+    if (e.key === 'Enter') {
+      handleQtyInputBlur(productId, value)
+    } else if (e.key === 'Escape') {
+      setEditingQtyId(null)
+    }
   }
 
   // ==================== QUICK NOMINAL ====================
@@ -1063,42 +1106,91 @@ export default function PosPage() {
       const lowStock = product.stock > 0 && product.stock <= 5
 
       return (
-        <button
+        <div
           key={product.id}
-          onClick={() => !outOfStock && addToCart(product)}
-          disabled={outOfStock}
           className={cn(
-            'relative group p-2.5 md:p-3 min-h-[68px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200 active:scale-[0.98]',
+            'relative group min-h-[68px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200',
             outOfStock
-              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30'
+              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30 p-2.5 md:p-3'
               : cartItem
-              ? `${accentColor.border} ${accentColor.bg} hover:shadow-lg hover:shadow-emerald-500/5 ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
-              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm'
+              ? `${accentColor.border} ${accentColor.bg} ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
+              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm cursor-pointer active:scale-[0.98]'
           )}
         >
-          {cartItem && (
-            <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10">
-              {cartItem.qty}
-            </div>
+          {/* Product info — clickable area */}
+          {!outOfStock && !cartItem && (
+            <button
+              className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
+              onClick={() => addToCart(product)}
+            />
           )}
-          <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate mb-1 md:mb-1.5 pr-6">{product.name}</p>
-          <p className={`text-xs md:text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
-          <div className="flex items-center justify-between mt-1.5">
-            {outOfStock ? (
-              <span className="text-[10px] text-red-400 font-medium">Habis</span>
-            ) : (
-              <span className={cn(
-                'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
-                lowStock
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'bg-zinc-800/80 text-zinc-500'
-              )}>
-                <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
-                {product.stock}
-              </span>
+          <div className={cn(
+            'relative z-[1]',
+            cartItem ? 'p-2 md:p-2.5' : 'p-2.5 md:p-3'
+          )}>
+            <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate mb-1 md:mb-1.5">{product.name}</p>
+            <p className={`text-xs md:text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
+            {!cartItem && (
+              <div className="flex items-center justify-between mt-1.5">
+                {outOfStock ? (
+                  <span className="text-[10px] text-red-400 font-medium">Habis</span>
+                ) : (
+                  <span className={cn(
+                    'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                    lowStock
+                      ? 'bg-amber-500/10 text-amber-400'
+                      : 'bg-zinc-800/80 text-zinc-500'
+                  )}>
+                    <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
+                    {product.stock}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* In-cart QTY stepper */}
+            {cartItem && (
+              <div className="flex items-center justify-between mt-2 gap-1.5">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCartItemQty(product.id, cartItem.qty - 1) }}
+                  className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-95 shrink-0"
+                >
+                  {cartItem.qty === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                </button>
+                <div className="flex-1 text-center">
+                  {editingQtyId === product.id ? (
+                    <input
+                      type="number"
+                      min="1"
+                      max={product.stock}
+                      value={cartItem.qty}
+                      onChange={(e) => handleQtyInputChange(product.id, e.target.value)}
+                      onBlur={(e) => handleQtyInputBlur(product.id, e.target.value)}
+                      onKeyDown={(e) => handleQtyInputKeyDown(e, product.id, (e.target as HTMLInputElement).value)}
+                      autoFocus
+                      className="w-full text-center text-sm font-bold text-zinc-100 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingQtyId(product.id) }}
+                      className="w-full text-center focus:outline-none cursor-pointer group"
+                    >
+                      <span className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{cartItem.qty}</span>
+                      <span className="text-[9px] text-zinc-500 block leading-none">/ {product.stock}</span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); addToCart(product) }}
+                  disabled={cartItem.qty >= product.stock}
+                  className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
             )}
           </div>
-        </button>
+        </div>
       )
     })
   }
@@ -1469,7 +1561,21 @@ export default function PosPage() {
               </div>
               Keranjang
               {cart.length > 0 && (
-                <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)}</span>
+                <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)}</span>
+              )}
+              {selectedCustomer && (
+                <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <User className="h-3 w-3 text-emerald-400" />
+                    <span className="text-[11px] text-emerald-300 font-semibold max-w-[100px] truncate">{selectedCustomer.name}</span>
+                  </div>
+                  {selectedCustomer.points > 0 && (
+                    <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] rounded-lg px-1.5 py-0">
+                      <Coins className="mr-0.5 h-2.5 w-2.5" />
+                      {selectedCustomer.points}
+                    </Badge>
+                  )}
+                </div>
               )}
             </h2>
           </div>
@@ -1497,7 +1603,26 @@ export default function PosPage() {
                     <div className="flex items-center gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
-                      <span className="text-xs text-zinc-200 w-6 text-center font-bold">{item.qty}</span>
+                      {editingQtyId === item.product.id ? (
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.product.stock}
+                          value={item.qty}
+                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
+                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
+                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                          autoFocus
+                          className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-md h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setEditingQtyId(item.product.id)}
+                          className="text-xs text-zinc-200 w-6 text-center font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
+                        >
+                          {item.qty}
+                        </button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
@@ -1612,6 +1737,24 @@ export default function PosPage() {
             className="pl-10 h-11 text-sm bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/50 ring-1 ring-inset ring-zinc-700/50 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
           />
         </div>
+        {/* Mobile Customer Indicator */}
+        {selectedCustomer && (
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <User className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs text-emerald-300 font-semibold">{selectedCustomer.name}</span>
+              {selectedCustomer.points > 0 && (
+                <span className="text-[10px] text-amber-400 font-medium flex items-center gap-0.5">
+                  <Coins className="h-2.5 w-2.5" />{selectedCustomer.points} poin
+                </span>
+              )}
+            </div>
+            <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); setPointsToUse(0) }}
+              className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {renderCategoryChips()}
         <div className="grid grid-cols-2 gap-2.5 pb-24">{renderProductGrid()}</div>
         {renderPagination()}
@@ -1627,7 +1770,8 @@ export default function PosPage() {
           >
             <ShoppingCart className="h-4 w-4" />
             <div className="text-left">
-              <p className="text-[10px] font-medium opacity-90">{cart.length} item</p>
+              {selectedCustomer && <p className="text-[9px] font-medium opacity-80 max-w-[100px] truncate">{selectedCustomer.name}</p>}
+              <p className="text-[10px] font-medium opacity-90">{cart.reduce((s, i) => s + i.qty, 0)} item</p>
               <p className="text-xs font-bold">{formatCurrency(total)}</p>
             </div>
           </motion.button>
@@ -1677,7 +1821,26 @@ export default function PosPage() {
                       <div className="flex items-center gap-0.5">
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                           onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                        <span className="text-xs w-7 text-center text-zinc-200 font-bold">{item.qty}</span>
+                        {editingQtyId === item.product.id ? (
+                          <input
+                            type="number"
+                            min="1"
+                            max={item.product.stock}
+                            value={item.qty}
+                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
+                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
+                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                            autoFocus
+                            className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setEditingQtyId(item.product.id)}
+                            className="text-xs w-7 text-center text-zinc-200 font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
+                          >
+                            {item.qty}
+                          </button>
+                        )}
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
                           onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
                       </div>

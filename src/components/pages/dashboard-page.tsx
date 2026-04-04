@@ -20,7 +20,6 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   DollarSign,
   Receipt,
@@ -43,8 +42,6 @@ import {
   CircleDot,
   Check,
   ShieldAlert,
-  Megaphone,
-  Cpu,
   RefreshCw,
   CheckCircle2,
   Activity,
@@ -129,44 +126,6 @@ function formatDateNow(): string {
     month: 'long',
     day: 'numeric',
   }).format(new Date())
-}
-
-// ── Insight Content Renderer ──
-function InsightContent({ text, accentColor }: { text: string; accentColor: 'emerald' | 'violet' }) {
-  const lines = text.split('\n').filter((l) => l.trim())
-  const colorMap = {
-    emerald: { bullet: 'bg-emerald-400', text: 'text-emerald-400' },
-    violet: { bullet: 'bg-violet-400', text: 'text-violet-400' },
-  }
-  const colors = colorMap[accentColor]
-
-  return (
-    <div className="space-y-2.5">
-      {lines.map((line, i) => {
-        const trimmed = line.trim()
-        // Skip empty lines
-        if (!trimmed) return null
-        // Handle bullet points (•, -, *, or numbered)
-        const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*') || /^\d+\./.test(trimmed)
-        const content = isBullet
-          ? trimmed.replace(/^[•\-*]\s*/, '').replace(/^\d+\.\s*/, '')
-          : trimmed
-        // Skip header-like lines (## or ###)
-        if (/^#{1,3}\s/.test(content)) return null
-
-        return (
-          <div key={i} className="flex items-start gap-2.5">
-            {isBullet ? (
-              <div className={`w-1.5 h-1.5 rounded-full ${colors.bullet} mt-1.5 shrink-0`} />
-            ) : null}
-            <p className="text-xs text-zinc-300 leading-relaxed">
-              {content}
-            </p>
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
 // ── Insight Bisnis Types ──
@@ -287,37 +246,11 @@ export default function DashboardPage() {
   const isOwner = session?.user?.role === 'OWNER'
   const isPro = features?.apiAccess === true
 
-  // AI Insight state
-  const [aiTab, setAiTab] = useState<'cmo' | 'cto'>('cmo')
-  const [aiInsights, setAiInsights] = useState<{ cmo: string; cto: string; generatedAt: string } | null>(null)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError] = useState<string | null>(null)
-
   // Code-based Insight Bisnis state (ALL OWNER users)
   const [bizData, setBizData] = useState<BizInsightData | null>(null)
   const [bizLoading, setBizLoading] = useState(false)
   const [bizError, setBizError] = useState<string | null>(null)
-
-  const generateInsights = useCallback(async () => {
-    setAiLoading(true)
-    setAiError(null)
-    try {
-      const res = await fetch('/api/insights/generate', { method: 'POST' })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || 'Gagal menghasilkan insight')
-      }
-      const data = await res.json()
-      setAiInsights(data)
-      setAiTab('cmo')
-      toast.success('AI Insight berhasil di-generate')
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'Terjadi kesalahan')
-      toast.error('Gagal menghasilkan AI Insight')
-    } finally {
-      setAiLoading(false)
-    }
-  }, [])
+  const [bizScoreTab, setBizScoreTab] = useState<'cmo' | 'cto'>('cmo')
 
   const fetchStats = useCallback(async () => {
     try {
@@ -510,7 +443,7 @@ export default function DashboardPage() {
                   ) : plan.type === 'pro' ? (
                     <div className="mt-2">
                       <p className="text-xs text-zinc-400">
-                        Semua fitur Pro aktif — AI Insight, Peak Hours, Export Excel, dan lainnya.
+                        Semua fitur Pro aktif — Peak Hours, Export Excel, dan lainnya.
                       </p>
                     </div>
                   ) : (
@@ -945,169 +878,7 @@ export default function DashboardPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════
-          SECTION 3b — AI Insight (OWNER + Pro only)
-      ═══════════════════════════════════════════════════ */}
-      {isOwner && isPro && (
-        <motion.div variants={itemVariants}>
-          <Card className="bg-zinc-900 border border-zinc-800/60 overflow-hidden relative">
-            {/* Gradient border accents */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/40 to-transparent" />
-
-            <CardContent className="p-4">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500/15 to-violet-500/15 flex items-center justify-center">
-                    <Sparkles className="h-4 w-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-semibold text-zinc-200">AI Insight</h2>
-                    <p className="text-[10px] text-zinc-500">Analisa cerdas berbasis data penjualan kamu</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {aiInsights && (
-                    <span className="text-[10px] text-zinc-500 hidden sm:inline">
-                      {new Date(aiInsights.generatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  )}
-                  <Button
-                    size="sm"
-                    className="bg-gradient-to-r from-amber-500/90 to-violet-500/90 hover:from-amber-500 hover:to-violet-500 text-white text-xs font-medium h-8 px-3 rounded-lg gap-1.5 shadow-lg shadow-amber-500/10"
-                    onClick={generateInsights}
-                    disabled={aiLoading}
-                  >
-                    {aiLoading ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : aiInsights ? (
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    {aiLoading ? 'Menganalisa...' : aiInsights ? 'Refresh' : 'Generate'}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Content */}
-              {!aiInsights && !aiLoading && !aiError && (
-                <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl bg-zinc-800/30 border border-zinc-700/30">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500/10 to-violet-500/10 flex items-center justify-center mb-3">
-                    <Sparkles className="h-7 w-7 text-amber-400/60" />
-                  </div>
-                  <p className="text-sm text-zinc-300 font-medium mb-1">
-                    Belum ada insight
-                  </p>
-                  <p className="text-xs text-zinc-500 max-w-xs">
-                    Klik "Generate" untuk mendapatkan rekomendasi AI berbasis data penjualan kamu
-                  </p>
-                </div>
-              )}
-
-              {aiLoading && (
-                <div className="space-y-4 py-2">
-                  {/* Tab skeleton */}
-                  <div className="flex gap-2">
-                    <Skeleton className="h-8 w-24 bg-zinc-800 rounded-lg" />
-                    <Skeleton className="h-8 w-24 bg-zinc-800 rounded-lg" />
-                  </div>
-                  {/* Content skeleton */}
-                  <div className="space-y-3">
-                    <Skeleton className="h-4 w-full bg-zinc-800 rounded" />
-                    <Skeleton className="h-4 w-[90%] bg-zinc-800 rounded" />
-                    <Skeleton className="h-4 w-[85%] bg-zinc-800 rounded" />
-                    <Skeleton className="h-4 w-[75%] bg-zinc-800 rounded" />
-                  </div>
-                  <p className="text-[11px] text-zinc-500 text-center mt-2">
-                    AI sedang menganalisa data penjualan kamu...
-                  </p>
-                </div>
-              )}
-
-              {aiError && (
-                <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl bg-red-500/5 border border-red-500/15">
-                  <AlertTriangle className="h-7 w-7 text-red-400/60 mb-2" />
-                  <p className="text-sm text-zinc-300 font-medium mb-1">Gagal menghasilkan insight</p>
-                  <p className="text-xs text-zinc-500 mb-3 max-w-xs">{aiError}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg"
-                    onClick={generateInsights}
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Coba Lagi
-                  </Button>
-                </div>
-              )}
-
-              {aiInsights && !aiLoading && !aiError && (
-                <Tabs value={aiTab} onValueChange={(v) => setAiTab(v as 'cmo' | 'cto')}>
-                  <TabsList className="bg-zinc-800/60 border border-zinc-700/40 h-9 p-[3px]">
-                    <TabsTrigger
-                      value="cmo"
-                      className={`text-xs font-medium gap-1.5 rounded-md px-3 data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-sm`}
-                    >
-                      <Megaphone className="h-3.5 w-3.5" />
-                      CMO
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="cto"
-                      className={`text-xs font-medium gap-1.5 rounded-md px-3 data-[state=active]:bg-violet-500/15 data-[state=active]:text-violet-400 data-[state=active]:border-violet-500/20 data-[state=active]:shadow-sm`}
-                    >
-                      <Cpu className="h-3.5 w-3.5" />
-                      CTO
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="cmo">
-                    <div className={`rounded-xl border p-4 mt-1 ${
-                      aiTab === 'cmo'
-                        ? 'bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent border-emerald-500/10'
-                        : 'bg-zinc-800/20 border-zinc-700/30'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-6 h-6 rounded-md bg-emerald-500/15 flex items-center justify-center">
-                          <Megaphone className="h-3.5 w-3.5 text-emerald-400" />
-                        </div>
-                        <h3 className="text-xs font-semibold text-emerald-400">
-                          Chief Marketing Officer
-                        </h3>
-                        <span className="text-[10px] text-zinc-500">— Strategi Marketing & Revenue</span>
-                      </div>
-                      <InsightContent text={aiInsights.cmo} accentColor="emerald" />
-                    </div>
-                  </TabsContent>
-
-                  <TabsContent value="cto">
-                    <div className={`rounded-xl border p-4 mt-1 ${
-                      aiTab === 'cto'
-                        ? 'bg-gradient-to-br from-violet-500/5 via-transparent to-transparent border-violet-500/10'
-                        : 'bg-zinc-800/20 border-zinc-700/30'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="w-6 h-6 rounded-md bg-violet-500/15 flex items-center justify-center">
-                          <Cpu className="h-3.5 w-3.5 text-violet-400" />
-                        </div>
-                        <h3 className="text-xs font-semibold text-violet-400">
-                          Chief Technology Officer
-                        </h3>
-                        <span className="text-[10px] text-zinc-500">— Operasional & Teknologi</span>
-                      </div>
-                      <InsightContent text={aiInsights.cto} accentColor="violet" />
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════
-          SECTION 3c — Insight Bisnis (OWNER only — ALL plans)
+          SECTION 3b — Insight Bisnis (OWNER only — ALL plans)
       ═══════════════════════════════════════════════════ */}
       {isOwner && (
         <motion.div variants={itemVariants}>
@@ -1229,10 +1000,114 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* CMO Score & CTO Score */}
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* CMO Score & CTO Score — Carousel on mobile, 2-col on desktop */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Mobile: tabbed carousel */}
+                      <div className="md:hidden">
+                        {/* Tab pills */}
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => setBizScoreTab('cmo')}
+                            className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-medium border transition-all ${
+                              bizScoreTab === 'cmo'
+                                ? 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400'
+                                : 'bg-zinc-800/40 border-zinc-700/30 text-zinc-500'
+                            }`}
+                          >
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            CMO
+                          </button>
+                          <button
+                            onClick={() => setBizScoreTab('cto')}
+                            className={`flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg text-xs font-medium border transition-all ${
+                              bizScoreTab === 'cto'
+                                ? 'bg-violet-500/15 border-violet-500/25 text-violet-400'
+                                : 'bg-zinc-800/40 border-zinc-700/30 text-zinc-500'
+                            }`}
+                          >
+                            <Activity className="h-3.5 w-3.5" />
+                            CTO
+                          </button>
+                        </div>
+
+                        {/* Card content with swipe hint */}
+                        <div
+                          className={`rounded-xl bg-gradient-to-br ${getBizScoreBg(bizScoreTab === 'cmo' ? bizData.cmo.score : bizData.cto.score)} border p-4 transition-all duration-300`}
+                          onTouchStart={(e) => {
+                            const touch = e.touches[0]
+                            ;(e.currentTarget as HTMLElement).dataset.touchStartX = String(touch.clientX)
+                          }}
+                          onTouchEnd={(e) => {
+                            const el = e.currentTarget as HTMLElement
+                            const startX = Number(el.dataset.touchStartX || 0)
+                            const endX = e.changedTouches[0].clientX
+                            const diff = startX - endX
+                            if (Math.abs(diff) > 50) {
+                              setBizScoreTab(diff > 0 ? 'cto' : 'cmo')
+                            }
+                          }}
+                        >
+                          {bizScoreTab === 'cmo' ? (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <TrendingUp className={`h-4 w-4 ${getBizScoreColor(bizData.cmo.score)}`} />
+                                  <h3 className="text-xs font-semibold text-zinc-200">CMO Score</h3>
+                                </div>
+                                <p className="text-[10px] text-zinc-400 leading-relaxed mt-1">
+                                  Performa marketing & penjualan.
+                                </p>
+                                <div className="flex gap-1.5 mt-2">
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                    {bizData.cmo.insights.filter(i => i.type === 'positive').length} positif
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                    {bizData.cmo.insights.filter(i => i.type === 'warning' || i.type === 'critical').length} perlu atensi
+                                  </Badge>
+                                </div>
+                              </div>
+                              <BizScoreRing score={bizData.cmo.score} label="Marketing" />
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Activity className={`h-4 w-4 ${getBizScoreColor(bizData.cto.score)}`} />
+                                  <h3 className="text-xs font-semibold text-zinc-200">CTO Score</h3>
+                                </div>
+                                <p className="text-[10px] text-zinc-400 leading-relaxed mt-1">
+                                  Kesehatan operasional.
+                                </p>
+                                <div className="flex gap-1.5 mt-2">
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                    {bizData.cto.insights.filter(i => i.type === 'positive').length} positif
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-zinc-700 text-zinc-400">
+                                    {bizData.cto.insights.filter(i => i.type === 'warning' || i.type === 'critical').length} perlu atensi
+                                  </Badge>
+                                </div>
+                              </div>
+                              <BizScoreRing score={bizData.cto.score} label="Operasional" />
+                            </div>
+                          )}
+                          {/* Swipe dots */}
+                          <div className="flex justify-center gap-1.5 mt-3">
+                            <div className={`w-1.5 h-1.5 rounded-full transition-colors ${bizScoreTab === 'cmo' ? 'bg-emerald-400' : 'bg-zinc-700'}`} />
+                            <div className={`w-1.5 h-1.5 rounded-full transition-colors ${bizScoreTab === 'cto' ? 'bg-violet-400' : 'bg-zinc-700'}`} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Desktop: 2-column grid */}
                       {/* CMO Score */}
-                      <div className={`rounded-xl bg-gradient-to-br ${getBizScoreBg(bizData.cmo.score)} border p-4`}>
+                      <div className="hidden md:block rounded-xl bg-gradient-to-br border p-4"
+                        style={{
+                          background: bizData.cmo.score >= 75
+                            ? 'linear-gradient(to bottom right, rgba(16,185,129,0.12), rgba(16,185,129,0.03))'
+                            : bizData.cmo.score >= 50
+                            ? 'linear-gradient(to bottom right, rgba(245,158,11,0.12), rgba(245,158,11,0.03))'
+                            : 'linear-gradient(to bottom right, rgba(239,68,68,0.12), rgba(239,68,68,0.03))',
+                        }}>
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
@@ -1256,7 +1131,14 @@ export default function DashboardPage() {
                       </div>
 
                       {/* CTO Score */}
-                      <div className={`rounded-xl bg-gradient-to-br ${getBizScoreBg(bizData.cto.score)} border p-4`}>
+                      <div className="hidden md:block rounded-xl bg-gradient-to-br border p-4"
+                        style={{
+                          background: bizData.cto.score >= 75
+                            ? 'linear-gradient(to bottom right, rgba(16,185,129,0.12), rgba(16,185,129,0.03))'
+                            : bizData.cto.score >= 50
+                            ? 'linear-gradient(to bottom right, rgba(245,158,11,0.12), rgba(245,158,11,0.03))'
+                            : 'linear-gradient(to bottom right, rgba(239,68,68,0.12), rgba(239,68,68,0.03))',
+                        }}>
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-1">
