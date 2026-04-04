@@ -3,6 +3,14 @@ import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import * as XLSX from 'xlsx'
 import { safeJsonError } from '@/lib/safe-response'
 
+const UNIT_OPTIONS = [
+  'pcs', 'box', 'pack', 'lusin', 'set', 'pasang',
+  'porsi', 'gelas', 'botol', 'kaleng', 'bungkus', 'bungkus',
+  'kg', 'gram', 'liter', 'ml', 'meter', 'cm',
+  'rim', 'lembar', 'batang', 'butir', 'buah', 'ekor',
+  ' sachet', 'kapsul', 'tablet', 'tube',
+]
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
@@ -13,7 +21,7 @@ export async function GET(request: NextRequest) {
     // Create template workbook
     const wb = XLSX.utils.book_new()
 
-    // Headers with sample data
+    // ── Sheet 1: Data Produk ──
     const data = [
       ['Nama', 'SKU', 'HPP', 'Harga Jual', 'Stok', 'Satuan', 'Kategori'],
       ['Nasi Goreng Spesial', 'SKU-001', 10000, 25000, 50, 'porsi', 'Makanan'],
@@ -34,7 +42,28 @@ export async function GET(request: NextRequest) {
       { wch: 15 }, // Kategori
     ]
 
+    // Add data validation (dropdown) for Satuan column (F2:F1000)
+    // The dropdown list is a string of comma-separated values
+    const dv = {
+      type: 'list',
+      allowBlank: true,
+      sqref: 'F2:F1000',
+      formulas: [`"${UNIT_OPTIONS.join(',')}"`],
+    }
+    ws['!dataValidation'] = [dv]
+
     XLSX.utils.book_append_sheet(wb, ws, 'Produk')
+
+    // ── Sheet 2: Daftar Satuan (reference) ──
+    const unitData = [
+      ['Daftar Satuan yang Tersedia'],
+      [''],
+      ['Satuan'],
+      ...UNIT_OPTIONS.map(u => [u]),
+    ]
+    const wsUnits = XLSX.utils.aoa_to_sheet(unitData)
+    wsUnits['!cols'] = [{ wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, wsUnits, 'Daftar Satuan')
 
     // Generate buffer
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })

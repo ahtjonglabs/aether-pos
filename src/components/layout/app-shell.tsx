@@ -62,17 +62,17 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-zinc-950 overflow-x-hidden">
       <Sidebar />
       <MobileBottomNav />
       <main
-        className={`min-h-screen transition-all duration-300 ease-in-out ${
+        className={`min-h-screen transition-all duration-300 ease-in-out overflow-x-hidden ${
           collapsed ? 'md:ml-[68px]' : 'md:ml-64'
         }`}
       >
         {/* Mobile: no top padding (no hamburger bar), bottom padding for nav */}
         {/* Desktop: no top padding, no bottom padding */}
-        <div className="pb-20 md:pb-0 px-3 sm:px-4 md:py-4 lg:px-5 lg:py-4">
+        <div className="pb-20 md:pb-0 px-3 sm:px-4 md:py-4 lg:px-5 lg:py-4 max-w-full">
           {renderPage()}
         </div>
       </main>
