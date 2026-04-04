@@ -890,7 +890,7 @@ export default function PosPage() {
       <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 13px; width: 300px; margin: 0 auto; padding: 12px 10px; color: #000; font-weight: 600; line-height: 1.5; }
+        body { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 13px; width: 300px; margin: 0 auto; padding: 16px 14px; color: #000; font-weight: 600; line-height: 1.5; }
         .text-center { text-align: center; }
         .text-right { text-align: right; }
         .font-bold { font-weight: 800; }
@@ -905,8 +905,12 @@ export default function PosPage() {
         .space-y-2 > * + * { margin-top: 10px; }
         .py-2 { padding-top: 10px; padding-bottom: 10px; }
         .py-1 { padding-top: 5px; padding-bottom: 5px; }
+        .py-3 { padding-top: 14px; padding-bottom: 14px; }
         .my-2 { margin-top: 10px; margin-bottom: 10px; }
         .mt-2 { margin-top: 10px; }
+        .mb-3 { margin-bottom: 12px; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
         .border-t, .border-dashed { border-top: 1.5px dashed #555; }
         .border-zinc-300 { border-color: #555; }
         .flex { display: flex; justify-content: space-between; align-items: baseline; }
@@ -920,9 +924,10 @@ export default function PosPage() {
         .uppercase { text-transform: uppercase; }
         .items-center { align-items: center; }
         .gap-1 { gap: 4px; }
+        .gap-2 { gap: 8px; }
         .inline-flex { display: inline-flex; }
         @media print {
-          body { margin: 0; padding: 8px 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { margin: 0; padding: 10px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { margin: 0; size: 80mm auto; }
         }
       </style>
@@ -1681,7 +1686,7 @@ export default function PosPage() {
           >
             <ShoppingCart className="h-5 w-5" />
             <span className="flex flex-col items-start leading-tight">
-              <span className="text-[10px] font-medium text-emerald-100">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
+              <span className="text-[10px] font-medium text-emerald-100">{cart.reduce((s, i) => s + i.qty, 0)} item{ppnAmount > 0 && <span className="text-emerald-200/70 ml-1">+PPN</span>}</span>
               <span className="text-sm">{formatCurrency(total)}</span>
             </span>
           </button>
@@ -1771,7 +1776,7 @@ export default function PosPage() {
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2 text-[11px]">
                   {pointsDiscount > 0 && <span className="text-emerald-400">💰 Poin: -{formatCurrency(pointsDiscount)}</span>}
                   {promoDiscount > 0 && selectedPromo && <span className="text-amber-400">🏷️ {selectedPromo.name}: -{formatCurrency(promoDiscount)}</span>}
-                  {ppnAmount > 0 && <span className="text-zinc-400">🧾 PPN: +{formatCurrency(ppnAmount)}</span>}
+                  {ppnAmount > 0 && <span className="text-sky-300 font-medium">🧾 PPN: +{formatCurrency(ppnAmount)}</span>}
                 </div>
               )}
               <div className="flex items-center gap-3">
@@ -1835,7 +1840,7 @@ export default function PosPage() {
                       <span>-{formatCurrency(promoDiscount)}</span>
                     </div>
                   )}
-                  {ppnAmount > 0 && <div className="flex justify-between text-zinc-400"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
+                  {ppnAmount > 0 && <div className="flex justify-between text-sky-300 font-medium"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
                   <Separator className="bg-zinc-800 !my-2" />
                   <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
                 </div>
@@ -1938,7 +1943,7 @@ export default function PosPage() {
                     <span>-{formatCurrency(promoDiscount)}</span>
                   </div>
                 )}
-                {ppnAmount > 0 && <div className="flex justify-between text-zinc-400 text-xs"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
+                {ppnAmount > 0 && <div className="flex justify-between text-sky-300 text-xs font-medium"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
                 <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
               </div>
 
@@ -2003,7 +2008,7 @@ export default function PosPage() {
                   )}
 
                   {/* Receipt content — thermal preview */}
-                  <div className="bg-white border border-zinc-200 rounded-lg shadow-inner mx-auto max-w-[300px]">
+                  <div className="bg-white border border-zinc-200 rounded-lg shadow-inner mx-auto max-w-[300px] p-4">
                     <div className="font-mono text-xs" style={{ fontWeight: 600 }}>
                       {renderReceiptContent()}
                     </div>
