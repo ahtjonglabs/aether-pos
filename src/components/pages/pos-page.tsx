@@ -1669,95 +1669,99 @@ export default function PosPage() {
         )}
       </div>
 
-      {/* Mobile Cart Sheet */}
+      {/* ── Mobile Cart Sheet ── */}
       <Sheet open={mobileCartOpen} onOpenChange={(open) => { if (!open) setMobileCartOpen(false) }}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl h-[92vh] max-h-[92vh] overflow-hidden flex flex-col px-0 gap-0">
+        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl h-[85vh] max-h-[85vh] overflow-hidden flex flex-col px-0 gap-0">
           {/* Drag handle */}
-          <div className="flex justify-center pt-3 pb-1">
+          <div className="flex justify-center pt-3 pb-1 shrink-0">
             <div className="w-10 h-1 rounded-full bg-zinc-700" />
           </div>
-          <SheetHeader className="px-5 pb-2">
+          <SheetHeader className="px-5 pb-3 shrink-0">
             <SheetTitle className="text-zinc-100 text-base font-bold flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                 <ShoppingCart className="h-4 w-4 text-emerald-400" />
               </div>
               Keranjang
               {cart.length > 0 && (
-                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
+                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
               )}
             </SheetTitle>
           </SheetHeader>
 
-          {/* Scrollable cart items area */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 space-y-4 pb-2">
-            {renderCustomerSelector(true)}
+          {/* Customer selector */}
+          <div className="shrink-0 px-5 pb-3">{renderCustomerSelector(true)}</div>
 
-              {/* Cart Items */}
-              {cart.length === 0 ? (
-                <div className="text-center py-10">
-                  <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
-                    <ShoppingCart className="h-7 w-7 text-zinc-700" />
-                  </div>
-                  <p className="text-zinc-500 text-sm">Keranjang kosong</p>
-                  <p className="text-zinc-600 text-xs mt-1">Pilih produk untuk memulai</p>
+          {/* Scrollable items */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5">
+            {cart.length === 0 ? (
+              <div className="text-center py-10">
+                <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
+                  <ShoppingCart className="h-7 w-7 text-zinc-700" />
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-zinc-200 font-medium truncate">{item.product.name}</p>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)} × {item.qty}</p>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-                          onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                        {editingQtyId === item.product.id ? (
-                          <input
-                            ref={qtyInputRef}
-                            type="number"
-                            min="0"
-                            max={item.product.stock}
-                            value={editingQtyValue}
-                            onChange={(e) => setEditingQtyValue(e.target.value)}
-                            onBlur={confirmEditQty}
-                            onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
-                            className="text-xs text-zinc-200 w-12 text-center font-bold bg-zinc-700 border border-zinc-600 rounded-lg h-8 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                        ) : (
-                          <span
-                            className="text-xs w-7 text-center text-zinc-200 font-bold cursor-pointer hover:text-emerald-400 transition-colors"
-                            onClick={() => startEditQty(item.product.id, item.qty)}
-                          >{item.qty}</span>
-                        )}
-                        <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-                          onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
-                      <button className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></button>
+                <p className="text-zinc-500 text-sm">Keranjang kosong</p>
+                <p className="text-zinc-600 text-xs mt-1">Pilih produk untuk memulai</p>
+              </div>
+            ) : (
+              <div className="space-y-2 pb-2">
+                {cart.map((item) => (
+                  <div key={item.product.id} className="flex items-center gap-2.5 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-zinc-200 font-medium truncate">{item.product.name}</p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)}</p>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors active:scale-95"
+                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
+                      {editingQtyId === item.product.id ? (
+                        <input
+                          ref={qtyInputRef}
+                          type="number"
+                          min="0"
+                          max={item.product.stock}
+                          value={editingQtyValue}
+                          onChange={(e) => setEditingQtyValue(e.target.value)}
+                          onBlur={confirmEditQty}
+                          onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
+                          className="text-xs text-zinc-200 w-12 text-center font-bold bg-zinc-700 border border-zinc-600 rounded-lg h-8 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      ) : (
+                        <span
+                          className="text-xs w-7 text-center text-zinc-200 font-bold cursor-pointer hover:text-emerald-400 transition-colors"
+                          onClick={() => startEditQty(item.product.id, item.qty)}
+                        >{item.qty}</span>
+                      )}
+                      <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors active:scale-95"
+                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
+                    </div>
+                    <div className="text-right shrink-0 min-w-[70px]">
+                      <p className="text-[13px] text-emerald-400 font-bold">{formatCurrency(item.product.price * item.qty)}</p>
+                    </div>
+                    <button className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                      onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3 w-3" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Sticky bottom: Summary + Payment + Checkout button */}
+          {/* Sticky footer: Total + Bayar */}
           {cart.length > 0 && (
-            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 mt-2 px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              {/* Summary row */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex-1 min-w-0 mr-3">
-                  <p className="text-[11px] text-zinc-500">
-                    {cart.reduce((s, i) => s + i.qty, 0)} item
-                    {pointsDiscount > 0 && <span className="text-emerald-400 ml-1">(-{formatCurrency(pointsDiscount)})</span>}
-                    {promoDiscount > 0 && selectedPromo && <span className="text-amber-400 ml-1">(-{formatCurrency(promoDiscount)})</span>}
-                  </p>
-                  <p className="text-lg font-black text-zinc-100">{formatCurrency(total)}</p>
+            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {/* Discount info (compact) */}
+              {(pointsDiscount > 0 || promoDiscount > 0) && (
+                <div className="flex gap-3 mb-2 text-[11px]">
+                  {pointsDiscount > 0 && <span className="text-emerald-400">💰 Poin: -{formatCurrency(pointsDiscount)}</span>}
+                  {promoDiscount > 0 && selectedPromo && <span className="text-amber-400">🏷️ {selectedPromo.name}: -{formatCurrency(promoDiscount)}</span>}
                 </div>
-                <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
-                  className="h-12 px-6 font-bold text-sm rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all shrink-0">
-                  <Check className="mr-2 h-4 w-4" /> Bayar
+              )}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] text-zinc-500 leading-tight">Total</p>
+                  <p className="text-xl font-black text-zinc-100 leading-tight">{formatCurrency(total)}</p>
+                </div>
+                <Button onClick={openCheckoutDialog}
+                  className="h-12 px-8 font-bold text-sm rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98] shrink-0">
+                  Bayar <ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
               </div>
             </div>
@@ -1765,57 +1769,127 @@ export default function PosPage() {
         </SheetContent>
       </Sheet>
 
-      {/* Checkout Confirmation — Sheet on mobile, Dialog on desktop */}
+      {/* ── Mobile Checkout Sheet (Payment Flow) ── */}
       {isMobile ? (
         <Sheet open={checkoutOpen} onOpenChange={(open) => { if (!open) setCheckoutOpen(false) }}>
-          <SheetContent side="bottom" className="bg-zinc-900 border-zinc-800 rounded-t-2xl max-h-[85vh] px-4">
-            <SheetHeader className="pb-2">
-              <SheetTitle className="text-zinc-100 text-sm font-bold">Konfirmasi Pembayaran</SheetTitle>
+          <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl h-[92vh] max-h-[92vh] overflow-hidden flex flex-col px-0 gap-0">
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-zinc-700" />
+            </div>
+            <SheetHeader className="px-5 pb-3 shrink-0">
+              <SheetTitle className="text-zinc-100 text-base font-bold flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                  <Banknote className="h-4 w-4 text-emerald-400" />
+                </div>
+                Pembayaran
+                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
+              </SheetTitle>
             </SheetHeader>
-            <ScrollArea className="flex-1 -mx-4 px-4">
-              <div className="space-y-3 py-1">
-                <div className="space-y-1 text-xs">
+
+            {/* Scrollable content */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 space-y-4 pb-2">
+              {/* Order summary */}
+              <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-3.5">
+                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wide mb-2">Ringkasan Pesanan</p>
+                <div className="space-y-1.5 text-xs">
                   {cart.map((item) => (
-                    <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                      <span>{item.product.name} × {item.qty}</span>
-                      <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                    <div key={item.product.id} className="flex justify-between text-zinc-300">
+                      <span className="truncate mr-2">{item.product.name} <span className="text-zinc-500">×{item.qty}</span></span>
+                      <span className="font-medium shrink-0">{formatCurrency(item.product.price * item.qty)}</span>
                     </div>
                   ))}
-                  <Separator className="bg-zinc-800 my-1.5" />
-                  <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                  <Separator className="bg-zinc-800 !my-2" />
+                  <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span className="text-zinc-200">{formatCurrency(subtotal)}</span></div>
+                  {settings.loyaltyEnabled && selectedCustomer && maxPointsToUse > 0 && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-zinc-400 flex items-center gap-1 shrink-0"><Coins className="h-3 w-3" /> Pakai Poin</span>
+                      <Input type="number" min="0" max={maxPointsToUse} value={pointsToUse || ''} onChange={(e) => handlePointsChange(e.target.value)}
+                        placeholder="0" className="w-24 h-8 text-right text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg" />
+                    </div>
+                  )}
                   {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
                   {promoDiscount > 0 && selectedPromo && (
-                    <div className="flex justify-between text-amber-400 text-xs">
-                      <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
+                    <div className="flex justify-between text-amber-400">
+                      <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {selectedPromo.name}</span>
                       <span>-{formatCurrency(promoDiscount)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
+                  <Separator className="bg-zinc-800 !my-2" />
+                  <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
                 </div>
-
-                <Separator className="bg-zinc-800" />
-
-                <div className="text-xs space-y-1">
-                  <div className="flex justify-between text-zinc-400"><span>Metode</span><span className="text-zinc-200 font-medium uppercase">{paymentMethod}</span></div>
-                  {paymentMethod === 'CASH' && (
-                    <>
-                      <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(Number(paidAmount))}</span></div>
-                      <div className="flex justify-between text-emerald-400 font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>
-                    </>
-                  )}
-                  {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT') && (
-                    <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(total)}</span></div>
-                  )}
-                </div>
-
-                <p className="text-[11px] text-zinc-500">Customer: {selectedCustomer ? selectedCustomer.name : 'Walk-in'}</p>
+                {selectedCustomer && (
+                  <div className="mt-2 pt-2 border-t border-zinc-800/60 text-[11px] text-zinc-500">
+                    👤 {selectedCustomer.name}
+                  </div>
+                )}
               </div>
-            </ScrollArea>
-            <SheetFooter className="flex-row gap-2 pt-1 pb-2 -mx-4 px-4">
-              <Button variant="ghost" onClick={() => setCheckoutOpen(false)} className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl h-11">Batal</Button>
-              <Button onClick={handleCheckout} disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs rounded-xl font-bold h-11">
-                {checkingOut && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Konfirmasi
+
+              {/* Payment method */}
+              <div>
+                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wide mb-2">Metode Pembayaran</p>
+                {renderPaymentButtons(false)}
+              </div>
+
+              {/* Cash payment section */}
+              {paymentMethod === 'CASH' && (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-[11px] text-zinc-500 font-medium mb-1.5">Jumlah Bayar</p>
+                    <Input type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="Masukkan jumlah"
+                      className="h-12 text-base bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 rounded-xl text-right font-bold" />
+                  </div>
+                  {Number(paidAmount) >= total && total > 0 && (
+                    <div className="flex justify-between items-center text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
+                      <span className="text-emerald-400 font-medium">Kembalian</span>
+                      <span className="text-emerald-400 font-black text-lg">{formatCurrency(change)}</span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[11px] text-zinc-500 font-medium mb-2">Nominal Cepat</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {getQuickNominals.map((nom) => (
+                        <button key={nom} onClick={() => setPaidAmount(String(nom))}
+                          className={cn(
+                            'py-3 rounded-xl text-sm font-bold border transition-all active:scale-95',
+                            Number(paidAmount) === nom
+                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-sm'
+                              : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 active:bg-zinc-800'
+                          )}>
+                          {nom >= 1000 ? `${(nom / 1000)}K` : nom}
+                        </button>
+                      ))}
+                      {total > 0 && (
+                        <button onClick={() => setPaidAmount(String(Math.ceil(total / 1000) * 1000))}
+                          className="py-3 rounded-xl text-sm font-bold border bg-zinc-900 border-zinc-800 text-amber-400 hover:border-amber-500/30 transition-all active:scale-95">
+                          Uang Pas
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Non-cash info */}
+              {paymentMethod !== 'CASH' && (
+                <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-4 text-center">
+                  <p className="text-xs text-zinc-400">Pembayaran <span className="font-bold text-zinc-200 uppercase">{paymentMethod}</span></p>
+                  <p className="text-2xl font-black text-zinc-100 mt-1">{formatCurrency(total)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Sticky confirm footer */}
+            <SheetFooter className="shrink-0 flex-row gap-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-5 border-t border-zinc-800">
+              <Button variant="ghost" onClick={() => setCheckoutOpen(false)}
+                className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 text-sm font-medium rounded-2xl h-12">
+                Kembali
+              </Button>
+              <Button onClick={handleCheckout}
+                disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold h-12 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]">
+                {checkingOut && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {checkingOut ? 'Memproses...' : `Konfirmasi ${formatCurrency(total)}`}
               </Button>
             </SheetFooter>
           </SheetContent>
