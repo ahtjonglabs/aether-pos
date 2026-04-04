@@ -198,34 +198,37 @@ export async function processCheckout(data: CheckoutInput) {
       },
     });
 
-    // 8. Create TransactionItem records for each item
-    for (const item of data.items) {
-      const product = productMap.get(item.productId)!;
-      const itemSubtotal = item.price * item.qty;
-
-      await tx.transactionItem.create({
-        data: {
+    // 8. Batch create TransactionItem records
+    await tx.transactionItem.createMany({
+      data: data.items.map((item) => {
+        const product = productMap.get(item.productId)!;
+        return {
           productId: item.productId,
           productName: item.name,
           price: item.price,
           qty: item.qty,
-          subtotal: itemSubtotal,
+          subtotal: item.price * item.qty,
           hpp: item.hpp,
           transactionId: transaction.id,
-        },
-      });
+        };
+      }),
+    });
 
-      // 9. Decrease stock for each product
+    // 9. Decrease stock for each product
+    for (const item of data.items) {
       await tx.product.update({
         where: { id: item.productId },
         data: { stock: { decrement: item.qty } },
       });
+    }
 
-      // 10. Create AuditLog for each stock decrease (action: SALE)
-      await tx.auditLog.create({
-        data: {
-          action: 'SALE',
-          entityType: 'PRODUCT',
+    // 10. Batch create AuditLog for stock decrease (action: SALE)
+    await tx.auditLog.createMany({
+      data: data.items.map((item) => {
+        const product = productMap.get(item.productId)!;
+        return {
+          action: 'SALE' as const,
+          entityType: 'PRODUCT' as const,
           entityId: item.productId,
           details: JSON.stringify({
             invoiceNumber,
@@ -236,9 +239,9 @@ export async function processCheckout(data: CheckoutInput) {
           }),
           outletId: user.outletId,
           userId: user.id,
-        },
-      });
-    }
+        };
+      }),
+    });
 
     // 11. Handle customer loyalty
     if (data.customerId) {
@@ -256,48 +259,49 @@ export async function processCheckout(data: CheckoutInput) {
         );
       }
 
-      // Update totalSpend
-      await tx.customer.update({
-        where: { id: data.customerId },
-        data: { totalSpend: { increment: total } },
-      });
-
       // Calculate earned points: Math.floor(total / 10000)
       const earnedPoints = Math.floor(total / 10000);
 
-      if (earnedPoints > 0) {
-        await tx.customer.update({
-          where: { id: data.customerId },
-          data: { points: { increment: earnedPoints } },
-        });
-
-        await tx.loyaltyLog.create({
-          data: {
-            type: 'EARN',
-            points: earnedPoints,
-            description: `Earned ${earnedPoints} points from transaction ${invoiceNumber} (Rp ${total.toLocaleString('id-ID')})`,
-            customerId: data.customerId,
-            transactionId: transaction.id,
-          },
-        });
+      // Combine customer updates into a single query
+      const customerUpdateData: { totalSpend: { increment: number }; points?: { increment: number } | { decrement: number } } = {
+        totalSpend: { increment: total },
+      };
+      let netPointsDelta = 0;
+      if (earnedPoints > 0) netPointsDelta += earnedPoints;
+      if (pointsToUse > 0) netPointsDelta -= pointsToUse;
+      if (netPointsDelta !== 0) {
+        customerUpdateData.points = netPointsDelta > 0
+          ? { increment: netPointsDelta }
+          : { decrement: Math.abs(netPointsDelta) };
       }
 
-      // Handle points redemption
-      if (pointsToUse > 0) {
-        await tx.customer.update({
-          where: { id: data.customerId },
-          data: { points: { decrement: pointsToUse } },
-        });
+      await tx.customer.update({
+        where: { id: data.customerId },
+        data: customerUpdateData,
+      });
 
-        await tx.loyaltyLog.create({
-          data: {
-            type: 'REDEEM',
-            points: -pointsToUse,
-            description: `Redeemed ${pointsToUse} points for Rp ${discount.toLocaleString('id-ID')} discount on transaction ${invoiceNumber}`,
-            customerId: data.customerId,
-            transactionId: transaction.id,
-          },
+      // Batch create loyalty logs
+      const loyaltyLogs = [];
+      if (earnedPoints > 0) {
+        loyaltyLogs.push({
+          type: 'EARN' as const,
+          points: earnedPoints,
+          description: `Earned ${earnedPoints} points from transaction ${invoiceNumber} (Rp ${total.toLocaleString('id-ID')})`,
+          customerId: data.customerId,
+          transactionId: transaction.id,
         });
+      }
+      if (pointsToUse > 0) {
+        loyaltyLogs.push({
+          type: 'REDEEM' as const,
+          points: -pointsToUse,
+          description: `Redeemed ${pointsToUse} points for Rp ${discount.toLocaleString('id-ID')} discount on transaction ${invoiceNumber}`,
+          customerId: data.customerId,
+          transactionId: transaction.id,
+        });
+      }
+      if (loyaltyLogs.length > 0) {
+        await tx.loyaltyLog.createMany({ data: loyaltyLogs });
       }
     }
 
@@ -314,7 +318,7 @@ export async function processCheckout(data: CheckoutInput) {
     });
 
     return completeTransaction;
-  });
+  }, { timeout: 15000 });
 
   return result;
 }
