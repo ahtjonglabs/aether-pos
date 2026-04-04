@@ -18,6 +18,7 @@ interface SyncTransaction {
     subtotal: number
     discount: number
     pointsUsed: number
+    taxAmount?: number
     total: number
     paymentMethod: string
     paidAmount: number
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
               subtotal: payload.subtotal,
               discount: payload.discount || 0,
               pointsUsed: payload.pointsUsed || 0,
+              taxAmount: payload.taxAmount || 0,
               total: payload.total,
               paymentMethod: payload.paymentMethod,
               paidAmount: payload.paidAmount || 0,

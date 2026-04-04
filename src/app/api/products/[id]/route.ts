@@ -134,6 +134,7 @@ export async function DELETE(
     return safeJson({ success: true })
   } catch (error) {
     console.error('Product DELETE error:', error)
-    return safeJsonError('Failed to delete product')
+    const msg = error instanceof Error ? error.message : 'Failed to delete product'
+    return safeJsonError(msg)
   }
 }

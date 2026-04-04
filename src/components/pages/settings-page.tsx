@@ -59,6 +59,7 @@ import {
   Tag,
   Palette,
   Receipt,
+  ReceiptText,
   Save,
   Plus,
   Pencil,
@@ -95,6 +96,8 @@ interface SettingsData {
   receiptFooter: string
   receiptLogo: string
   themePrimaryColor: string
+  ppnEnabled: boolean
+  ppnRate: number
   telegramChatId: string | null
   telegramBotToken: string | null
   notifyOnTransaction: boolean
@@ -174,6 +177,7 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
   const tabs = [
     { value: 'plan', label: 'Plan & Langganan', icon: <Crown className="h-4 w-4" /> },
     { value: 'payment', label: 'Pembayaran', icon: <Banknote className="h-4 w-4" /> },
+    { value: 'tax', label: 'Pajak PPN', icon: <ReceiptText className="h-4 w-4" /> },
     { value: 'outlet', label: 'Info Outlet', icon: <Store className="h-4 w-4" /> },
     { value: 'loyalty', label: 'Loyalty', icon: <Star className="h-4 w-4" /> },
     ...(isOwner ? [{ value: 'promo', label: 'Promo', icon: <Tag className="h-4 w-4" /> }] : []),
@@ -207,6 +211,9 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         </TabsContent>
         <TabsContent value="payment">
           <PaymentMethodsTab />
+        </TabsContent>
+        <TabsContent value="tax">
+          <TaxTab />
         </TabsContent>
         <TabsContent value="outlet">
           <OutletInfoTab />
@@ -423,7 +430,138 @@ function PaymentMethodsTab() {
   )
 }
 
-// ==================== TAB 2: OUTLET INFO ====================
+// ==================== TAB 2: TAX / PPN ====================
+
+function TaxTab() {
+  const { settings, loading, saving, saveSettings } = useSettings()
+  const [edits, setEdits] = useState<Record<string, string | boolean> | null>(null)
+
+  const ppnEnabled = edits?.ppnEnabled ?? settings?.ppnEnabled ?? false
+  const ppnRate = edits?.ppnRate ?? (settings ? String(settings.ppnRate) : '11')
+  const dirty = edits !== null
+
+  const handleChange = (key: string, value: string | boolean) => {
+    setEdits((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = async () => {
+    if (!settings) {
+      toast.error('Pengaturan belum dimuat, silakan tunggu')
+      return
+    }
+    const ok = await saveSettings({
+      ppnEnabled: ppnEnabled as boolean,
+      ppnRate: Number(ppnRate),
+    })
+    if (ok) setEdits(null)
+  }
+
+  // Example calculation
+  const rate = Number(ppnRate) || 11
+  const exampleSubtotal = 100000
+  const exampleTax = Math.round(exampleSubtotal * rate / 100)
+  const exampleTotal = exampleSubtotal + exampleTax
+
+  if (loading) {
+    return (
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <Skeleton className="h-5 w-36 bg-zinc-800" />
+          <Skeleton className="h-16 bg-zinc-800 rounded-lg" />
+          <Skeleton className="h-9 bg-zinc-800" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="bg-zinc-900 border-zinc-800">
+      <CardContent className="p-4 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Pajak PPN</h2>
+          <p className="text-xs text-zinc-400 mt-0.5">Atur Pajak Pertambahan Nilai untuk transaksi</p>
+        </div>
+
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-800/50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <ReceiptText className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-200">Aktifkan PPN</p>
+              <p className="text-[11px] text-zinc-500">Pajak otomatis ditambahkan ke setiap transaksi</p>
+            </div>
+          </div>
+          <Switch
+            checked={ppnEnabled}
+            onCheckedChange={(v) => handleChange('ppnEnabled', v)}
+            className="data-[state=checked]:bg-emerald-500"
+          />
+        </div>
+
+        {ppnEnabled && (
+          <>
+            <Separator className="bg-zinc-800" />
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ppn-rate" className="text-xs text-zinc-300">
+                Tarif PPN (%)
+              </Label>
+              <div className="relative">
+                <Input
+                  id="ppn-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={ppnRate}
+                  onChange={(e) => handleChange('ppnRate', e.target.value)}
+                  placeholder="11"
+                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm pr-10"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span>
+              </div>
+              <p className="text-[10px] text-zinc-600">Tarif PPN standar Indonesia: 11%</p>
+            </div>
+
+            {/* Example formula */}
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <p className="text-[11px] font-medium text-emerald-400 uppercase tracking-wider mb-1.5">Contoh Perhitungan</p>
+              <div className="space-y-1 text-xs text-zinc-300">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span className="font-medium">{formatCurrency(exampleSubtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>PPN ({rate}%)</span>
+                  <span className="font-medium text-emerald-400">+{formatCurrency(exampleTax)}</span>
+                </div>
+                <div className="flex justify-between border-t border-emerald-500/20 pt-1 mt-1">
+                  <span className="font-semibold text-zinc-200">Total</span>
+                  <span className="font-bold text-emerald-300">{formatCurrency(exampleTotal)}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+          >
+            {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+            Simpan
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ==================== TAB 3: OUTLET INFO ====================
 
 function OutletInfoTab() {
   const { settings, loading, saving, saveSettings, refetch } = useSettings()

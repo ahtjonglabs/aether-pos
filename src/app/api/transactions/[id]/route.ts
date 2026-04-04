@@ -56,6 +56,7 @@ export async function GET(
       subtotal: transaction.subtotal,
       discount: transaction.discount,
       pointsUsed: transaction.pointsUsed,
+      taxAmount: transaction.taxAmount,
       total: transaction.total,
       paymentMethod: transaction.paymentMethod,
       paidAmount: transaction.paidAmount,

@@ -95,6 +95,7 @@ interface Transaction {
   syncStatus: 'synced' | 'pending'
   subtotal?: number
   discount?: number
+  taxAmount?: number
   paidAmount?: number
   change?: number
 }
@@ -113,6 +114,7 @@ interface SummaryData {
   totalRevenue: number
   totalBrutto: number
   totalDiscount: number
+  totalTax: number
   totalTransactions: number
   avgTransaction: number
   totalItemsSold: number
@@ -627,6 +629,20 @@ export default function TransactionsPage() {
                 <div
                   className="h-full rounded-full bg-emerald-500 transition-all duration-700"
                   style={{ width: `${summary.totalBrutto > 0 ? (summary.totalRevenue / summary.totalBrutto) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* PPN */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+              <span className="text-[10px] text-sky-400/70 font-medium">PPN</span>
+              <p className="text-base font-bold text-sky-400 tracking-tight mt-1">
+                {summary.totalTax > 0 ? `+ ${formatCurrency(summary.totalTax)}` : 'Rp 0'}
+              </p>
+              <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden mt-2.5">
+                <div
+                  className="h-full rounded-full bg-sky-400 transition-all duration-700"
+                  style={{ width: `${summary.totalBrutto > 0 ? (summary.totalTax / summary.totalBrutto) * 100 : 0}%` }}
                 />
               </div>
             </div>
@@ -1367,6 +1383,12 @@ export default function TransactionsPage() {
                       <div className="flex justify-between text-xs">
                         <span className="text-zinc-400">Diskon</span>
                         <span className="text-amber-400">-{formatCurrency(detailTransaction.discount ?? 0)}</span>
+                      </div>
+                    )}
+                    {(detailTransaction.taxAmount ?? 0) > 0 && (
+                      <div className="flex justify-between text-xs">
+                        <span className="text-zinc-400">PPN</span>
+                        <span className="text-zinc-300">+{formatCurrency(detailTransaction.taxAmount ?? 0)}</span>
                       </div>
                     )}
                     <Separator className="bg-zinc-800" />

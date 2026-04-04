@@ -66,6 +66,7 @@ interface DashboardStats {
   todayRevenue: number
   todayBrutto: number
   todayDiscount: number
+  todayTax: number
   todayTransactions: number
   todayProfit: number | null
   yesterdayRevenue: number
@@ -731,7 +732,7 @@ export default function DashboardPage() {
                   Laba & Rugi Hari Ini
                 </h2>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                 <div className="rounded-xl bg-zinc-800/40 border border-zinc-700/40 p-3 space-y-2">
                   <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">
                     Brutto

@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
         invoiceNumber: true,
         subtotal: true,
         discount: true,
+        taxAmount: true,
         total: true,
         paymentMethod: true,
         paidAmount: true,
@@ -112,6 +113,7 @@ export async function GET(request: NextRequest) {
           'Harga Satuan': formatCurrency(item.price),
           'Subtotal Item': formatCurrency(item.subtotal),
           'Metode Pembayaran': t.paymentMethod,
+          'PPN': formatCurrency(t.taxAmount),
           'Total Transaksi': formatCurrency(t.total),
           'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
         })
@@ -139,6 +141,7 @@ export async function GET(request: NextRequest) {
       'Metode Pembayaran': t.paymentMethod,
       'Subtotal': formatCurrency(t.subtotal),
       'Diskon': formatCurrency(t.discount),
+      'PPN': formatCurrency(t.taxAmount),
       'Total': formatCurrency(t.total),
       'Dibayar': formatCurrency(t.paidAmount),
       'Kembalian': formatCurrency(t.change),

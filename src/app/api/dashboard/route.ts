@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
       select: {
         subtotal: true,
         discount: true,
+        taxAmount: true,
         total: true,
         createdAt: true,
         items: {
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
 
     const todayBrutto = todayTransactions.reduce((s, t) => s + t.subtotal, 0)
     const todayDiscount = todayTransactions.reduce((s, t) => s + t.discount, 0)
+    const todayTax = todayTransactions.reduce((s, t) => s + (t.taxAmount || 0), 0)
     const todayRevenue = todayTransactions.reduce((s, t) => s + t.total, 0)
     const todayTxCount = todayTransactions.length
 
@@ -156,6 +158,7 @@ export async function GET(request: NextRequest) {
       todayRevenue,
       todayBrutto,
       todayDiscount,
+      todayTax,
       todayTransactions: todayTxCount,
       todayProfit: isOwner ? todayProfit : null,
 

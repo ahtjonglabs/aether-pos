@@ -99,6 +99,7 @@ export async function GET(request: NextRequest) {
     const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0)
     const totalBrutto = transactions.reduce((sum, t) => sum + t.subtotal, 0)
     const totalDiscount = transactions.reduce((sum, t) => sum + t.discount, 0)
+    const totalTax = transactions.reduce((sum, t) => sum + (t.taxAmount || 0), 0)
     const totalTransactions = transactions.length
     const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
 
@@ -168,6 +169,7 @@ export async function GET(request: NextRequest) {
       totalRevenue,
       totalBrutto,
       totalDiscount,
+      totalTax,
       totalTransactions,
       avgTransaction,
       totalItemsSold,

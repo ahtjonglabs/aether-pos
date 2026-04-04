@@ -434,13 +434,14 @@ export default function ProductsPage() {
     try {
       const res = await fetch(`/api/products/${deleteId}`, { method: 'DELETE' })
       if (res.ok) {
-        toast.success('Product deleted')
+        toast.success('Produk berhasil dihapus')
         fetchProducts()
       } else {
-        toast.error('Failed to delete product')
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'Gagal menghapus produk')
       }
     } catch {
-      toast.error('Failed to delete product')
+      toast.error('Gagal menghapus produk')
     } finally {
       setDeleting(false)
       setDeleteId(null)
@@ -1471,14 +1472,14 @@ export default function ProductsPage() {
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent className="bg-zinc-900 border-zinc-800">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-zinc-100 text-sm font-semibold">Delete Product</AlertDialogTitle>
+            <AlertDialogTitle className="text-zinc-100 text-sm font-semibold">Hapus Produk</AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400 text-xs">
-              Are you sure? This action cannot be undone.
+              Yakin ingin menghapus <span className="text-zinc-200 font-medium">{products.find(p => p.id === deleteId)?.name}</span>? Riwayat transaksi tetap tersimpan, tapi data produk akan dihapus permanen.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs">
-              Cancel
+              Batal
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
@@ -1486,7 +1487,7 @@ export default function ProductsPage() {
               className="bg-red-500 hover:bg-red-600 text-white h-8 text-xs"
             >
               {deleting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-              Delete
+              Hapus
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -119,6 +119,8 @@ interface OutletSettings {
   receiptFooter: string
   receiptLogo: string
   themePrimaryColor: string
+  ppnEnabled: boolean
+  ppnRate: number
 }
 
 interface OutletInfo {
@@ -194,6 +196,8 @@ export default function PosPage() {
     receiptFooter: 'Terima kasih atas kunjungan Anda!',
     receiptLogo: '',
     themePrimaryColor: 'emerald',
+    ppnEnabled: false,
+    ppnRate: 11,
   })
 
   // Outlet info (from settings API)
@@ -224,6 +228,8 @@ export default function PosPage() {
               receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
               receiptLogo: data.receiptLogo || '',
               themePrimaryColor: data.themePrimaryColor || 'emerald',
+              ppnEnabled: data.ppnEnabled ?? false,
+              ppnRate: data.ppnRate || 11,
             })
             // Extract outlet info from settings response
             if (data.outlet) {
@@ -252,6 +258,8 @@ export default function PosPage() {
               receiptFooter: (cached.receiptFooter as string) || 'Terima kasih atas kunjungan Anda!',
               receiptLogo: (cached.receiptLogo as string) || '',
               themePrimaryColor: (cached.themePrimaryColor as string) || 'emerald',
+              ppnEnabled: (cached.ppnEnabled as boolean) ?? false,
+              ppnRate: (cached.ppnRate as number) || 11,
             })
             // Extract outlet info from cached settings
             const cachedOutlet = cached.outlet as { id: string; name: string; address: string | null; phone: string | null } | undefined
@@ -290,6 +298,8 @@ export default function PosPage() {
                 receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
                 receiptLogo: data.receiptLogo || '',
                 themePrimaryColor: data.themePrimaryColor || 'emerald',
+                ppnEnabled: data.ppnEnabled ?? false,
+                ppnRate: data.ppnRate || 11,
               })
             }
           }
@@ -658,7 +668,8 @@ export default function PosPage() {
   const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.qty, 0), [cart])
   const maxPointsToUse = selectedCustomer ? selectedCustomer.points : 0
   const pointsDiscount = pointsToUse * settings.loyaltyPointValue
-  const total = Math.max(0, subtotal - pointsDiscount - promoDiscount)
+  const ppnAmount = settings.ppnEnabled ? Math.round(subtotal * settings.ppnRate / 100) : 0
+  const total = Math.max(0, subtotal - pointsDiscount - promoDiscount + ppnAmount)
   const change = paymentMethod === 'CASH' ? Math.max(0, Number(paidAmount) - total) : 0
 
   const addToCart = (product: Product) => {
@@ -783,6 +794,7 @@ export default function PosPage() {
         subtotal,
         discount: pointsDiscount + promoDiscount,
         pointsUsed: pointsToUse,
+        taxAmount: ppnAmount,
         total,
         paymentMethod,
         paidAmount: paymentMethod === 'CASH' ? Number(paidAmount) : total,
@@ -1256,6 +1268,7 @@ export default function PosPage() {
           <div className="flex"><span className="text-zinc-500">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
           {pointsDiscount > 0 && <div className="flex text-emerald-600"><span className="font-medium">Poin Diskon</span><span className="font-bold">-{formatCurrency(pointsDiscount)}</span></div>}
           {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="font-medium">Promo: {selectedPromo.name}</span><span className="font-bold">-{formatCurrency(promoDiscount)}</span></div>}
+          {ppnAmount > 0 && <div className="flex"><span className="text-zinc-500">PPN ({settings.ppnRate}%)</span><span className="font-medium">+{formatCurrency(ppnAmount)}</span></div>}
           <div className="border-t border-dashed border-zinc-300 my-2" />
           <div className="flex text-base font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
         </div>
@@ -1570,6 +1583,12 @@ export default function PosPage() {
                   <span>-{formatCurrency(promoDiscount)}</span>
                 </div>
               )}
+              {ppnAmount > 0 && (
+                <div className="flex justify-between text-zinc-400 text-xs">
+                  <span>PPN ({settings.ppnRate}%)</span>
+                  <span>+{formatCurrency(ppnAmount)}</span>
+                </div>
+              )}
               <Separator className="bg-zinc-800" />
               <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
             </div>
@@ -1748,10 +1767,11 @@ export default function PosPage() {
           {cart.length > 0 && (
             <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               {/* Discount info (compact) */}
-              {(pointsDiscount > 0 || promoDiscount > 0) && (
-                <div className="flex gap-3 mb-2 text-[11px]">
+              {(pointsDiscount > 0 || promoDiscount > 0 || ppnAmount > 0) && (
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2 text-[11px]">
                   {pointsDiscount > 0 && <span className="text-emerald-400">💰 Poin: -{formatCurrency(pointsDiscount)}</span>}
                   {promoDiscount > 0 && selectedPromo && <span className="text-amber-400">🏷️ {selectedPromo.name}: -{formatCurrency(promoDiscount)}</span>}
+                  {ppnAmount > 0 && <span className="text-zinc-400">🧾 PPN: +{formatCurrency(ppnAmount)}</span>}
                 </div>
               )}
               <div className="flex items-center gap-3">
@@ -1815,6 +1835,7 @@ export default function PosPage() {
                       <span>-{formatCurrency(promoDiscount)}</span>
                     </div>
                   )}
+                  {ppnAmount > 0 && <div className="flex justify-between text-zinc-400"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
                   <Separator className="bg-zinc-800 !my-2" />
                   <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
                 </div>
@@ -1917,6 +1938,7 @@ export default function PosPage() {
                     <span>-{formatCurrency(promoDiscount)}</span>
                   </div>
                 )}
+                {ppnAmount > 0 && <div className="flex justify-between text-zinc-400 text-xs"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
                 <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
               </div>
 
