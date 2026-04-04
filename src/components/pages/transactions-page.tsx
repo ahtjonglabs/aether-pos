@@ -114,7 +114,7 @@ interface SummaryData {
   totalTransactions: number
   avgTransaction: number
   totalItemsSold: number
-  paymentBreakdown: { method: string; count: number; total: number }[]
+  paymentBreakdown: { method: string; count: number; total: number; brutto: number; discount: number }[]
   topProducts: { rank: number; name: string; quantity: number; revenue: number }[]
   hourlyBreakdown: { hour: number; count: number }[]
   voidInfo: { count: number; total: number }
@@ -628,12 +628,12 @@ export default function TransactionsPage() {
 
           {/* Two-column: Payment Breakdown + Hourly Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {/* Revenue by Payment Method */}
+            {/* Revenue by Payment Method — with Brutto/Netto per method */}
             <Card className="bg-zinc-900 border-zinc-800 rounded-xl">
               <CardHeader className="p-4 pb-2">
                 <CardTitle className="text-xs font-semibold text-zinc-300 flex items-center gap-2">
                   <CreditCard className="h-3.5 w-3.5 text-zinc-500" />
-                  Pendapatan per Metode
+                  Pendapatan per Metode Pembayaran
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-0 space-y-3">
@@ -641,6 +641,7 @@ export default function TransactionsPage() {
                   summary.paymentBreakdown.map((pb) => {
                     const pct = paymentMax > 0 ? (pb.total / paymentMax) * 100 : 0
                     const barColor = PAYMENT_BAR_COLORS[pb.method] || 'bg-zinc-500'
+                    const hasBruttoData = pb.brutto !== undefined && pb.discount !== undefined
                     return (
                       <div key={pb.method} className="space-y-1.5">
                         <div className="flex items-center justify-between">
@@ -653,6 +654,14 @@ export default function TransactionsPage() {
                           </div>
                           <span className="text-xs font-semibold text-zinc-200">{formatCurrency(pb.total)}</span>
                         </div>
+                        {hasBruttoData && (
+                          <div className="flex items-center gap-3 ml-7 text-[10px]">
+                            <span className="text-zinc-500">Brutto: <span className="text-zinc-400 font-medium">{formatCurrency(pb.brutto)}</span></span>
+                            {pb.discount > 0 && (
+                              <span className="text-red-400/70">Diskon: <span className="text-red-400 font-medium">-{formatCurrency(pb.discount)}</span></span>
+                            )}
+                          </div>
+                        )}
                         <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
                           <div className={`h-full ${barColor} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
                         </div>

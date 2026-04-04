@@ -276,7 +276,7 @@ export async function POST(request: NextRequest) {
         existingNames.add(name.toLowerCase().trim())
         created++
       }
-    })
+    }, { timeout: 30000 })
 
     // Create audit log for bulk upload
     if (created > 0) {

@@ -130,12 +130,11 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          // 5. Create TransactionItem records, decrease stock, create audit logs
-          for (const item of payload.items) {
-            const product = productMap.get(item.productId)!
-
-            await txDb.transactionItem.create({
-              data: {
+          // 5. Batch create TransactionItems, update stocks, batch create audit logs
+          await txDb.transactionItem.createMany({
+            data: payload.items.map((item) => {
+              const product = productMap.get(item.productId)!
+              return {
                 productId: item.productId,
                 productName: item.productName,
                 price: item.price,
@@ -143,20 +142,25 @@ export async function POST(request: NextRequest) {
                 subtotal: item.subtotal,
                 hpp: product.hpp,
                 transactionId: transaction.id,
-              },
-            })
+              }
+            }),
+          })
 
-            // Decrease stock
+          // Update stock for all items
+          for (const item of payload.items) {
             await txDb.product.update({
               where: { id: item.productId },
               data: { stock: { decrement: item.qty } },
             })
+          }
 
-            // Create AuditLog for stock decrease
-            await txDb.auditLog.create({
-              data: {
-                action: 'SALE',
-                entityType: 'PRODUCT',
+          // Batch create audit logs
+          await txDb.auditLog.createMany({
+            data: payload.items.map((item) => {
+              const product = productMap.get(item.productId)!
+              return {
+                action: 'SALE' as const,
+                entityType: 'PRODUCT' as const,
                 entityId: item.productId,
                 details: JSON.stringify({
                   invoiceNumber,
@@ -170,9 +174,9 @@ export async function POST(request: NextRequest) {
                 outletId,
                 userId,
                 createdAt: transactionDate,
-              },
-            })
-          }
+              }
+            }),
+          })
 
           // 6. Handle customer loyalty
           if (payload.customerId) {
@@ -191,11 +195,6 @@ export async function POST(request: NextRequest) {
               )
             }
 
-            await txDb.customer.update({
-              where: { id: payload.customerId },
-              data: { totalSpend: { increment: payload.total } },
-            })
-
             // Calculate earned points based on outlet loyalty settings
             let earnedPoints = 0
             const syncSetting = await txDb.outletSetting.findUnique({
@@ -206,47 +205,54 @@ export async function POST(request: NextRequest) {
               earnedPoints = Math.floor(payload.total / syncSetting.loyaltyPointsPerAmount)
             }
 
-            if (earnedPoints > 0) {
-              await txDb.customer.update({
-                where: { id: payload.customerId },
-                data: { points: { increment: earnedPoints } },
-              })
-
-              await txDb.loyaltyLog.create({
-                data: {
-                  type: 'EARN',
-                  points: earnedPoints,
-                  description: `Earned ${earnedPoints} points from transaction ${invoiceNumber} (Rp ${payload.total.toLocaleString('id-ID')}) [synced offline]`,
-                  customerId: payload.customerId,
-                  transactionId: transaction.id,
-                  createdAt: transactionDate,
-                },
-              })
+            // Combine customer updates into a single query
+            const customerUpdateData: { totalSpend: { increment: number }; points?: { increment: number } | { decrement: number } } = {
+              totalSpend: { increment: payload.total },
+            }
+            let netPointsDelta = 0
+            if (earnedPoints > 0) netPointsDelta += earnedPoints
+            if (pointsToUse > 0) netPointsDelta -= pointsToUse
+            if (netPointsDelta !== 0) {
+              customerUpdateData.points = netPointsDelta > 0
+                ? { increment: netPointsDelta }
+                : { decrement: Math.abs(netPointsDelta) }
             }
 
+            await txDb.customer.update({
+              where: { id: payload.customerId },
+              data: customerUpdateData,
+            })
+
+            // Batch create loyalty logs
+            const loyaltyLogs = []
+            if (earnedPoints > 0) {
+              loyaltyLogs.push({
+                type: 'EARN' as const,
+                points: earnedPoints,
+                description: `Earned ${earnedPoints} points from transaction ${invoiceNumber} (Rp ${payload.total.toLocaleString('id-ID')}) [synced offline]`,
+                customerId: payload.customerId,
+                transactionId: transaction.id,
+                createdAt: transactionDate,
+              })
+            }
             if (pointsToUse > 0) {
-              await txDb.customer.update({
-                where: { id: payload.customerId },
-                data: { points: { decrement: pointsToUse } },
-              })
-
               const pointsDiscount = pointsToUse * 100
-
-              await txDb.loyaltyLog.create({
-                data: {
-                  type: 'REDEEM',
-                  points: -pointsToUse,
-                  description: `Redeemed ${pointsToUse} points for Rp ${pointsDiscount.toLocaleString('id-ID')} discount on transaction ${invoiceNumber} [synced offline]`,
-                  customerId: payload.customerId,
-                  transactionId: transaction.id,
-                  createdAt: transactionDate,
-                },
+              loyaltyLogs.push({
+                type: 'REDEEM' as const,
+                points: -pointsToUse,
+                description: `Redeemed ${pointsToUse} points for Rp ${pointsDiscount.toLocaleString('id-ID')} discount on transaction ${invoiceNumber} [synced offline]`,
+                customerId: payload.customerId,
+                transactionId: transaction.id,
+                createdAt: transactionDate,
               })
+            }
+            if (loyaltyLogs.length > 0) {
+              await txDb.loyaltyLog.createMany({ data: loyaltyLogs })
             }
           }
 
           return { transactionId: transaction.id, invoiceNumber }
-        })
+        }, { timeout: 15000 })
 
         results.push({
           localId: tx.id,

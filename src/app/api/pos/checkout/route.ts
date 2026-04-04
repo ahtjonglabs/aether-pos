@@ -126,46 +126,50 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // 5. Create TransactionItem records, decrease stock, create audit logs
-      for (const item of items) {
+      // 5. Batch create TransactionItems, batch update stocks, batch create audit logs
+      const itemData = items.map((item: { productId: string; productName: string; price: number; qty: number }) => {
         const product = productMap.get(item.productId)!
-        const itemSubtotal = item.price * item.qty
+        return {
+          productId: item.productId,
+          productName: item.productName,
+          price: item.price,
+          qty: item.qty,
+          subtotal: item.price * item.qty,
+          hpp: product.hpp,
+          transactionId: transaction.id,
+        }
+      })
 
-        await tx.transactionItem.create({
-          data: {
-            productId: item.productId,
-            productName: item.productName,
-            price: item.price,
-            qty: item.qty,
-            subtotal: itemSubtotal,
-            hpp: product.hpp,
-            transactionId: transaction.id,
-          },
-        })
+      await tx.transactionItem.createMany({ data: itemData })
 
-        // Decrease stock
+      // Batch update stock for all items
+      for (const item of items) {
         await tx.product.update({
           where: { id: item.productId },
           data: { stock: { decrement: item.qty } },
         })
+      }
 
-        // Create AuditLog for stock decrease (action: SALE)
-        await tx.auditLog.create({
-          data: {
-            action: 'SALE',
-            entityType: 'PRODUCT',
-            entityId: item.productId,
-            details: JSON.stringify({
-              invoiceNumber,
-              productName: item.productName,
-              quantitySold: item.qty,
-              previousStock: product.stock,
-              newStock: product.stock - item.qty,
-            }),
-            outletId,
-            userId,
-          },
-        })
+      // Batch create audit logs
+      const auditData = items.map((item: { productId: string; productName: string; qty: number }) => {
+        const product = productMap.get(item.productId)!
+        return {
+          action: 'SALE' as const,
+          entityType: 'PRODUCT' as const,
+          entityId: item.productId,
+          details: JSON.stringify({
+            invoiceNumber,
+            productName: item.productName,
+            quantitySold: item.qty,
+            previousStock: product.stock,
+            newStock: product.stock - item.qty,
+          }),
+          outletId,
+          userId,
+        }
+      })
+      if (auditData.length > 0) {
+        await tx.auditLog.createMany({ data: auditData })
       }
 
       // 6. Handle customer loyalty
@@ -186,12 +190,6 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Update totalSpend
-        await tx.customer.update({
-          where: { id: customerId },
-          data: { totalSpend: { increment: total } },
-        })
-
         // Calculate earned points based on outlet loyalty settings
         let earnedPoints = 0
         const setting = await tx.outletSetting.findUnique({
@@ -202,46 +200,52 @@ export async function POST(request: NextRequest) {
           earnedPoints = Math.floor(total / setting.loyaltyPointsPerAmount)
         }
 
-        if (earnedPoints > 0) {
-          await tx.customer.update({
-            where: { id: customerId },
-            data: { points: { increment: earnedPoints } },
-          })
-
-          await tx.loyaltyLog.create({
-            data: {
-              type: 'EARN',
-              points: earnedPoints,
-              description: `Earned ${earnedPoints} points from transaction ${invoiceNumber} (Rp ${total.toLocaleString('id-ID')})`,
-              customerId,
-              transactionId: transaction.id,
-            },
-          })
+        // Combine customer updates into a single query
+        const customerUpdateData: { totalSpend: { increment: number }; points?: { increment: number } | { decrement: number } } = {
+          totalSpend: { increment: total },
+        }
+        let netPointsDelta = 0
+        if (earnedPoints > 0) netPointsDelta += earnedPoints
+        if (pointsToUse > 0) netPointsDelta -= pointsToUse
+        if (netPointsDelta !== 0) {
+          customerUpdateData.points = netPointsDelta > 0
+            ? { increment: netPointsDelta }
+            : { decrement: Math.abs(netPointsDelta) }
         }
 
-        // Handle points redemption
+        await tx.customer.update({
+          where: { id: customerId },
+          data: customerUpdateData,
+        })
+
+        // Create loyalty logs in batch
+        const loyaltyLogs = []
+        if (earnedPoints > 0) {
+          loyaltyLogs.push({
+            type: 'EARN' as const,
+            points: earnedPoints,
+            description: `Earned ${earnedPoints} points from transaction ${invoiceNumber} (Rp ${total.toLocaleString('id-ID')})`,
+            customerId,
+            transactionId: transaction.id,
+          })
+        }
         if (pointsToUse > 0) {
-          await tx.customer.update({
-            where: { id: customerId },
-            data: { points: { decrement: pointsToUse } },
-          })
-
           const pointsDiscount = pointsToUse * 100
-
-          await tx.loyaltyLog.create({
-            data: {
-              type: 'REDEEM',
-              points: -pointsToUse,
-              description: `Redeemed ${pointsToUse} points for Rp ${pointsDiscount.toLocaleString('id-ID')} discount on transaction ${invoiceNumber}`,
-              customerId,
-              transactionId: transaction.id,
-            },
+          loyaltyLogs.push({
+            type: 'REDEEM' as const,
+            points: -pointsToUse,
+            description: `Redeemed ${pointsToUse} points for Rp ${pointsDiscount.toLocaleString('id-ID')} discount on transaction ${invoiceNumber}`,
+            customerId,
+            transactionId: transaction.id,
           })
+        }
+        if (loyaltyLogs.length > 0) {
+          await tx.loyaltyLog.createMany({ data: loyaltyLogs })
         }
       }
 
       return { invoiceNumber }
-    })
+    }, { timeout: 15000 })
 
     // H4: Post-transaction lookups for notification — wrapped in try/catch so a
     //     lookup failure never causes a "checkout failed" response when data was already saved.

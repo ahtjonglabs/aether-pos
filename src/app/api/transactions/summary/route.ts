@@ -107,19 +107,23 @@ export async function GET(request: NextRequest) {
       return sum + t.items.reduce((itemSum, item) => itemSum + item.qty, 0)
     }, 0)
 
-    // Payment method breakdown
-    const paymentMap = new Map<string, { count: number; total: number }>()
+    // Payment method breakdown with brutto/netto per method
+    const paymentMap = new Map<string, { count: number; total: number; brutto: number; discount: number }>()
     for (const t of transactions) {
       const method = t.paymentMethod
-      const existing = paymentMap.get(method) || { count: 0, total: 0 }
+      const existing = paymentMap.get(method) || { count: 0, total: 0, brutto: 0, discount: 0 }
       existing.count += 1
       existing.total += t.total
+      existing.brutto += t.subtotal
+      existing.discount += t.discount
       paymentMap.set(method, existing)
     }
     const paymentBreakdown = Array.from(paymentMap.entries()).map(([method, data]) => ({
       method,
       count: data.count,
       total: data.total,
+      brutto: data.brutto,
+      discount: data.discount,
     }))
 
     // Top products by revenue

@@ -55,7 +55,7 @@ export async function POST(
       select: { productId: true, productName: true, qty: true },
     })
 
-    // Perform void in a transaction: restore stock + create audit log
+    // Perform void in a transaction: restore stock + create audit logs
     await db.$transaction(async (tx) => {
       // Restore stock for each item
       for (const item of transactionItems) {
@@ -64,29 +64,31 @@ export async function POST(
           where: { id: item.productId },
           data: { stock: { increment: item.qty } },
         })
-
-        // Create audit log for stock restoration
-        const product = await tx.product.findUnique({
-          where: { id: item.productId },
-          select: { stock: true },
-        })
-
-        await tx.auditLog.create({
-          data: {
-            action: 'RESTOCK',
-            entityType: 'PRODUCT',
-            entityId: item.productId,
-            details: JSON.stringify({
-              reason: `Void transaksi ${transaction.invoiceNumber}`,
-              productName: item.productName,
-              quantityAdded: item.qty,
-              newStock: product?.stock ?? 0,
-            }),
-            outletId,
-            userId,
-          },
-        })
       }
+
+      // Fetch updated stocks for audit logs
+      const updatedProducts = await tx.product.findMany({
+        where: { id: { in: transactionItems.map(i => i.productId) } },
+        select: { id: true, stock: true },
+      })
+      const stockMap = new Map(updatedProducts.map(p => [p.id, p.stock]))
+
+      // Batch create audit logs for stock restoration
+      await tx.auditLog.createMany({
+        data: transactionItems.map(item => ({
+          action: 'RESTOCK' as const,
+          entityType: 'PRODUCT' as const,
+          entityId: item.productId,
+          details: JSON.stringify({
+            reason: `Void transaksi ${transaction.invoiceNumber}`,
+            productName: item.productName,
+            quantityAdded: item.qty,
+            newStock: stockMap.get(item.productId) ?? 0,
+          }),
+          outletId,
+          userId,
+        })),
+      })
 
       // Create void audit log
       await tx.auditLog.create({
@@ -109,7 +111,7 @@ export async function POST(
           userId,
         },
       })
-    })
+    }, { timeout: 10000 })
 
     return safeJson({ success: true, message: 'Transaction voided, stock restored' })
   } catch (error) {

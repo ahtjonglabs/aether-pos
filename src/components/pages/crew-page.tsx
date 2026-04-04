@@ -198,7 +198,9 @@ function CrewManagement() {
         toast.success('Crew berhasil ditambahkan')
         setAddOpen(false)
         setFormData(DEFAULT_FORM)
-        fetchCrew()
+        // Delay refetch to let dialog close animation finish
+        // before component re-renders (prevents overlay sticking)
+        setTimeout(() => fetchCrew(), 300)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Gagal menambah crew')
@@ -254,7 +256,7 @@ function CrewManagement() {
         setEditOpen(false)
         setEditCrew(null)
         setFormData(DEFAULT_FORM)
-        fetchCrew()
+        setTimeout(() => fetchCrew(), 300)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Gagal memperbarui crew')
@@ -275,7 +277,7 @@ function CrewManagement() {
       const res = await fetch(`/api/outlet/crew/${deleteId}`, { method: 'DELETE' })
       if (res.ok) {
         toast.success('Crew berhasil dihapus')
-        fetchCrew()
+        setTimeout(() => fetchCrew(), 300)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Gagal menghapus crew')
@@ -484,7 +486,7 @@ function CrewManagement() {
 
       {/* Add Crew Dialog */}
       <ResponsiveDialog open={addOpen} onOpenChange={setAddOpen}>
-        <ResponsiveDialogContent className="p-4" desktopClassName="max-w-md p-4">
+        <ResponsiveDialogContent className="p-4 max-w-md">
           <ResponsiveDialogHeader>
             <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100">
               Tambah Crew Baru
@@ -572,7 +574,7 @@ function CrewManagement() {
 
       {/* Edit Crew Dialog */}
       <ResponsiveDialog open={editOpen} onOpenChange={setEditOpen}>
-        <ResponsiveDialogContent className="p-4" desktopClassName="max-w-md p-4">
+        <ResponsiveDialogContent className="p-4 max-w-md">
           <ResponsiveDialogHeader>
             <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100">
               Edit Data Crew

@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
           data: auditLogs,
         })
       }
-    })
+    }, { timeout: 15000 })
 
     return safeJson({ updated: updatedCount })
   } catch (error) {

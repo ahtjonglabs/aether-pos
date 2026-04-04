@@ -38,7 +38,9 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "data-[state=open]:animate-[dialog-overlay-show_200ms_ease-out] data-[state=closed]:animate-[dialog-overlay-hide_150ms_ease-in] fixed inset-0 z-50 bg-black/60",
+        "fixed inset-0 z-50 bg-black/60 transition-opacity duration-150",
+        "data-[state=open]:opacity-100 data-[state=closed]:opacity-0",
+        "data-[state=closed]:pointer-events-none",
         className
       )}
       {...props}
@@ -60,7 +62,10 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-[dialog-content-show_200ms_ease-out] data-[state=closed]:animate-[dialog-content-hide_150ms_ease-in] fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-zinc-800/80 p-6 shadow-2xl shadow-black/50 sm:max-w-lg",
+          "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-zinc-800/80 p-6 shadow-2xl shadow-black/50 sm:max-w-lg",
+          "data-[state=open]:animate-[dialog-content-show_200ms_ease-out]",
+          "data-[state=closed]:animate-[dialog-content-hide_150ms_ease-in]",
+          "data-[state=closed]:pointer-events-none",
           className
         )}
         {...props}
