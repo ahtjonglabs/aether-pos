@@ -666,54 +666,54 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* ── All-time stats — compact horizontal bar ── */}
+      {/* ── All-time stats — compact grid ── */}
       <motion.div variants={itemVariants}>
-        <div className="bg-zinc-900/60 border border-zinc-800/40 rounded-xl px-4 py-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-8 sm:gap-y-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-emerald-500/10 flex items-center justify-center">
-              <Wallet className="h-3.5 w-3.5 text-emerald-400" />
+        <div className="bg-zinc-900/60 border border-zinc-800/40 rounded-xl p-3">
+          <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2.5">Statistik Keseluruhan</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                <Wallet className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-zinc-500 leading-tight">Total Revenue</p>
+                <p className="text-sm font-bold text-zinc-100 truncate">
+                  {stats ? formatCurrency(stats.totalRevenue) : '-'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total Revenue</p>
-              <p className="text-sm font-bold text-zinc-200">
-                {stats ? formatCurrency(stats.totalRevenue) : '-'}
-              </p>
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                <Receipt className="h-4 w-4 text-blue-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-zinc-500 leading-tight">Total Transaksi</p>
+                <p className="text-sm font-bold text-zinc-100">
+                  {stats ? formatNumber(stats.totalTransactions) : '-'}
+                </p>
+              </div>
             </div>
-          </div>
-          <Separator orientation="vertical" className="h-8 bg-zinc-800 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-blue-500/10 flex items-center justify-center">
-              <Receipt className="h-3.5 w-3.5 text-blue-400" />
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+              <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                <Package className="h-4 w-4 text-violet-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-zinc-500 leading-tight">Total Produk</p>
+                <p className="text-sm font-bold text-zinc-100">
+                  {stats ? formatNumber(stats.totalProducts) : '-'}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total Transaksi</p>
-              <p className="text-sm font-bold text-zinc-200">
-                {stats ? formatNumber(stats.totalTransactions) : '-'}
-              </p>
-            </div>
-          </div>
-          <Separator orientation="vertical" className="h-8 bg-zinc-800 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-violet-500/10 flex items-center justify-center">
-              <Package className="h-3.5 w-3.5 text-violet-400" />
-            </div>
-            <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Total Produk</p>
-              <p className="text-sm font-bold text-zinc-200">
-                {stats ? formatNumber(stats.totalProducts) : '-'}
-              </p>
-            </div>
-          </div>
-          <Separator orientation="vertical" className="h-8 bg-zinc-800 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-amber-500/10 flex items-center justify-center">
-              <Users className="h-3.5 w-3.5 text-amber-400" />
-            </div>
-            <div>
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Top Customers</p>
-              <p className="text-sm font-bold text-zinc-200">
-                {stats?.topCustomers?.length ?? 0}
-              </p>
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                <Users className="h-4 w-4 text-amber-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] text-zinc-500 leading-tight">Top Customers</p>
+                <p className="text-sm font-bold text-zinc-100">
+                  {stats?.topCustomers?.length ?? 0}
+                </p>
+              </div>
             </div>
           </div>
         </div>
