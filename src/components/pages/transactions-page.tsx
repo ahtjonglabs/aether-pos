@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Pagination } from '@/components/shared/pagination'
+import { cn } from '@/lib/utils'
 import {
   Search,
   Eye,
@@ -55,6 +56,7 @@ import {
   Printer,
   Lock,
   Filter,
+  SlidersHorizontal,
   Loader2,
   Store,
   TrendingUp,
@@ -195,6 +197,9 @@ export default function TransactionsPage() {
   const [voidOpen, setVoidOpen] = useState(false)
   const [voidReason, setVoidReason] = useState('')
   const [voidSubmitting, setVoidSubmitting] = useState(false)
+
+  // Filter panel toggle
+  const [filterOpen, setFilterOpen] = useState(false)
 
   const receiptRef = useRef<HTMLDivElement>(null)
 
@@ -448,6 +453,7 @@ export default function TransactionsPage() {
   }
 
   const hasActiveFilters = search || dateFrom || dateTo || cashierId || paymentMethod || voidFilter || outletId
+  const activeSecondaryFilterCount = [outletId, cashierId, paymentMethod, voidFilter].filter(Boolean).length
 
   // --- Payment badge helpers ---
   const getPaymentBadge = (method: string) => {
@@ -826,41 +832,112 @@ export default function TransactionsPage() {
   // --- Transactions Tab Content ---
   const renderTransactionsTab = () => (
     <>
-      {/* Filters */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:flex-wrap">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-            <Input
-              placeholder="Cari invoice..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 w-full sm:w-[180px]"
-            />
-          </div>
+      {/* ── Compact Toolbar ── */}
+      <div className="flex items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1 min-w-0 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
+          <Input
+            placeholder="Cari invoice..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500"
+          />
+        </div>
 
-          {/* Date filters */}
-          <div className="flex items-center gap-1.5">
-            <CalendarDays className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
-            <Input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-full sm:w-[130px] [color-scheme:dark]"
-            />
-            <span className="text-zinc-500 text-[11px] hidden sm:inline">—</span>
-            <Input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-full sm:w-[130px] [color-scheme:dark]"
-            />
-          </div>
+        {/* Date range */}
+        <div className="hidden sm:flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-md px-1 h-8">
+          <CalendarDays className="h-3 w-3 text-zinc-500 shrink-0 ml-1" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-6 text-[11px] bg-transparent border-0 text-zinc-200 w-[120px] px-1 [color-scheme:dark] focus-visible:ring-0"
+          />
+          <span className="text-zinc-600 text-[10px]">—</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-6 text-[11px] bg-transparent border-0 text-zinc-200 w-[120px] px-1 [color-scheme:dark] focus-visible:ring-0"
+          />
+        </div>
 
-          {/* Outlet filter (prepared for multi-outlet) */}
+        {/* Hari Ini */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleSetToday}
+          className="text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 text-[11px] h-8 px-2.5 rounded-lg shrink-0"
+        >
+          Hari Ini
+        </Button>
+
+        {/* Filter toggle */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setFilterOpen(!filterOpen)}
+          className={cn(
+            'h-8 px-2.5 text-xs rounded-lg shrink-0 transition-all',
+            filterOpen || activeSecondaryFilterCount > 0
+              ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/15'
+              : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+          )}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          {activeSecondaryFilterCount > 0 && (
+            <span className="ml-1 w-4 h-4 rounded-full bg-emerald-500 text-[9px] text-white font-bold flex items-center justify-center">{activeSecondaryFilterCount}</span>
+          )}
+        </Button>
+
+        {/* Export */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={!isPro}
+          className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs rounded-lg shrink-0"
+        >
+          {isPro ? <Download className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+
+      {/* ── Mobile Date Bar (shown only on mobile) ── */}
+      <div className="flex sm:hidden items-center gap-1.5">
+        <div className="flex items-center gap-1 flex-1 min-w-0 bg-zinc-800 border border-zinc-700 rounded-lg px-2 h-9">
+          <CalendarDays className="h-3 w-3 text-zinc-500 shrink-0" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-7 text-[11px] bg-transparent border-0 text-zinc-200 w-full px-0 [color-scheme:dark] focus-visible:ring-0"
+          />
+          <span className="text-zinc-600 text-[10px]">—</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-7 text-[11px] bg-transparent border-0 text-zinc-200 w-full px-0 [color-scheme:dark] focus-visible:ring-0"
+          />
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 shrink-0"
+          onClick={handleClearAllFilters}
+          title="Reset filter"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {/* ── Collapsible Secondary Filters ── */}
+      {filterOpen && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl animate-in slide-in-from-top-2 duration-200">
+          {/* Outlet filter */}
           <Select value={outletId || '__all__'} onValueChange={(v) => setOutletId(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="w-full sm:w-[150px] h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+            <SelectTrigger className="h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg">
               <Store className="mr-1.5 h-3 w-3 text-zinc-500" />
               <SelectValue placeholder="Outlet" />
             </SelectTrigger>
@@ -873,16 +950,14 @@ export default function TransactionsPage() {
           {/* Cashier filter */}
           {isPro && cashiers.length > 0 && (
             <Select value={cashierId || '__all__'} onValueChange={(v) => setCashierId(v === '__all__' ? '' : v)}>
-              <SelectTrigger className="w-full sm:w-[140px] h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+              <SelectTrigger className="h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg">
                 <Filter className="mr-1.5 h-3 w-3 text-zinc-500" />
                 <SelectValue placeholder="Kasir" />
               </SelectTrigger>
               <SelectContent className="bg-zinc-800 border-zinc-700">
                 <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Kasir</SelectItem>
                 {cashiers.filter((c) => c.id).map((c) => (
-                  <SelectItem key={c.id} value={c.id} className="text-zinc-200 focus:bg-zinc-700 text-xs">
-                    {c.name}
-                  </SelectItem>
+                  <SelectItem key={c.id} value={c.id} className="text-zinc-200 focus:bg-zinc-700 text-xs">{c.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -891,116 +966,78 @@ export default function TransactionsPage() {
           {/* Payment method filter */}
           {isPro && (
             <Select value={paymentMethod || '__all__'} onValueChange={(v) => setPaymentMethod(v === '__all__' ? '' : v)}>
-              <SelectTrigger className="w-full sm:w-[140px] h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
-                <Filter className="mr-1.5 h-3 w-3 text-zinc-500" />
+              <SelectTrigger className="h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg">
+                <CreditCard className="mr-1.5 h-3 w-3 text-zinc-500" />
                 <SelectValue placeholder="Pembayaran" />
               </SelectTrigger>
               <SelectContent className="bg-zinc-800 border-zinc-700">
                 <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua Metode</SelectItem>
-                <SelectItem value="CASH" className="text-zinc-200 focus:bg-zinc-700 text-xs">CASH</SelectItem>
-                <SelectItem value="QRIS" className="text-zinc-200 focus:bg-zinc-700 text-xs">QRIS</SelectItem>
-                <SelectItem value="DEBIT" className="text-zinc-200 focus:bg-zinc-700 text-xs">DEBIT</SelectItem>
+                <SelectItem value="CASH" className="text-zinc-200 focus:bg-zinc-700 text-xs">💵 CASH</SelectItem>
+                <SelectItem value="QRIS" className="text-zinc-200 focus:bg-zinc-700 text-xs">📱 QRIS</SelectItem>
+                <SelectItem value="DEBIT" className="text-zinc-200 focus:bg-zinc-700 text-xs">💳 DEBIT</SelectItem>
               </SelectContent>
             </Select>
           )}
 
           {/* Void status filter */}
           <Select value={voidFilter || '__all__'} onValueChange={(v) => setVoidFilter(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="w-full sm:w-[120px] h-9 sm:h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100">
+            <SelectTrigger className="h-9 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg">
+              <Ban className="mr-1.5 h-3 w-3 text-zinc-500" />
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent className="bg-zinc-800 border-zinc-700">
               <SelectItem value="__all__" className="text-zinc-200 focus:bg-zinc-700 text-xs">Semua</SelectItem>
-              <SelectItem value="active" className="text-zinc-200 focus:bg-zinc-700 text-xs">Aktif</SelectItem>
-              <SelectItem value="void" className="text-zinc-200 focus:bg-zinc-700 text-xs">Void</SelectItem>
+              <SelectItem value="active" className="text-zinc-200 focus:bg-zinc-700 text-xs">✅ Aktif</SelectItem>
+              <SelectItem value="void" className="text-zinc-200 focus:bg-zinc-700 text-xs">❌ Void</SelectItem>
             </SelectContent>
           </Select>
-
-          {/* Quick actions */}
-          <div className="flex gap-0.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSetToday}
-              className="text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 text-[11px] h-8 px-2"
-            >
-              Hari Ini
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800"
-              onClick={handleClearAllFilters}
-              title="Reset semua filter"
-            >
-              <RotateCcw className="h-3 w-3" />
-            </Button>
-          </div>
         </div>
+      )}
 
-        {/* Export */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          disabled={!isPro}
-          className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-8 text-xs"
-        >
-          {isPro ? (
-            <>
-              <Download className="mr-1.5 h-3 w-3" />
-              Export
-            </>
-          ) : (
-            <>
-              <Lock className="mr-1.5 h-3 w-3" />
-              Export
-              <Badge className="ml-1.5 bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px] px-1 py-0">
-                PRO
-              </Badge>
-            </>
-          )}
-        </Button>
-      </div>
-
-      {/* Active filter badges */}
+      {/* Active filter chips */}
       {hasActiveFilters && (
         <div className="flex flex-wrap gap-1.5">
           {search && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setSearch('')}>
-              Search: {search} <span className="ml-1 text-zinc-500">×</span>
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={() => setSearch('')}>
+              🔍 {search} <span className="ml-1 text-zinc-500">×</span>
             </Badge>
           )}
-          {dateFrom && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setDateFrom('')}>
-              Dari: {dateFrom} <span className="ml-1 text-zinc-500">×</span>
+          {dateFrom && dateTo && dateFrom === dateTo ? (
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={handleSetToday}>
+              📅 {dateFrom} <span className="ml-1 text-zinc-500">×</span>
             </Badge>
-          )}
-          {dateTo && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setDateTo('')}>
-              Sampai: {dateTo} <span className="ml-1 text-zinc-500">×</span>
-            </Badge>
-          )}
-          {outletId && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setOutletId('')}>
-              Outlet <span className="ml-1 text-zinc-500">×</span>
-            </Badge>
+          ) : (
+            <>
+              {dateFrom && (
+                <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={() => setDateFrom('')}>
+                  Dari: {dateFrom} <span className="ml-1 text-zinc-500">×</span>
+                </Badge>
+              )}
+              {dateTo && (
+                <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={() => setDateTo('')}>
+                  Sampai: {dateTo} <span className="ml-1 text-zinc-500">×</span>
+                </Badge>
+              )}
+            </>
           )}
           {cashierId && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setCashierId('')}>
-              Kasir: {cashiers.find(c => c.id === cashierId)?.name || cashierId} <span className="ml-1 text-zinc-500">×</span>
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={() => setCashierId('')}>
+              👤 {cashiers.find(c => c.id === cashierId)?.name || 'Kasir'} <span className="ml-1 text-zinc-500">×</span>
             </Badge>
           )}
           {paymentMethod && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setPaymentMethod('')}>
-              Pembayaran: {paymentMethod} <span className="ml-1 text-zinc-500">×</span>
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={() => setPaymentMethod('')}>
+              {paymentMethod === 'CASH' ? '💵' : paymentMethod === 'QRIS' ? '📱' : '💳'} {paymentMethod} <span className="ml-1 text-zinc-500">×</span>
             </Badge>
           )}
           {voidFilter && (
-            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer" onClick={() => setVoidFilter('')}>
-              Status: {voidFilter === 'active' ? 'Aktif' : 'Void'} <span className="ml-1 text-zinc-500">×</span>
+            <Badge variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 text-[11px] cursor-pointer hover:bg-zinc-700" onClick={() => setVoidFilter('')}>
+              {voidFilter === 'active' ? '✅ Aktif' : '❌ Void'} <span className="ml-1 text-zinc-500">×</span>
             </Badge>
           )}
+          <Button variant="ghost" size="sm" onClick={handleClearAllFilters} className="text-[10px] text-zinc-500 hover:text-zinc-300 h-5 px-1.5">
+            Reset semua
+          </Button>
         </div>
       )}
 
@@ -1209,43 +1246,6 @@ export default function TransactionsPage() {
       <div>
         <h1 className="text-lg font-semibold text-zinc-100">Transaksi</h1>
         <p className="text-xs text-zinc-500 mt-0.5">Lihat semua transaksi dan ringkasan harian</p>
-      </div>
-
-      {/* Date bar (shared across tabs) */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <CalendarDays className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
-          <Input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-full sm:w-[140px] [color-scheme:dark]"
-          />
-          <span className="text-zinc-600 text-[11px]">—</span>
-          <Input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="h-8 text-xs bg-zinc-800 border-zinc-700 text-zinc-100 w-full sm:w-[140px] [color-scheme:dark]"
-          />
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSetToday}
-          className="text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 text-[11px] h-8 px-2.5 rounded-full"
-        >
-          Hari Ini
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
-          onClick={handleClearAllFilters}
-          title="Reset filter"
-        >
-          <RotateCcw className="h-3 w-3" />
-        </Button>
       </div>
 
       {/* Tabs */}
