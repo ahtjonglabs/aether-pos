@@ -39,6 +39,10 @@ export interface PlanFeatures {
   stockMovement: boolean
   dashboardAnalytics: boolean
 
+  // AI & Insights
+  aiInsights: boolean            // Basic AI insight engine (health score, top insight)
+  forecasting: boolean           // Revenue forecasting, stock depletion prediction, trend analysis
+
   // Advanced
   offlineMode: boolean           // Offline POS (IndexedDB)
   multiOutlet: boolean           // Multiple outlets
@@ -74,6 +78,9 @@ export const PLANS: Record<AccountType, PlanFeatures> = {
     stockMovement: true,
     dashboardAnalytics: true,
 
+    aiInsights: false,
+    forecasting: false,
+
     offlineMode: true,
     multiOutlet: false,
     bulkUpload: false,
@@ -103,6 +110,9 @@ export const PLANS: Record<AccountType, PlanFeatures> = {
     stockMovement: true,
     dashboardAnalytics: true,
 
+    aiInsights: true,
+    forecasting: true,
+
     offlineMode: true,
     multiOutlet: false,
     bulkUpload: true,
@@ -131,6 +141,9 @@ export const PLANS: Record<AccountType, PlanFeatures> = {
     auditLog: true,
     stockMovement: true,
     dashboardAnalytics: true,
+
+    aiInsights: true,
+    forecasting: true,
 
     offlineMode: true,
     multiOutlet: true,

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
-import { getVoidedTxIds } from '@/lib/api-helpers'
+import { getVoidedTxIds, parseTzOffset, getTodayRangeTz } from '@/lib/api-helpers'
 import { runInsightEngine, type InsightEngineInput } from '@/lib/insight-engine'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
@@ -21,10 +21,20 @@ export async function GET(request: NextRequest) {
     if (user.role !== 'OWNER') return safeJsonError('Owner only', 403)
 
     const outletId = user.outletId
-    const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
-    const weekAgo = new Date(todayStart.getTime() - 7 * 86_400_000)
+
+    // Timezone-aware date ranges from client device
+    const tzOffset = parseTzOffset(request.nextUrl.searchParams)
+    const { todayStart, yesterdayStart, weekAgo } = tzOffset !== null
+      ? getTodayRangeTz(tzOffset)
+      : (() => {
+          const now = new Date()
+          const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          return {
+            todayStart: ts,
+            yesterdayStart: new Date(ts.getTime() - 86_400_000),
+            weekAgo: new Date(ts.getTime() - 7 * 86_400_000),
+          }
+        })()
 
     // Void exclusion
     const voidedTxIds = await getVoidedTxIds(db, outletId)

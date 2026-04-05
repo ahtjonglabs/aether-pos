@@ -181,15 +181,10 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
 
   const tabs = [
     { value: 'plan', label: 'Plan & Langganan', icon: <Crown className="h-4 w-4" /> },
-    { value: 'payment', label: 'Pembayaran', icon: <Banknote className="h-4 w-4" /> },
-    { value: 'tax', label: 'Pajak PPN', icon: <ReceiptText className="h-4 w-4" /> },
-    { value: 'outlet', label: 'Info Outlet', icon: <Store className="h-4 w-4" /> },
-    { value: 'loyalty', label: 'Loyalty', icon: <Star className="h-4 w-4" /> },
-    ...(isOwner ? [{ value: 'promo', label: 'Promo', icon: <Tag className="h-4 w-4" /> }] : []),
-    { value: 'theme', label: 'Tema & Struk', icon: <Palette className="h-4 w-4" /> },
+    { value: 'outlet', label: 'Outlet & Struk', icon: <Store className="h-4 w-4" /> },
+    ...(isOwner ? [{ value: 'kasir', label: 'Pembayaran & Promo', icon: <Banknote className="h-4 w-4" /> }] : [{ value: 'kasir', label: 'Kasir', icon: <Banknote className="h-4 w-4" /> }]),
     ...(isOwner ? [{ value: 'telegram', label: 'Telegram', icon: <Send className="h-4 w-4" /> }] : []),
     { value: 'account', label: 'Akun', icon: <KeyRound className="h-4 w-4" /> },
-    ...(isOwner ? [{ value: 'multi-outlet', label: 'Outlet Cabang', icon: <Building2 className="h-4 w-4" /> }] : []),
   ]
 
   return (
@@ -214,25 +209,27 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         <TabsContent value="plan">
           <PlanTab />
         </TabsContent>
-        <TabsContent value="payment">
-          <PaymentMethodsTab />
-        </TabsContent>
-        <TabsContent value="tax">
-          <TaxTab />
-        </TabsContent>
         <TabsContent value="outlet">
-          <OutletInfoTab />
+          <OutletAndReceiptTab />
+          {isOwner && (
+            <div className="mt-4">
+              <ProGate feature="multiOutlet" label="Multi-Outlet" description="Kelola beberapa outlet dalam satu akun" minHeight="200px">
+                <MultiOutletTab />
+              </ProGate>
+            </div>
+          )}
         </TabsContent>
-        <TabsContent value="loyalty">
-          <LoyaltyTab />
-        </TabsContent>
-        {isOwner && (
-          <TabsContent value="promo">
-            <PromoTab />
-          </TabsContent>
-        )}
-        <TabsContent value="theme">
-          <ThemeReceiptTab />
+        <TabsContent value="kasir">
+          <PaymentMethodsTab />
+          <div className="mt-4">
+            <LoyaltyTab />
+          </div>
+          {isOwner && (
+            <div className="mt-4 space-y-4">
+              <TaxTab />
+              <PromoTab />
+            </div>
+          )}
         </TabsContent>
         {isOwner && (
           <TabsContent value="telegram">
@@ -244,13 +241,7 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         <TabsContent value="account">
           <AccountTab />
         </TabsContent>
-        {isOwner && (
-          <TabsContent value="multi-outlet">
-            <ProGate feature="multiOutlet" label="Multi-Outlet" description="Kelola beberapa outlet dalam satu akun" minHeight="200px">
-              <MultiOutletTab />
-            </ProGate>
-          </TabsContent>
-        )}
+
       </div>
     </Tabs>
   )
@@ -319,6 +310,17 @@ function useSettings() {
   }, [settings])
 
   return { settings, setSettings, loading, saving, saveSettings, refetch: fetchSettings }
+}
+
+// ==================== TAB: OUTLET & RECEIPT (Combined) ====================
+
+function OutletAndReceiptTab() {
+  return (
+    <div className="space-y-4">
+      <OutletInfoTab />
+      <ThemeReceiptTab />
+    </div>
+  )
 }
 
 // ==================== TAB 1: PAYMENT METHODS ====================
@@ -1322,16 +1324,43 @@ function ThemeReceiptTab() {
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="receipt-logo" className="text-xs text-zinc-300">Logo URL</Label>
-              <Input
-                id="receipt-logo"
-                value={receiptLogo}
-                onChange={(e) => handleChange('receiptLogo', e.target.value)}
-                placeholder="https://example.com/logo.png"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-              />
-              <p className="text-[11px] text-zinc-500">Masukkan URL gambar logo</p>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-logo" className="text-xs text-zinc-300">Logo Outlet (Image URL)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="receipt-logo"
+                  value={receiptLogo}
+                  onChange={(e) => handleChange('receiptLogo', e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                />
+                {receiptLogo && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 h-9 w-9 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    onClick={() => handleChange('receiptLogo', '')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {receiptLogo && (
+                <div className="mt-1 flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+                  <img
+                    src={receiptLogo}
+                    alt="Logo Preview"
+                    className="h-14 w-14 rounded-lg object-contain bg-white p-1"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-emerald-400">Logo berhasil dimuat</p>
+                    <p className="text-[10px] text-zinc-500 truncate mt-0.5">{receiptLogo}</p>
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-zinc-500">Masukkan URL gambar logo. Logo akan ditampilkan pada struk belanja.</p>
             </div>
           </div>
         </CardContent>
@@ -1349,6 +1378,9 @@ function ThemeReceiptTab() {
             <div className="w-64 bg-white text-zinc-900 rounded-lg p-4 shadow-lg font-mono text-[11px] space-y-1.5">
               {/* Header */}
               <div className="text-center space-y-0.5">
+                {receiptLogo && (
+                  <img src={receiptLogo} alt="Logo" className="h-10 w-10 mx-auto object-contain mb-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                )}
                 <p className="font-bold text-xs text-zinc-900">
                   {receiptBusinessName || 'Nama Usaha'}
                 </p>

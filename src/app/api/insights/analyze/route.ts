@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
-import { getVoidedTxIds } from '@/lib/api-helpers'
+import { getVoidedTxIds, parseTzOffset, getTodayRangeTz, getHourInTimezone } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 export const maxDuration = 30
@@ -44,14 +44,23 @@ interface InsightData {
   }
 }
 
-async function aggregateData(outletId: string): Promise<InsightData> {
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
-  const dayOfWeek = now.getDay()
-  const weekStart = new Date(todayStart.getTime() - ((dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 86_400_000))
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const weekAgo = new Date(todayStart.getTime() - 7 * 86_400_000)
+async function aggregateData(outletId: string, tzOffset: number | null): Promise<InsightData> {
+  const { todayStart, yesterdayStart, dayOfWeek, weekStart, monthStart, weekAgo } = tzOffset !== null
+    ? getTodayRangeTz(tzOffset)
+    : (() => {
+        const now = new Date()
+        const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const dow = now.getDay()
+        const mondayOff = dow === 0 ? 6 : dow - 1
+        return {
+          todayStart: ts,
+          yesterdayStart: new Date(ts.getTime() - 86_400_000),
+          dayOfWeek: dow,
+          weekStart: new Date(ts.getTime() - mondayOff * 86_400_000),
+          monthStart: new Date(now.getFullYear(), now.getMonth(), 1),
+          weekAgo: new Date(ts.getTime() - 7 * 86_400_000),
+        }
+      })()
 
   const voidedTxIds = await getVoidedTxIds(db, outletId)
   const voidedIdArray = Array.from(voidedTxIds).filter(Boolean) as string[]
@@ -100,7 +109,9 @@ async function aggregateData(outletId: string): Promise<InsightData> {
   const hourBuckets: { hour: number; count: number; revenue: number }[] = []
   for (let h = 0; h < 24; h++) hourBuckets.push({ hour: h, count: 0, revenue: 0 })
   for (const t of todayFullTxs) {
-    const h = t.createdAt.getHours()
+    const h = tzOffset !== null
+      ? getHourInTimezone(t.createdAt, tzOffset)
+      : t.createdAt.getHours()
     hourBuckets[h].count++
     hourBuckets[h].revenue += t.total
   }
@@ -548,7 +559,8 @@ export async function GET(request: NextRequest) {
     if (!user) return unauthorized()
     if (user.role !== 'OWNER') return safeJsonError('Owner only', 403)
 
-    const data = await aggregateData(user.outletId)
+    const tzOffset = parseTzOffset(request.nextUrl.searchParams)
+    const data = await aggregateData(user.outletId, tzOffset)
     const cmo = generateCMOInsights(data)
     const cto = generateCTOInsights(data)
 

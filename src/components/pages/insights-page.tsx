@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
+import { useTimezone } from '@/hooks/use-timezone'
 import {
   TrendingUp, TrendingDown, Minus, BarChart3, Brain,
   ShoppingCart, Users, Package, AlertTriangle,
@@ -277,6 +278,7 @@ function PeakHoursChart({ buckets }: { buckets: HourBucket[] }) {
 export default function InsightsPage() {
   const { data: session } = useSession()
   const isOwner = session?.user?.role === 'OWNER'
+  const { tzOffset } = useTimezone()
   const [activeTab, setActiveTab] = useState('overview')
   const [data, setData] = useState<AnalyzeResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -286,7 +288,7 @@ export default function InsightsPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/insights/analyze')
+      const res = await fetch(`/api/insights/analyze?tzOffset=${tzOffset}`)
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || 'Gagal memuat insight')
@@ -298,7 +300,7 @@ export default function InsightsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [tzOffset])
 
   useEffect(() => {
     if (isOwner) fetchInsights()

@@ -192,6 +192,8 @@ export default function TransactionsPage() {
   const [detailItems, setDetailItems] = useState<TransactionItem[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailOutlet, setDetailOutlet] = useState<{ name: string; address: string; phone: string } | null>(null)
+  const [detailReceiptLogo, setDetailReceiptLogo] = useState('')
+  const [detailReceiptBusinessName, setDetailReceiptBusinessName] = useState('')
   const [detailCashierName, setDetailCashierName] = useState<string | null>(null)
   const [detailVoidInfo, setDetailVoidInfo] = useState<{ reason: string; voidedBy: string; voidedAt: string } | null>(null)
 
@@ -352,6 +354,8 @@ export default function TransactionsPage() {
         setDetailItems(data.items || [])
         setDetailVoidInfo(data.voidInfo || null)
         setDetailOutlet(data.outlet || null)
+        setDetailReceiptLogo(data.receiptLogo || '')
+        setDetailReceiptBusinessName(data.receiptBusinessName || '')
         setDetailCashierName(data.user?.name || null)
       }
     } catch {
@@ -1414,7 +1418,10 @@ export default function TransactionsPage() {
                 <div className="hidden">
                   <div ref={receiptRef} className="bg-white rounded-md p-4 font-mono text-xs text-zinc-800 max-w-[300px] mx-auto">
                     <div className="text-center mb-3">
-                      <p className="font-bold text-sm text-zinc-900">{detailOutlet?.name || 'Aether POS'}</p>
+                      {detailReceiptLogo && (
+                        <img src={detailReceiptLogo} alt="Logo" className="h-10 w-10 mx-auto object-contain mb-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                      )}
+                      <p className="font-bold text-sm text-zinc-900">{detailReceiptBusinessName || detailOutlet?.name || 'Aether POS'}</p>
                       {detailOutlet?.address && <p className="text-zinc-500 text-[10px]">{detailOutlet.address}</p>}
                       {detailOutlet?.phone && <p className="text-zinc-500 text-[10px]">{detailOutlet.phone}</p>}
                     </div>
