@@ -926,7 +926,9 @@ export default function PosPage() {
         .gap-1 { gap: 4px; }
         .gap-2 { gap: 8px; }
         .inline-flex { display: inline-flex; }
+        img { max-width: 48px; max-height: 48px; object-fit: contain; }
         @media print {
+          img { max-width: 48px; max-height: 48px; object-fit: contain; }
           body { margin: 0; padding: 10px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { margin: 0; size: 80mm auto; }
         }
@@ -1232,11 +1234,11 @@ export default function PosPage() {
         {/* Header — Business Info */}
         <div className="text-center space-y-2 py-3">
           {settings.receiptLogo && (
-            <div className="flex justify-center">
+            <div style={{ textAlign: 'center', marginBottom: '8px' }}>
               <img
                 src={settings.receiptLogo}
                 alt="Logo"
-                className="h-12 w-12 rounded object-contain"
+                style={{ width: '48px', height: '48px', objectFit: 'contain', borderRadius: '8px', display: 'inline-block' }}
                 crossOrigin="anonymous"
               />
             </div>

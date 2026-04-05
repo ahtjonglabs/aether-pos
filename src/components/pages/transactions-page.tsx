@@ -447,6 +447,8 @@ export default function TransactionsPage() {
             .right { text-align: right; }
             table { width: 100%; border-collapse: collapse; }
             td { padding: 2px 0; }
+            img { max-width: 48px; max-height: 48px; object-fit: contain; }
+            @media print { img { max-width: 48px; max-height: 48px; object-fit: contain; } }
           </style>
         </head>
         <body>
@@ -1419,7 +1421,9 @@ export default function TransactionsPage() {
                   <div ref={receiptRef} className="bg-white rounded-md p-4 font-mono text-xs text-zinc-800 max-w-[300px] mx-auto">
                     <div className="text-center mb-3">
                       {detailReceiptLogo && (
-                        <img src={detailReceiptLogo} alt="Logo" className="h-10 w-10 mx-auto object-contain mb-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                          <img src={detailReceiptLogo} alt="Logo" style={{ width: '48px', height: '48px', objectFit: 'contain', borderRadius: '8px', display: 'inline-block' }} crossOrigin="anonymous" />
+                        </div>
                       )}
                       <p className="font-bold text-sm text-zinc-900">{detailReceiptBusinessName || detailOutlet?.name || 'Aether POS'}</p>
                       {detailOutlet?.address && <p className="text-zinc-500 text-[10px]">{detailOutlet.address}</p>}

@@ -835,7 +835,7 @@ export default function DashboardPage() {
                     <Card className="bg-zinc-900 border border-zinc-800/60 rounded-xl">
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Tren 14 Hari</p>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Tren Revenue 14 Hari</p>
                           <TrendIcon direction={forecastData.trendDirection} />
                         </div>
                         <p className={`text-sm font-bold ${
@@ -845,7 +845,8 @@ export default function DashboardPage() {
                           {forecastData.trendDirection === 'up' ? 'Naik' :
                            forecastData.trendDirection === 'down' ? 'Turun' : 'Stabil'}
                         </p>
-                        <div className="mt-2">
+                        <p className="text-[10px] text-zinc-500 mt-0.5">Total pendapatan harian</p>
+                        <div className="mt-1.5">
                           <Sparkline data={trendValues} color={
                             forecastData.trendDirection === 'up' ? 'text-emerald-400' :
                             forecastData.trendDirection === 'down' ? 'text-red-400' : 'text-zinc-400'
@@ -891,14 +892,18 @@ export default function DashboardPage() {
                       </CardContent>
                     </Card>
 
-                    {/* Stock alerts */}
+                    {/* Stock alerts — Velocity based */}
                     <Card className={`bg-zinc-900 border rounded-xl ${
-                      forecastData.summary.criticalStock > 0 ? 'border-red-500/20' : 'border-zinc-800/60'
+                      forecastData.summary.criticalStock > 0 ? 'border-red-500/20' :
+                      forecastData.summary.warningStock > 0 ? 'border-amber-500/20' : 'border-zinc-800/60'
                     }`}>
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between mb-1">
                           <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Stok Kritis</p>
-                          <Warehouse className="h-3.5 w-3.5 text-red-400" />
+                          <Warehouse className={`h-3.5 w-3.5 ${
+                            forecastData.summary.criticalStock > 0 ? 'text-red-400' :
+                            forecastData.summary.warningStock > 0 ? 'text-amber-400' : 'text-emerald-400'
+                          }`} />
                         </div>
                         <p className={`text-sm font-bold ${
                           forecastData.summary.criticalStock > 0 ? 'text-red-400' :
@@ -910,8 +915,16 @@ export default function DashboardPage() {
                               ? `${forecastData.summary.warningStock} peringatan`
                               : 'Aman'}
                         </p>
-                        <p className="text-[10px] text-zinc-500 mt-0.5">
-                          berdasarkan velocity
+                        <p className={`text-[10px] mt-0.5 ${
+                          forecastData.summary.criticalStock > 0 ? 'text-red-400/60' :
+                          forecastData.summary.warningStock > 0 ? 'text-amber-400/60' : 'text-zinc-500'
+                        }`}>
+                          {forecastData.summary.criticalStock > 0
+                            ? `⚡ ${forecastData.summary.criticalStock} produk habis dalam 3 hari`
+                            : forecastData.summary.warningStock > 0
+                              ? `⚠️ ${forecastData.summary.warningStock} produk menipis (velocity 14 hari)`
+                              : '✓ Semua stok aman berdasarkan penjualan'
+                          }
                         </p>
                       </CardContent>
                     </Card>
@@ -920,7 +933,7 @@ export default function DashboardPage() {
                   {/* Revenue Trend + Forecast Line Chart */}
                   <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
                     <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <Activity className="h-4 w-4 text-violet-400" />
                           <h2 className="text-sm font-semibold text-zinc-200">Revenue Trend & Forecast</h2>
@@ -928,15 +941,57 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-1.5">
                             <div className="w-6 h-[2px] rounded-full bg-emerald-400" />
-                            <span className="text-[10px] text-zinc-500">Aktual</span>
+                            <span className="text-[10px] text-zinc-500">Aktual 14 hari</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <div className="w-6 h-[2px] rounded-full bg-violet-400 border-dashed" />
-                            <span className="text-[10px] text-zinc-500">Prediksi</span>
+                            <span className="text-[10px] text-zinc-500">Prediksi 7 hari</span>
                           </div>
                         </div>
                       </div>
+                      {/* Chart Explanation */}
+                      <div className="mb-3 px-3 py-2 rounded-lg bg-zinc-800/40 border border-zinc-700/30">
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          <span className="text-zinc-300 font-medium">📊 Cara baca grafik:</span> Garis hijau menunjukkan{' '}
+                          <span className="text-emerald-400 font-medium">pendapatan aktual harian</span>{' '}
+                          selama 14 hari terakhir. Garis ungu putus-putus adalah{' '}
+                          <span className="text-violet-400 font-medium">prediksi revenue</span>{' '}
+                          7 hari ke depan menggunakan{' '}
+                          <span className="text-zinc-300 font-medium">linear regression</span> dari data tren.
+                          {forecastData.trendDirection === 'up' && (
+                            <span className="text-emerald-400"> Tren <strong>naik</strong> — rata-rata harian {formatCurrency(forecastData.summary.avgDailyRevenue)}.</span>
+                          )}
+                          {forecastData.trendDirection === 'down' && (
+                            <span className="text-red-400"> Tren <strong>turun</strong> — perlu perhatian khusus.</span>
+                          )}
+                          {forecastData.trendDirection === 'stable' && (
+                            <span className="text-zinc-300"> Tren <strong>stabil</strong> — revenue konsisten.</span>
+                          )}
+                        </p>
+                      </div>
                       <RevenueLineChart trend={forecastData.trend} forecast={forecastData.forecast} />
+                      {/* Forecast summary line */}
+                      <div className="mt-3 flex items-center justify-between px-1">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="text-[10px] text-zinc-500">Rata-rata/hari</p>
+                            <p className="text-xs font-semibold text-zinc-200">{formatCurrency(forecastData.summary.avgDailyRevenue)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-zinc-500">Proyeksi minggu depan</p>
+                            <p className="text-xs font-semibold text-violet-400">{formatCurrency(forecastData.summary.projectedWeekly)}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] text-zinc-500">Week vs Week</p>
+                          <p className={`text-xs font-semibold ${
+                            forecastData.summary.weekOverWeek > 0 ? 'text-emerald-400' :
+                            forecastData.summary.weekOverWeek < 0 ? 'text-red-400' : 'text-zinc-200'
+                          }`}>
+                            {forecastData.summary.weekOverWeek > 0 ? '+' : ''}{forecastData.summary.weekOverWeek}%
+                          </p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 
@@ -1075,60 +1130,190 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <Zap className="h-4 w-4 text-violet-400" />
-                        <h2 className="text-sm font-semibold text-zinc-200">Jam Ramai Hari Ini</h2>
-                        {busiestHour && busiestHour.transactionCount > 0 && (
-                          <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px]">
-                            Puncak: {String(busiestHour.hour).padStart(2, '0')}:00
-                          </Badge>
+                <div className="space-y-3">
+                  {/* Main Bar Chart */}
+                  <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-4 w-4 text-violet-400" />
+                          <h2 className="text-sm font-semibold text-zinc-200">Jam Ramai Hari Ini</h2>
+                          {busiestHour && busiestHour.transactionCount > 0 && (
+                            <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px]">
+                              Puncak: {String(busiestHour.hour).padStart(2, '0')}:00
+                            </Badge>
+                          )}
+                        </div>
+                        {stats?.todayTransactions && stats.todayTransactions > 0 && (
+                          <div className="flex items-center gap-3 text-[10px]">
+                            <span className="text-zinc-500">Total hari ini:</span>
+                            <span className="font-semibold text-zinc-200">{stats.todayTransactions} trx</span>
+                            <span className="text-zinc-600">•</span>
+                            <span className="font-semibold text-emerald-400">{formatCurrency(stats.todayRevenue)}</span>
+                          </div>
                         )}
                       </div>
-                    </div>
-                    <div className="relative h-36 sm:h-44">
-                      <div className="absolute left-0 top-0 bottom-6 w-7 flex flex-col justify-between text-[10px] text-zinc-600">
-                        <span>{maxTxCount}</span>
-                        <span>{Math.round(maxTxCount / 2)}</span>
-                        <span>0</span>
-                      </div>
-                      <div className="ml-9 h-full flex items-end gap-[3px]">
-                        {stats?.peakHours?.map((bucket) => {
-                          const heightPct = maxTxCount > 0 ? (bucket.transactionCount / maxTxCount) * 100 : 0
-                          const isPeak = busiestHour?.hour === bucket.hour && bucket.transactionCount > 0
-                          return (
-                            <div key={bucket.hour} className="flex-1 flex flex-col items-center gap-1 group relative">
-                              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
-                                <p className="text-zinc-300 font-medium">
-                                  {String(bucket.hour).padStart(2, '0')}:00 — {bucket.transactionCount} trx
-                                </p>
-                                <p className="text-emerald-400">{formatCurrency(bucket.revenue)}</p>
+                      <div className="relative h-40 sm:h-48">
+                        <div className="absolute left-0 top-0 bottom-6 w-7 flex flex-col justify-between text-[10px] text-zinc-600">
+                          <span>{maxTxCount}</span>
+                          <span>{Math.round(maxTxCount / 2)}</span>
+                          <span>0</span>
+                        </div>
+                        <div className="ml-9 h-full flex items-end gap-[2px] sm:gap-[3px]">
+                          {stats?.peakHours?.map((bucket) => {
+                            const heightPct = maxTxCount > 0 ? (bucket.transactionCount / maxTxCount) * 100 : 0
+                            const isPeak = busiestHour?.hour === bucket.hour && bucket.transactionCount > 0
+                            return (
+                              <div key={bucket.hour} className="flex-1 flex flex-col items-center gap-1 group relative">
+                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
+                                  <p className="text-zinc-300 font-medium">
+                                    {String(bucket.hour).padStart(2, '0')}:00 — {bucket.transactionCount} trx
+                                  </p>
+                                  <p className="text-emerald-400">{formatCurrency(bucket.revenue)}</p>
+                                </div>
+                                <motion.div
+                                  className={`w-full rounded-t transition-colors duration-150 ${
+                                    isPeak
+                                      ? 'bg-gradient-to-t from-violet-600 to-violet-400'
+                                      : bucket.transactionCount > 0
+                                        ? 'bg-emerald-500/50 hover:bg-emerald-400/70'
+                                        : 'bg-zinc-800/80'
+                                  }`}
+                                  initial={{ height: 0 }}
+                                  animate={{ height: `${Math.max(heightPct, 2)}%` }}
+                                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                                />
+                                {bucket.hour % 3 === 0 && (
+                                  <span className="text-[9px] text-zinc-600 -mt-0.5">{String(bucket.hour).padStart(2, '0')}</span>
+                                )}
                               </div>
-                              <motion.div
-                                className={`w-full rounded-t transition-colors duration-150 ${
-                                  isPeak
-                                    ? 'bg-gradient-to-t from-violet-600 to-violet-400'
-                                    : bucket.transactionCount > 0
-                                      ? 'bg-emerald-500/50 hover:bg-emerald-400/70'
-                                      : 'bg-zinc-800/80'
-                                }`}
-                                initial={{ height: 0 }}
-                                animate={{ height: `${Math.max(heightPct, 2)}%` }}
-                                transition={{ duration: 0.6, ease: 'easeOut' }}
-                              />
-                              {bucket.hour % 3 === 0 && (
-                                <span className="text-[9px] text-zinc-600 -mt-0.5">{String(bucket.hour).padStart(2, '0')}</span>
-                              )}
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
+                        <div className="ml-9 h-px bg-zinc-800" />
                       </div>
-                      <div className="ml-9 h-px bg-zinc-800" />
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+
+                  {/* Historical Insights Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Peak Hour Insight */}
+                    <Card className="bg-zinc-900 border border-zinc-800/60 rounded-xl">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                            <Zap className="h-3.5 w-3.5 text-violet-400" />
+                          </div>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Jam Puncak</p>
+                        </div>
+                        {busiestHour && busiestHour.transactionCount > 0 ? (
+                          <>
+                            <p className="text-lg font-bold text-violet-400">{String(busiestHour.hour).padStart(2, '0')}:00</p>
+                            <p className="text-[10px] text-zinc-500 mt-0.5">
+                              {busiestHour.transactionCount} trx • {formatCurrency(busiestHour.revenue)}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-zinc-500">Belum ada transaksi</p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Quiet Hours Insight */}
+                    <Card className="bg-zinc-900 border border-zinc-800/60 rounded-xl">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center">
+                            <Clock className="h-3.5 w-3.5 text-zinc-400" />
+                          </div>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Jam Sepi</p>
+                        </div>
+                        {(() => {
+                          const quietHours = stats?.peakHours?.filter(b => b.transactionCount === 0)
+                          const quietRange = quietHours && quietHours.length > 0
+                            ? (() => {
+                                const hours = quietHours.map(h => h.hour).sort((a, b) => a - b)
+                                // Find longest consecutive range
+                                let bestStart = hours[0], bestEnd = hours[0], curStart = hours[0], curEnd = hours[0]
+                                for (let i = 1; i < hours.length; i++) {
+                                  if (hours[i] === curEnd + 1) { curEnd = hours[i] }
+                                  else { if (curEnd - curStart > bestEnd - bestStart) { bestStart = curStart; bestEnd = curEnd } curStart = hours[i]; curEnd = hours[i] }
+                                }
+                                if (curEnd - curStart > bestEnd - bestStart) { bestStart = curStart; bestEnd = curEnd }
+                                return { start: bestStart, end: bestEnd, count: quietHours.length }
+                              })()
+                            : null
+                          return quietRange ? (
+                            <>
+                              <p className="text-lg font-bold text-zinc-300">
+                                {String(quietRange.start).padStart(2, '0')}:00–{String(quietRange.end).padStart(2, '0')}:00
+                              </p>
+                              <p className="text-[10px] text-zinc-500 mt-0.5">{quietRange.count} jam tanpa transaksi</p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-zinc-500">Semua jam aktif</p>
+                          )
+                        })()}
+                      </CardContent>
+                    </Card>
+
+                    {/* Average per Hour */}
+                    <Card className="bg-zinc-900 border border-zinc-800/60 rounded-xl">
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                            <Activity className="h-3.5 w-3.5 text-emerald-400" />
+                          </div>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">Rata-rata/Jam</p>
+                        </div>
+                        {(() => {
+                          const activeHours = stats?.peakHours?.filter(b => b.transactionCount > 0).length ?? 0
+                          const avgPerHour = activeHours > 0 ? (stats?.todayTransactions ?? 0) / activeHours : 0
+                          const avgRevenuePerHour = activeHours > 0 ? (stats?.todayRevenue ?? 0) / activeHours : 0
+                          return activeHours > 0 ? (
+                            <>
+                              <p className="text-lg font-bold text-emerald-400">{avgPerHour.toFixed(1)} trx</p>
+                              <p className="text-[10px] text-zinc-500 mt-0.5">
+                                ~{formatCurrency(Math.round(avgRevenuePerHour))}/jam • {activeHours} jam aktif
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-zinc-500">Belum ada data</p>
+                          )
+                        })()}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* AI Insight for Peak Hours */}
+                  {(() => {
+                    const peak = busiestHour
+                    if (!peak || peak.transactionCount === 0) return null
+                    const totalTrx = stats?.todayTransactions ?? 0
+                    const peakPct = totalTrx > 0 ? Math.round((peak.transactionCount / totalTrx) * 100) : 0
+                    const activeHours = stats?.peakHours?.filter(b => b.transactionCount > 0).length ?? 0
+                    return (
+                      <div className="px-3 py-2.5 rounded-xl bg-zinc-800/40 border border-zinc-700/30">
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          <span className="text-zinc-300 font-medium">💡 Insight:</span>{' '}
+                          Jam <span className="text-violet-400 font-semibold">{String(peak.hour).padStart(2, '0')}:00</span> adalah jam tersibuk hari ini dengan{' '}
+                          <span className="text-zinc-200 font-medium">{peak.transactionCount} transaksi ({peakPct}%)</span>{' '}
+                          menghasilkan{' '}
+                          <span className="text-emerald-400 font-medium">{formatCurrency(peak.revenue)}</span>.
+                          {activeHours > 0 && (
+                            <span>
+                              {' '}Outlet aktif selama <span className="text-zinc-200 font-medium">{activeHours} jam</span> dengan rata-rata{' '}
+                              <span className="text-zinc-200 font-medium">{totalTrx > 0 ? (totalTrx / activeHours).toFixed(1) : 0} trx/jam</span>.
+                            </span>
+                          )}
+                          {peakPct > 30 && (
+                            <span className="text-amber-400"> ⚠️ {peakPct}% transaksi terkonsentrasi di 1 jam — pertimbangkan tambah shift.</span>
+                          )}
+                        </p>
+                      </div>
+                    )
+                  })()}
+                </div>
               )}
             </TabsContent>
           </Tabs>
