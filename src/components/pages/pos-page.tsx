@@ -1232,12 +1232,14 @@ export default function PosPage() {
         {/* Header — Business Info */}
         <div className="text-center space-y-2 py-3">
           {settings.receiptLogo && (
-            <img
-              src={settings.receiptLogo}
-              alt="Logo"
-              className="h-12 w-12 mx-auto object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-            />
+            <div className="flex justify-center">
+              <img
+                src={settings.receiptLogo}
+                alt="Logo"
+                className="h-12 w-12 rounded object-contain"
+                crossOrigin="anonymous"
+              />
+            </div>
           )}
           <p className="text-lg font-bold">{settings.receiptBusinessName}</p>
           {settings.receiptAddress && <p className="text-xs text-zinc-500">{settings.receiptAddress}</p>}

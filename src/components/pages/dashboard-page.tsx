@@ -304,6 +304,144 @@ function Sparkline({ data, color = 'text-emerald-400', height = 40 }: { data: nu
   )
 }
 
+// ── Revenue Trend Line Chart ──
+function RevenueLineChart({ trend, forecast, onReady }: {
+  trend: { date: string; revenue: number }[]
+  forecast: { date: string; predictedRevenue: number; isForecast: boolean }[]
+  onReady?: () => void
+}) {
+  const chartRef = useRef<HTMLDivElement>(null)
+  const chartW = 600
+  const chartH = 160
+  const pad = { top: 8, right: 8, bottom: 24, left: 8 }
+  const innerW = chartW - pad.left - pad.right
+  const innerH = chartH - pad.top - pad.bottom
+
+  const allValues = [...trend.map((d) => d.revenue), ...forecast.map((d) => d.predictedRevenue)]
+  const maxVal = Math.max(...allValues, 1)
+  const minVal = Math.min(...allValues, 0)
+  const range = maxVal - minVal || 1
+
+  const allPoints = [...trend.map((d) => ({ x: d.date, y: d.revenue, isForecast: false })), ...forecast.map((d) => ({ x: d.date, y: d.predictedRevenue, isForecast: true }))]
+  const totalPts = allPoints.length
+
+  const toX = (i: number) => pad.left + (i / (totalPts - 1)) * innerW
+  const toY = (v: number) => pad.top + innerH - ((v - minVal) / range) * innerH
+
+  const actualPath = trend.map((d, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(d.revenue).toFixed(1)}`).join(' ')
+  const forecastPath = forecast.map((d, i) => {
+    const idx = trend.length + i
+    if (i === 0) {
+      const lastTrend = trend[trend.length - 1]
+      return `M${toX(trend.length - 1).toFixed(1)},${toY(lastTrend.revenue).toFixed(1)} L${toX(idx).toFixed(1)},${toY(d.predictedRevenue).toFixed(1)}`
+    }
+    return `L${toX(idx).toFixed(1)},${toY(d.predictedRevenue).toFixed(1)}`
+  }).join(' ')
+
+  // Area fill paths
+  const actualArea = `${actualPath} L${toX(trend.length - 1).toFixed(1)},${(pad.top + innerH).toFixed(1)} L${toX(0).toFixed(1)},${(pad.top + innerH).toFixed(1)} Z`
+  const forecastArea = (() => {
+    const lastTrendX = toX(trend.length - 1).toFixed(1)
+    const lastForecastX = toX(totalPts - 1).toFixed(1)
+    const baseY = (pad.top + innerH).toFixed(1)
+    const pts = forecast.map((d, i) => {
+      const idx = trend.length + i
+      return `${toX(idx).toFixed(1)},${toY(d.predictedRevenue).toFixed(1)}`
+    }).join(' ')
+    return `M${lastTrendX},${baseY} L${lastTrendX},${toY(trend[trend.length - 1].revenue).toFixed(1)} L${pts} L${lastForecastX},${baseY} Z`
+  })()
+
+  return (
+    <div ref={chartRef} className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full min-w-[500px]" preserveAspectRatio="xMidYMid meet">
+        {/* Area fills */}
+        <path d={actualArea} fill="url(#actualGrad)" />
+        <path d={forecastArea} fill="url(#forecastGrad)" />
+        {/* Grid lines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
+          const y = pad.top + innerH * (1 - pct)
+          return <line key={pct} x1={pad.left} y1={y} x2={chartW - pad.right} y2={y} stroke="rgb(63 63 70)" strokeWidth={0.5} />
+        })}
+        {/* Actual line */}
+        <motion.path
+          d={actualPath}
+          fill="none"
+          stroke="rgb(52 211 153)"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+        />
+        {/* Forecast line (dashed) */}
+        <motion.path
+          d={forecastPath}
+          fill="none"
+          stroke="rgb(167 139 250)"
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="6 4"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1, delay: 0.6, ease: 'easeOut' }}
+        />
+        {/* Dots on actual */}
+        {trend.map((d, i) => (
+          <motion.circle
+            key={`a-${i}`}
+            cx={toX(i)} cy={toY(d.revenue)}
+            r={i % 3 === 0 ? 3 : 0}
+            fill="rgb(52 211 153)"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 + i * 0.03 }}
+          />
+        ))}
+        {/* Dots on forecast */}
+        {forecast.map((d, i) => {
+          const idx = trend.length + i
+          return (
+            <motion.circle
+              key={`f-${i}`}
+              cx={toX(idx)} cy={toY(d.predictedRevenue)}
+              r={i % 2 === 0 ? 3 : 0}
+              fill="rgb(167 139 250)"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1.2 + i * 0.03 }}
+            />
+          )
+        })}
+        {/* X-axis labels */}
+        {allPoints.filter((_, i) => i % 3 === 0).map((p, i) => (
+          <text
+            key={i}
+            x={toX(i * 3)} y={chartH - 4}
+            textAnchor="middle"
+            className="fill-zinc-600"
+            style={{ fontSize: '9px' }}
+          >
+            {formatShortDate(p.x)}
+          </text>
+        ))}
+        {/* Gradients */}
+        <defs>
+          <linearGradient id="actualGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(52 211 153)" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="rgb(52 211 153)" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="forecastGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(167 139 250)" stopOpacity="0.1" />
+            <stop offset="100%" stopColor="rgb(167 139 250)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  )
+}
+
 // ── Day Performance Heat Bar ──
 function DayHeatBar({ day, avgRevenue, maxRevenue, avgTx }: { day: string; avgRevenue: number; maxRevenue: number; avgTx: number }) {
   const pct = maxRevenue > 0 ? Math.min((avgRevenue / maxRevenue) * 100, 100) : 0
@@ -485,119 +623,7 @@ export default function DashboardPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════
-          3. Insight Card (OWNER, AI Insights feature)
-      ═══════════════════════════════════════════════════ */}
-      {isOwner && hasAiInsights && (
-        <motion.div variants={itemVariants}>
-          {insightLoading && !insightData ? (
-            <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
-              <CardContent className="p-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-4 w-4 rounded bg-zinc-800" />
-                  <Skeleton className="h-4 w-32 bg-zinc-800" />
-                </div>
-                <Skeleton className="h-4 w-72 bg-zinc-800" />
-                <Skeleton className="h-3 w-full bg-zinc-800" />
-                <div className="flex gap-2">
-                  <Skeleton className="h-7 w-24 rounded-lg bg-zinc-800" />
-                  <Skeleton className="h-7 w-24 rounded-lg bg-zinc-800" />
-                </div>
-              </CardContent>
-            </Card>
-          ) : insightData ? (
-            <Card className={`bg-zinc-900 border rounded-2xl overflow-hidden relative ${
-              insightData.healthScore >= 75 ? 'border-emerald-500/15' : insightData.healthScore >= 50 ? 'border-amber-500/15' : 'border-red-500/15'
-            }`}>
-              <div className={`absolute inset-0 pointer-events-none ${
-                insightData.healthScore >= 75
-                  ? 'bg-gradient-to-br from-emerald-500/[0.03] to-transparent'
-                  : insightData.healthScore >= 50
-                    ? 'bg-gradient-to-br from-amber-500/[0.03] to-transparent'
-                    : 'bg-gradient-to-br from-red-500/[0.03] to-transparent'
-              }`} />
-              <CardContent className="p-5 relative">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-violet-400" />
-                    <h2 className="text-sm font-semibold text-zinc-200">Insight Hari Ini</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={fetchInsights}
-                    disabled={insightLoading}
-                    className="h-7 text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 gap-1"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${insightLoading ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-
-                {/* Top Insight */}
-                {insightData.topInsight ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <PriorityDot priority={insightData.topInsight.priority} />
-                      <h3 className="text-sm font-semibold text-zinc-100">
-                        {insightData.topInsight.emoji} {insightData.topInsight.title}
-                      </h3>
-                    </div>
-                    <p className="text-sm text-zinc-400 leading-relaxed">
-                      {insightData.topInsight.why}
-                    </p>
-                    {insightData.topInsight.actions.length > 0 && (
-                      <ul className="space-y-1">
-                        {insightData.topInsight.actions.map((action, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-zinc-400">
-                            <span className="text-violet-400 mt-0.5 shrink-0">•</span>
-                            {action}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {insightData.topInsight.cta.length > 0 && (
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        {insightData.topInsight.cta.map((cta, i) => (
-                          <Button
-                            key={i}
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs font-medium bg-zinc-800/80 border-zinc-700/50 hover:bg-zinc-700 hover:border-zinc-600 text-zinc-300 rounded-lg gap-1.5"
-                            onClick={() => setCurrentPage(cta.page as 'pos' | 'products' | 'transactions' | 'customers' | 'settings' | 'crew' | 'dashboard' | 'audit-log')}
-                          >
-                            {cta.label}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-zinc-500 py-2">Semua berjalan baik! Tidak ada insight penting saat ini.</p>
-                )}
-
-                {/* Other insights as chips */}
-                {otherInsights.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-4 pt-3 border-t border-zinc-800/80">
-                    {otherInsights.slice(0, 5).map((insight) => (
-                      <button
-                        key={insight.id}
-                        onClick={() => setInsightData((prev) => prev ? { ...prev, topInsight: insight } : null)}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border cursor-pointer transition-colors hover:bg-zinc-800/80 ${getPriorityBg(insight.priority)}`}
-                      >
-                        <PriorityDot priority={insight.priority} />
-                        <span className="max-w-[140px] truncate text-zinc-400">{insight.emoji} {insight.title}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : null}
-        </motion.div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════
-          4. Stat Cards Grid
+          3. Stat Cards Grid
       ═══════════════════════════════════════════════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Revenue */}
@@ -681,10 +707,11 @@ export default function DashboardPage() {
 
         {/* Low Stock */}
         <motion.div variants={itemVariants}>
-          <Card className={`bg-zinc-900 border rounded-xl ${
+          <Card className={`bg-zinc-900 border rounded-xl overflow-hidden relative ${
             stats && stats.lowStockProducts > 0 ? 'border-red-500/20' : 'border-zinc-800/60'
           }`}>
-            <CardContent className="p-3.5">
+            <div className={`absolute inset-0 ${stats && stats.lowStockProducts > 0 ? 'bg-gradient-to-br from-red-500/[0.04] to-transparent' : 'bg-gradient-to-br from-zinc-500/[0.02] to-transparent'}`} />
+            <CardContent className="p-3.5 relative">
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider">Stok Menipis</p>
                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${
@@ -693,12 +720,17 @@ export default function DashboardPage() {
                   <AlertTriangle className="h-3.5 w-3.5" />
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <p className={`text-xl font-bold tracking-tight ${
-                  stats && stats.lowStockProducts > 0 ? 'text-red-400' : 'text-zinc-100'
-                }`}>
-                  {stats ? formatNumber(stats.lowStockProducts) : '-'}
-                </p>
+              <p className={`text-xl font-bold tracking-tight ${
+                stats && stats.lowStockProducts > 0 ? 'text-red-400' : 'text-zinc-100'
+              }`}>
+                {stats ? formatNumber(stats.lowStockProducts) : '-'}
+              </p>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                {stats && stats.lowStockProducts > 0 ? (
+                  <span className="text-[10px] text-red-400/70 font-medium">perlu restok</span>
+                ) : (
+                  <span className="text-[10px] text-zinc-600">semua aman</span>
+                )}
                 {stats && stats.lowStockProducts > 0 && (
                   <motion.span
                     className="relative flex h-2 w-2"
@@ -885,7 +917,7 @@ export default function DashboardPage() {
                     </Card>
                   </div>
 
-                  {/* Revenue Trend + Forecast Chart */}
+                  {/* Revenue Trend + Forecast Line Chart */}
                   <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-4">
@@ -895,49 +927,16 @@ export default function DashboardPage() {
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                            <div className="w-6 h-[2px] rounded-full bg-emerald-400" />
                             <span className="text-[10px] text-zinc-500">Aktual</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <div className="w-2 h-2 rounded-full bg-violet-400" />
+                            <div className="w-6 h-[2px] rounded-full bg-violet-400 border-dashed" />
                             <span className="text-[10px] text-zinc-500">Prediksi</span>
                           </div>
                         </div>
                       </div>
-
-                      <div className="h-40 flex items-end gap-1">
-                        {[...forecastData.trend.map((d) => ({ ...d, isForecast: false })), ...forecastData.forecast].map((d, i) => {
-                          const allValues = [...trendValues, ...forecastValues]
-                          const maxVal = Math.max(...allValues, 1)
-                          const val = d.isForecast ? d.predictedRevenue : d.revenue
-                          const pct = (val / maxVal) * 100
-                          return (
-                            <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative min-w-0">
-                              {/* Tooltip */}
-                              <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-[9px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
-                                <span className="text-zinc-400">{formatShortDate(d.date)}</span>
-                                <span className="ml-1 font-medium text-zinc-200">{formatCurrency(val)}</span>
-                              </div>
-                              <motion.div
-                                className={`w-full rounded-t-sm ${
-                                  d.isForecast
-                                    ? 'bg-violet-500/30 border border-violet-500/20 border-dashed border-b-0'
-                                    : 'bg-emerald-500/40 hover:bg-emerald-500/60'
-                                }`}
-                                initial={{ height: 0 }}
-                                animate={{ height: `${Math.max(pct, 1.5)}%` }}
-                                transition={{ duration: 0.5, delay: i * 0.02, ease: 'easeOut' }}
-                              />
-                              {/* Date label (every 3rd) */}
-                              {i % 3 === 0 && (
-                                <span className="text-[8px] text-zinc-600 mt-0.5">{formatShortDate(d.date)}</span>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {/* Divider line */}
-                      <div className="mt-0 border-t border-dashed border-zinc-700/50 mx-0 w-[7/21]" />
+                      <RevenueLineChart trend={forecastData.trend} forecast={forecastData.forecast} />
                     </CardContent>
                   </Card>
 
@@ -1137,7 +1136,117 @@ export default function DashboardPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════
-          7. Bottom Row — Top Products & Top Customers
+          7. Insight Card (OWNER, AI Insights feature)
+      ═══════════════════════════════════════════════════ */}
+      {isOwner && hasAiInsights && (
+        <motion.div variants={itemVariants}>
+          {insightLoading && !insightData ? (
+            <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
+              <CardContent className="p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-4 rounded bg-zinc-800" />
+                  <Skeleton className="h-4 w-32 bg-zinc-800" />
+                </div>
+                <Skeleton className="h-4 w-72 bg-zinc-800" />
+                <Skeleton className="h-3 w-full bg-zinc-800" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-7 w-24 rounded-lg bg-zinc-800" />
+                  <Skeleton className="h-7 w-24 rounded-lg bg-zinc-800" />
+                </div>
+              </CardContent>
+            </Card>
+          ) : insightData ? (
+            <Card className={`bg-zinc-900 border rounded-2xl overflow-hidden relative ${
+              insightData.healthScore >= 75 ? 'border-emerald-500/15' : insightData.healthScore >= 50 ? 'border-amber-500/15' : 'border-red-500/15'
+            }`}>
+              <div className={`absolute inset-0 pointer-events-none ${
+                insightData.healthScore >= 75
+                  ? 'bg-gradient-to-br from-emerald-500/[0.03] to-transparent'
+                  : insightData.healthScore >= 50
+                    ? 'bg-gradient-to-br from-amber-500/[0.03] to-transparent'
+                    : 'bg-gradient-to-br from-red-500/[0.03] to-transparent'
+              }`} />
+              <CardContent className="p-5 relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-violet-400" />
+                    <h2 className="text-sm font-semibold text-zinc-200">AI Insight Hari Ini</h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <HealthRing score={insightData.healthScore} size="sm" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={fetchInsights}
+                      disabled={insightLoading}
+                      className="h-7 text-[11px] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 gap-1"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${insightLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                </div>
+                {insightData.topInsight ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <PriorityDot priority={insightData.topInsight.priority} />
+                      <h3 className="text-sm font-semibold text-zinc-100">
+                        {insightData.topInsight.emoji} {insightData.topInsight.title}
+                      </h3>
+                    </div>
+                    <p className="text-sm text-zinc-400 leading-relaxed">
+                      {insightData.topInsight.why}
+                    </p>
+                    {insightData.topInsight.actions.length > 0 && (
+                      <ul className="space-y-1">
+                        {insightData.topInsight.actions.map((action, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-zinc-400">
+                            <span className="text-violet-400 mt-0.5 shrink-0">•</span>
+                            {action}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {insightData.topInsight.cta.length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {insightData.topInsight.cta.map((cta, i) => (
+                          <Button
+                            key={i}
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs font-medium bg-zinc-800/80 border-zinc-700/50 hover:bg-zinc-700 hover:border-zinc-600 text-zinc-300 rounded-lg gap-1.5"
+                            onClick={() => setCurrentPage(cta.page as 'pos' | 'products' | 'transactions' | 'customers' | 'settings' | 'crew' | 'dashboard' | 'audit-log')}
+                          >
+                            {cta.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-zinc-500 py-2">Semua berjalan baik! Tidak ada insight penting saat ini.</p>
+                )}
+                {otherInsights.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-4 pt-3 border-t border-zinc-800/80">
+                    {otherInsights.slice(0, 5).map((insight) => (
+                      <button
+                        key={insight.id}
+                        onClick={() => setInsightData((prev) => prev ? { ...prev, topInsight: insight } : null)}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border cursor-pointer transition-colors hover:bg-zinc-800/80 ${getPriorityBg(insight.priority)}`}
+                      >
+                        <PriorityDot priority={insight.priority} />
+                        <span className="max-w-[140px] truncate text-zinc-400">{insight.emoji} {insight.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+        </motion.div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════
+          8. Bottom Row — Top Products & Top Customers
       ═══════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* Top Products */}
