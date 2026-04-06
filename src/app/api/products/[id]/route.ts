@@ -25,7 +25,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, sku, hpp, price, stock, lowStockAlert, image, unit, categoryId } = body
+    const { name, sku, hpp, price, stock, lowStockAlert, image, unit, categoryId, hasVariants, variants } = body
 
     // Check unique name if changed
     if (name && name !== existing.name) {
@@ -35,6 +35,13 @@ export async function PUT(
       if (nameExists) {
         return safeJsonError('Product name already exists in this outlet', 400)
       }
+    }
+
+    // If toggling hasVariants OFF, delete all variants
+    if (hasVariants === false && existing.hasVariants) {
+      await db.productVariant.deleteMany({
+        where: { productId: id, outletId },
+      })
     }
 
     const product = await db.$transaction(async (tx) => {
@@ -47,6 +54,7 @@ export async function PUT(
       if (stock !== undefined && stock !== existing.stock) changes.stock = { from: existing.stock, to: stock }
       if (image !== undefined && image !== existing.image) changes.image = { from: existing.image, to: image }
       if (unit !== undefined && unit !== existing.unit) changes.unit = { from: existing.unit, to: unit }
+      if (hasVariants !== undefined && hasVariants !== existing.hasVariants) changes.hasVariants = { from: existing.hasVariants, to: hasVariants }
 
       const updateData: Record<string, unknown> = {}
       if (name !== undefined) updateData.name = name
@@ -58,11 +66,45 @@ export async function PUT(
       if (image !== undefined) updateData.image = image || null
       if (unit !== undefined) updateData.unit = unit || 'pcs'
       if (categoryId !== undefined) updateData.categoryId = categoryId || null
+      if (hasVariants !== undefined) updateData.hasVariants = hasVariants
 
       const updated = await tx.product.update({
         where: { id },
         data: updateData,
       })
+
+      // Handle bulk variant update if provided
+      if (variants && Array.isArray(variants)) {
+        // Delete all existing variants for this product
+        await tx.productVariant.deleteMany({
+          where: { productId: id, outletId },
+        })
+
+        // Create new variants from the array
+        if (variants.length > 0) {
+          // Validate unique names
+          const variantNames = new Set<string>()
+          for (const v of variants) {
+            if (variantNames.has(v.name)) {
+              throw new Error(`Duplicate variant name: ${v.name}`)
+            }
+            variantNames.add(v.name)
+          }
+
+          await tx.productVariant.createMany({
+            data: variants.map((v: Record<string, unknown>) => ({
+              name: v.name as string,
+              sku: (v.sku as string) || null,
+              price: Number(v.price),
+              hpp: Number(v.hpp) || 0,
+              stock: Number(v.stock) || 0,
+              lowStockAlert: Number(v.lowStockAlert) || 10,
+              productId: id,
+              outletId,
+            })),
+          })
+        }
+      }
 
       // Create audit log only if there are actual changes
       if (Object.keys(changes).length > 0) {
@@ -81,10 +123,17 @@ export async function PUT(
       return updated
     })
 
-    return safeJson(product)
+    // Fetch updated variants to return
+    const updatedVariants = await db.productVariant.findMany({
+      where: { productId: id, outletId },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    return safeJson({ ...product, variants: updatedVariants })
   } catch (error) {
     console.error('Product PUT error:', error)
-    return safeJsonError('Failed to update product')
+    const message = error instanceof Error ? error.message : 'Failed to update product'
+    return safeJsonError(message, 400)
   }
 }
 
@@ -122,6 +171,7 @@ export async function DELETE(
         price: existing.price,
         stock: existing.stock,
         sku: existing.sku,
+        hasVariants: existing.hasVariants,
       }),
       outletId,
       userId,

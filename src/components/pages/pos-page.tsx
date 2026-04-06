@@ -56,6 +56,7 @@ import {
   AlertCircle,
   Store,
   Tag,
+  Layers,
 } from 'lucide-react'
 import {
   Select,
@@ -73,6 +74,16 @@ import { usePageStore } from '@/hooks/use-page-store'
 
 // ==================== TYPES ====================
 
+interface ProductVariant {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  hpp: number
+  stock: number
+  lowStockAlert: number
+}
+
 interface Product {
   id: string
   name: string
@@ -82,6 +93,8 @@ interface Product {
   barcode: string | null
   categoryId: string | null
   image: string | null
+  hasVariants?: boolean
+  _variantCount?: number
 }
 
 interface Category {
@@ -100,6 +113,10 @@ interface Customer {
 interface CartItem {
   product: Product
   qty: number
+  variantId?: string
+  variantName?: string
+  variantPrice?: number
+  variantStock?: number
 }
 
 interface CheckoutResult {
@@ -382,17 +399,17 @@ export default function PosPage() {
     const calculatePromo = async () => {
       setPromoLoading(true)
       try {
-        const cartSubtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0)
+        const cartSubtotal = cart.reduce((sum, item) => sum + (item.variantPrice || item.product.price) * item.qty, 0)
         const res = await fetch('/api/promos/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: cart.map(item => ({
               productId: item.product.id,
-              productName: item.product.name,
-              price: item.product.price,
+              productName: item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name,
+              price: item.variantPrice || item.product.price,
               qty: item.qty,
-              subtotal: item.product.price * item.qty,
+              subtotal: (item.variantPrice || item.product.price) * item.qty,
             })),
             subtotal: cartSubtotal,
           }),
@@ -420,6 +437,12 @@ export default function PosPage() {
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
+
+  // Variant picker
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false)
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null)
+  const [variantPickerVariants, setVariantPickerVariants] = useState<ProductVariant[]>([])
+  const [variantPickerLoading, setVariantPickerLoading] = useState(false)
 
   // Online/offline detection
   useEffect(() => {
@@ -617,10 +640,12 @@ export default function PosPage() {
     if (e.key === 'Enter' && productSearch.trim()) {
       if (products.length === 1 && !productsLoading) {
         const product = products[0]
-        if (product.stock > 0) {
+        if (product.stock > 0 && !product.hasVariants) {
           addToCart(product)
           setProductSearch('')
           toast.success(`${product.name} ditambahkan`)
+        } else if (product.hasVariants) {
+          openVariantPicker(product)
         }
       }
     }
@@ -642,7 +667,7 @@ export default function PosPage() {
 
   // ==================== CART LOGIC ====================
 
-  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.qty, 0), [cart])
+  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + (item.variantPrice || item.product.price) * item.qty, 0), [cart])
   const maxPointsToUse = selectedCustomer ? selectedCustomer.points : 0
   const pointsDiscount = pointsToUse * settings.loyaltyPointValue
   const total = Math.max(0, subtotal - pointsDiscount - promoDiscount)
@@ -652,33 +677,77 @@ export default function PosPage() {
     if (product.stock <= 0) return
     if (qty <= 0) return
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id)
+      const existing = prev.find((item) => item.product.id === product.id && !item.variantId)
       if (existing) {
         const newQty = existing.qty + qty
         if (newQty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
-        return prev.map((item) => item.product.id === product.id ? { ...item, qty: newQty } : item)
+        return prev.map((item) => item.product.id === product.id && !item.variantId ? { ...item, qty: newQty } : item)
       }
       if (qty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
       return [...prev, { product, qty }]
     })
   }
 
-  const setCartItemQty = (productId: string, qty: number) => {
-    if (qty <= 0) { removeFromCart(productId); return }
-    const item = cart.find((i) => i.product.id === productId)
-    if (item && qty > item.product.stock) { toast.warning('Stok tidak cukup'); return }
-    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty } : i)))
+  const addToCartWithVariant = (product: Product, variant: ProductVariant, qty: number = 1) => {
+    if (variant.stock <= 0) return
+    if (qty <= 0) return
+    setCart((prev) => {
+      const existing = prev.find((item) => item.variantId === variant.id)
+      if (existing) {
+        const newQty = existing.qty + qty
+        if (newQty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return prev.map((item) => item.variantId === variant.id ? { ...item, qty: newQty } : item)
+      }
+      if (qty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
+      return [...prev, { product, qty, variantId: variant.id, variantName: variant.name, variantPrice: variant.price, variantStock: variant.stock }]
+    })
   }
 
-  const updateQty = (productId: string, newQty: number) => {
-    if (newQty <= 0) { removeFromCart(productId); return }
-    const item = cart.find((i) => i.product.id === productId)
-    if (item && newQty > item.product.stock) { toast.warning('Stok tidak cukup'); return }
-    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty: newQty } : i)))
+  const openVariantPicker = async (product: Product) => {
+    setVariantPickerProduct(product)
+    setVariantPickerOpen(true)
+    setVariantPickerLoading(true)
+    try {
+      const res = await fetch(`/api/products/${product.id}/variants`)
+      if (res.ok) {
+        const data = await res.json()
+        setVariantPickerVariants(data.variants || [])
+      } else {
+        toast.error('Gagal memuat varian')
+      }
+    } catch {
+      toast.error('Gagal memuat varian')
+    } finally {
+      setVariantPickerLoading(false)
+    }
   }
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((i) => i.product.id !== productId))
+  const handleProductClick = (product: Product) => {
+    if (product.hasVariants) {
+      openVariantPicker(product)
+    } else {
+      addToCart(product)
+    }
+  }
+
+  const setCartItemQty = (productId: string, qty: number, variantId?: string) => {
+    if (qty <= 0) { removeFromCart(productId, variantId); return }
+    const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
+    const maxStock = item?.variantId ? (item.variantStock ?? 9999) : (item?.product.stock ?? 9999)
+    if (item && qty > maxStock) { toast.warning('Stok tidak cukup'); return }
+    setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty } : i)))
+  }
+
+  const updateQty = (productId: string, newQty: number, variantId?: string) => {
+    if (newQty <= 0) { removeFromCart(productId, variantId); return }
+    const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
+    const maxStock = item?.variantId ? (item.variantStock ?? 9999) : (item?.product.stock ?? 9999)
+    if (item && newQty > maxStock) { toast.warning('Stok tidak cukup'); return }
+    setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: newQty } : i)))
+  }
+
+  const removeFromCart = (productId: string, variantId?: string) => {
+    setCart((prev) => prev.filter((i) => !(i.product.id === productId && i.variantId === variantId)))
   }
 
   const clearCart = () => {
@@ -696,33 +765,34 @@ export default function PosPage() {
     setPointsToUse(Math.min(Number(value) || 0, maxPointsToUse))
   }
 
-  const handleQtyInputChange = (productId: string, value: string) => {
+  const handleQtyInputChange = (productId: string, value: string, variantId?: string) => {
     const qty = parseInt(value)
     if (!isNaN(qty) && qty > 0) {
-      const item = cart.find((i) => i.product.id === productId)
-      if (item && qty <= item.product.stock) {
-        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty } : i)))
-      } else if (item && qty > item.product.stock) {
+      const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
+      const maxStock = item?.variantId ? (item.variantStock ?? 9999) : (item?.product.stock ?? 9999)
+      if (item && qty <= maxStock) {
+        setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty } : i)))
+      } else if (item && qty > maxStock) {
         toast.warning('Stok tidak cukup')
-        setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty: item.product.stock } : i)))
+        setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: maxStock } : i)))
       }
     } else if (value === '' || value === '0') {
-      removeFromCart(productId)
+      removeFromCart(productId, variantId)
       setEditingQtyId(null)
     }
   }
 
-  const handleQtyInputBlur = (productId: string, value: string) => {
+  const handleQtyInputBlur = (productId: string, value: string, variantId?: string) => {
     const qty = parseInt(value)
     if (!isNaN(qty) && qty > 0) {
-      setCartItemQty(productId, qty)
+      setCartItemQty(productId, qty, variantId)
     }
     setEditingQtyId(null)
   }
 
-  const handleQtyInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, productId: string, value: string) => {
+  const handleQtyInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, productId: string, value: string, variantId?: string) => {
     if (e.key === 'Enter') {
-      handleQtyInputBlur(productId, value)
+      handleQtyInputBlur(productId, value, variantId)
     } else if (e.key === 'Escape') {
       setEditingQtyId(null)
     }
@@ -804,10 +874,12 @@ export default function PosPage() {
         customerId: selectedCustomer?.id || null,
         items: cart.map((item) => ({
           productId: item.product.id,
-          productName: item.product.name,
-          price: item.product.price,
+          productName: item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name,
+          price: item.variantPrice || item.product.price,
           qty: item.qty,
-          subtotal: item.product.price * item.qty,
+          subtotal: (item.variantPrice || item.product.price) * item.qty,
+          variantId: item.variantId || null,
+          variantName: item.variantName || null,
         })),
         subtotal,
         discount: pointsDiscount + promoDiscount,
@@ -1099,11 +1171,14 @@ export default function PosPage() {
     }
 
     return products.map((product) => {
-      const cartItem = cart.find((i) => i.product.id === product.id)
-      const outOfStock = product.stock <= 0
+      const cartItem = cart.find((i) => i.product.id === product.id && !i.variantId)
+      // Variant products: parent stock may be 0 but variants have their own stock
+      // Only mark as outOfStock if it's NOT a variant product AND stock is 0
+      const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+      const outOfStock = !isVariantProduct && product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
       const accentColor = catColor ? (CATEGORY_COLORS[catColor] || themeColors) : themeColors
-      const lowStock = product.stock > 0 && product.stock <= 5
+      const lowStock = !isVariantProduct && product.stock > 0 && product.stock <= 5
 
       return (
         <div
@@ -1121,7 +1196,7 @@ export default function PosPage() {
           {!outOfStock && !cartItem && (
             <button
               className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
-              onClick={() => addToCart(product)}
+              onClick={() => handleProductClick(product)}
             />
           )}
           <div className={cn(
@@ -1142,8 +1217,14 @@ export default function PosPage() {
                       : 'bg-zinc-800/80 text-zinc-500'
                   )}>
                     <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
-                    {product.stock}
+                    {product.hasVariants ? (product._variantCount || 0) + ' varian' : product.stock}
                   </span>
+                )}
+                {product.hasVariants && (
+                  <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[9px] px-1.5 py-0 h-4">
+                    <Layers className="h-2.5 w-2.5 mr-0.5" />
+                    Varian
+                  </Badge>
                 )}
               </div>
             )}
@@ -1152,27 +1233,27 @@ export default function PosPage() {
             {cartItem && (
               <div className="flex items-center justify-between mt-2 gap-1.5">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setCartItemQty(product.id, cartItem.qty - 1) }}
+                  onClick={(e) => { e.stopPropagation(); setCartItemQty(product.id, cartItem.qty - 1, cartItem.variantId) }}
                   className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-95 shrink-0"
                 >
                   {cartItem.qty === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
                 </button>
                 <div className="flex-1 text-center">
-                  {editingQtyId === product.id ? (
+                  {editingQtyId === `${product.id}-${cartItem.variantId || ''}` ? (
                     <input
                       type="number"
                       min="1"
                       max={product.stock}
                       value={cartItem.qty}
-                      onChange={(e) => handleQtyInputChange(product.id, e.target.value)}
-                      onBlur={(e) => handleQtyInputBlur(product.id, e.target.value)}
-                      onKeyDown={(e) => handleQtyInputKeyDown(e, product.id, (e.target as HTMLInputElement).value)}
+                      onChange={(e) => handleQtyInputChange(product.id, e.target.value, cartItem.variantId)}
+                      onBlur={(e) => handleQtyInputBlur(product.id, (e.target as HTMLInputElement).value, cartItem.variantId)}
+                      onKeyDown={(e) => handleQtyInputKeyDown(e, product.id, (e.target as HTMLInputElement).value, cartItem.variantId)}
                       autoFocus
                       className="w-full text-center text-sm font-bold text-zinc-100 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   ) : (
                     <button
-                      onClick={(e) => { e.stopPropagation(); setEditingQtyId(product.id) }}
+                      onClick={(e) => { e.stopPropagation(); setEditingQtyId(`${product.id}-${cartItem.variantId || ''}`) }}
                       className="w-full text-center focus:outline-none cursor-pointer group"
                     >
                       <span className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{cartItem.qty}</span>
@@ -1313,12 +1394,12 @@ export default function PosPage() {
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
         <div className="space-y-1.5 py-2">
-          {cart.map((item) => (
-            <div key={item.product.id} className="space-y-0.5">
-              <p className="font-medium text-[11px]">{item.product.name}</p>
+          {cart.map((item, idx) => (
+            <div key={`${item.product.id}-${item.variantId || ''}-${idx}`} className="space-y-0.5">
+              <p className="font-medium text-[11px]">{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name}</p>
               <div className="flex text-[11px] text-zinc-600">
-                <span>{item.qty} x {formatCurrency(item.product.price)}</span>
-                <span className="font-medium text-zinc-900">{formatCurrency(item.product.price * item.qty)}</span>
+                <span>{item.qty} x {formatCurrency(item.variantPrice || item.product.price)}</span>
+                <span className="font-medium text-zinc-900">{formatCurrency((item.variantPrice || item.product.price) * item.qty)}</span>
               </div>
             </div>
           ))}
@@ -1593,43 +1674,47 @@ export default function PosPage() {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-800/50 border border-zinc-800/50">
+                {cart.map((item) => {
+                  const itemPrice = item.variantPrice || item.product.price
+                  const cartItemId = `${item.product.id}-${item.variantId || ''}`
+                  return (
+                  <div key={cartItemId} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-800/50 border border-zinc-800/50">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-zinc-200 truncate">{item.product.name}</p>
-                      <p className="text-[11px] text-zinc-500">{formatCurrency(item.product.price)} × {item.qty}</p>
-                      <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(item.product.price * item.qty)}</p>
+                      <p className="text-xs font-medium text-zinc-200 truncate">{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name}</p>
+                      <p className="text-[11px] text-zinc-500">{formatCurrency(itemPrice)} × {item.qty}</p>
+                      <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(itemPrice * item.qty)}</p>
                     </div>
                     <div className="flex items-center gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
-                      {editingQtyId === item.product.id ? (
+                        onClick={() => updateQty(item.product.id, item.qty - 1, item.variantId)}><Minus className="h-3.5 w-3.5" /></Button>
+                      {editingQtyId === cartItemId ? (
                         <input
                           type="number"
                           min="1"
-                          max={item.product.stock}
+                          max={item.variantId ? (item.variantStock ?? 9999) : item.product.stock}
                           value={item.qty}
-                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
-                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
-                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value, item.variantId)}
+                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value, item.variantId)}
+                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value, item.variantId)}
                           autoFocus
                           className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-md h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       ) : (
                         <button
-                          onClick={() => setEditingQtyId(item.product.id)}
+                          onClick={() => setEditingQtyId(cartItemId)}
                           className="text-xs text-zinc-200 w-6 text-center font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
                         >
                           {item.qty}
                         </button>
                       )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
+                        onClick={() => updateQty(item.product.id, item.qty + 1, item.variantId)}><Plus className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        onClick={() => removeFromCart(item.product.id, item.variantId)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </ScrollArea>
@@ -1812,43 +1897,47 @@ export default function PosPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
+                  {cart.map((item) => {
+                    const itemPrice = item.variantPrice || item.product.price
+                    const cartItemId = `${item.product.id}-${item.variantId || ''}`
+                    return (
+                    <div key={cartItemId} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-zinc-200 font-medium truncate">{item.product.name}</p>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)} × {item.qty}</p>
+                        <p className="text-xs text-zinc-200 font-medium truncate">{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name}</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(itemPrice)} × {item.qty}</p>
                       </div>
                       <div className="flex items-center gap-0.5">
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-                          onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                        {editingQtyId === item.product.id ? (
+                          onClick={() => updateQty(item.product.id, item.qty - 1, item.variantId)}><Minus className="h-3.5 w-3.5" /></button>
+                        {editingQtyId === cartItemId ? (
                           <input
                             type="number"
                             min="1"
-                            max={item.product.stock}
+                            max={item.variantId ? (item.variantStock ?? 9999) : item.product.stock}
                             value={item.qty}
-                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
-                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
-                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value, item.variantId)}
+                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value, item.variantId)}
+                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value, item.variantId)}
                             autoFocus
                             className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         ) : (
                           <button
-                            onClick={() => setEditingQtyId(item.product.id)}
+                            onClick={() => setEditingQtyId(cartItemId)}
                             className="text-xs w-7 text-center text-zinc-200 font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
                           >
                             {item.qty}
                           </button>
                         )}
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-                          onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
+                          onClick={() => updateQty(item.product.id, item.qty + 1, item.variantId)}><Plus className="h-3.5 w-3.5" /></button>
                       </div>
-                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
+                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(itemPrice * item.qty)}</p>
                       <button className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></button>
+                        onClick={() => removeFromCart(item.product.id, item.variantId)}><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -1942,12 +2031,15 @@ export default function PosPage() {
             <ScrollArea className="flex-1 -mx-4 px-4">
               <div className="space-y-3 py-1">
                 <div className="space-y-1 text-xs">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                      <span>{item.product.name} × {item.qty}</span>
-                      <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                  {cart.map((item) => {
+                    const itemPrice = item.variantPrice || item.product.price
+                    return (
+                    <div key={`${item.product.id}-${item.variantId || ''}`} className="flex justify-between text-zinc-300 py-0.5">
+                      <span>{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name} × {item.qty}</span>
+                      <span className="font-medium">{formatCurrency(itemPrice * item.qty)}</span>
                     </div>
-                  ))}
+                    )
+                  })}
                   <Separator className="bg-zinc-800 my-1.5" />
                   <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                   {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
@@ -1995,12 +2087,15 @@ export default function PosPage() {
             </DialogHeader>
             <div className="space-y-3 py-1">
               <div className="space-y-1 text-xs">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                    <span>{item.product.name} × {item.qty}</span>
-                    <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                {cart.map((item) => {
+                  const itemPrice = item.variantPrice || item.product.price
+                  return (
+                  <div key={`${item.product.id}-${item.variantId || ''}`} className="flex justify-between text-zinc-300 py-0.5">
+                    <span>{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name} × {item.qty}</span>
+                    <span className="font-medium">{formatCurrency(itemPrice * item.qty)}</span>
                   </div>
-                ))}
+                  )
+                })}
                 <Separator className="bg-zinc-800 my-1.5" />
                 <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                 {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
@@ -2123,6 +2218,81 @@ export default function PosPage() {
               {addingCustomer && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Simpan
             </Button>
           </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+
+      {/* Variant Picker Dialog */}
+      <ResponsiveDialog open={variantPickerOpen} onOpenChange={(open) => { setVariantPickerOpen(open); if (!open) { setVariantPickerProduct(null); setVariantPickerVariants([]) }}}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-md">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <Layers className="h-4 w-4 text-violet-400" />
+              Pilih Varian — {variantPickerProduct?.name}
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-xs text-zinc-500">
+              Pilih varian untuk menambahkan ke keranjang
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="py-2">
+            {variantPickerLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 text-zinc-500 animate-spin" />
+              </div>
+            ) : variantPickerVariants.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
+                <p className="text-xs text-zinc-500">Belum ada varian tersedia</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {variantPickerVariants.map((variant) => {
+                  const cartItem = cart.find((i) => i.variantId === variant.id)
+                  const outOfStock = variant.stock <= 0
+                  return (
+                    <button
+                      key={variant.id}
+                      disabled={outOfStock}
+                      onClick={() => {
+                        if (variantPickerProduct) {
+                          addToCartWithVariant(variantPickerProduct, variant)
+                          toast.success(`${variantPickerProduct.name} - ${variant.name} ditambahkan`)
+                        }
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between p-3 rounded-xl border transition-all',
+                        outOfStock
+                          ? 'opacity-40 cursor-not-allowed bg-zinc-900/30 border-zinc-800/40'
+                          : cartItem
+                          ? 'bg-violet-500/10 border-violet-500/30 ring-1 ring-inset ring-violet-500/30'
+                          : 'bg-zinc-800/40 border-zinc-700/60 hover:border-zinc-600 hover:bg-zinc-800/60 active:scale-[0.98]'
+                      )}
+                    >
+                      <div className="text-left">
+                        <p className="text-xs font-medium text-zinc-200">{variant.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-zinc-500">{variant.sku || ''}</span>
+                          <span className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                            variant.stock <= variant.lowStockAlert && variant.stock > 0
+                              ? 'bg-amber-500/10 text-amber-400'
+                              : 'bg-zinc-800/80 text-zinc-500'
+                          )}>
+                            Stock: {variant.stock}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-emerald-400">{formatCurrency(variant.price)}</p>
+                        {cartItem && (
+                          <p className="text-[10px] text-violet-400 font-medium">x{cartItem.qty}</p>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
     </div>

@@ -94,18 +94,62 @@ export async function GET(request: NextRequest) {
       total = count
     }
 
+    // Enrich products with variant count
+    const productIds = (products as Array<{ id: string }>).map((p) => p.id)
+    const variantCounts = await db.productVariant.groupBy({
+      by: ['productId'],
+      where: { productId: { in: productIds } },
+      _count: { id: true },
+    })
+    const variantCountMap = new Map(
+      variantCounts.map((v) => [v.productId, v._count.id])
+    )
+
+    products = (products as Array<Record<string, unknown>>).map((p) => ({
+      ...p,
+      _variantCount: variantCountMap.get(p.id) || 0,
+    }))
+
     // Analytics stats (computed on all products in outlet, not filtered)
     const [totalCount, categoryCount, statsProducts] = await Promise.all([
       db.product.count({ where: { outletId } }),
       db.category.count({ where: { outletId } }),
       db.product.findMany({
         where: { outletId },
-        select: { price: true, stock: true, lowStockAlert: true },
+        select: { id: true, price: true, stock: true, lowStockAlert: true, hasVariants: true },
       }),
     ])
 
-    const lowStockCount = statsProducts.filter((p) => p.stock <= p.lowStockAlert && p.stock >= 0).length
-    const totalInventoryValue = statsProducts.reduce((sum, p) => sum + (Number(p.price) * p.stock), 0)
+    // For products with variants, sum up variant stocks
+    const variantProducts = statsProducts.filter((p) => p.hasVariants)
+    const variantStockMap = new Map<string, { stock: number; lowStock: number }>()
+    if (variantProducts.length > 0) {
+      const vIds = variantProducts.map((p) => p.id)
+      const allVariants = await db.productVariant.findMany({
+        where: { productId: { in: vIds } },
+        select: { productId: true, stock: true, lowStockAlert: true },
+      })
+      for (const v of allVariants) {
+        const existing = variantStockMap.get(v.productId) || { stock: 0, lowStock: 0 }
+        variantStockMap.set(v.productId, {
+          stock: existing.stock + v.stock,
+          lowStock: v.stock <= v.lowStockAlert && v.stock >= 0 ? existing.lowStock + 1 : existing.lowStock,
+        })
+      }
+    }
+
+    let lowStockCount = 0
+    let totalInventoryValue = 0
+    for (const p of statsProducts) {
+      if (p.hasVariants && variantStockMap.has(p.id)) {
+        const vInfo = variantStockMap.get(p.id)!
+        lowStockCount += vInfo.lowStock
+        totalInventoryValue += Number(p.price) * vInfo.stock
+      } else {
+        if (p.stock <= p.lowStockAlert && p.stock >= 0) lowStockCount++
+        totalInventoryValue += Number(p.price) * p.stock
+      }
+    }
 
     return safeJson({
       products,
@@ -133,7 +177,7 @@ export async function POST(request: NextRequest) {
     const outletId = user.outletId
 
     const body = await request.json()
-    const { name, sku, hpp, price, stock, lowStockAlert, image, categoryId, unit } = body
+    const { name, sku, hpp, price, stock, lowStockAlert, image, categoryId, unit, hasVariants, variants } = body
 
     if (!name || price === undefined || price === null) {
       return safeJsonError('Product name and price are required', 400)
@@ -172,6 +216,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate variants if hasVariants is true
+    if (hasVariants && variants && variants.length > 0) {
+      const variantNames = new Set<string>()
+      for (const v of variants) {
+        if (!v.name || v.price === undefined || v.price === null) {
+          return safeJsonError('Each variant must have a name and price', 400)
+        }
+        if (variantNames.has(v.name)) {
+          return safeJsonError(`Duplicate variant name: ${v.name}`, 400)
+        }
+        variantNames.add(v.name)
+      }
+    }
+
     const product = await db.$transaction(async (tx) => {
       const newProduct = await tx.product.create({
         data: {
@@ -184,9 +242,26 @@ export async function POST(request: NextRequest) {
           image: image || null,
           categoryId: categoryId || null,
           unit: unit || 'pcs',
+          hasVariants: hasVariants || false,
           outletId,
         },
       })
+
+      // Create variants if provided
+      if (hasVariants && variants && variants.length > 0) {
+        await tx.productVariant.createMany({
+          data: variants.map((v: Record<string, unknown>) => ({
+            name: v.name as string,
+            sku: (v.sku as string) || null,
+            price: Number(v.price),
+            hpp: Number(v.hpp) || 0,
+            stock: Number(v.stock) || 0,
+            lowStockAlert: Number(v.lowStockAlert) || 10,
+            productId: newProduct.id,
+            outletId,
+          })),
+        })
+      }
 
       await tx.auditLog.create({
         data: {
@@ -197,6 +272,8 @@ export async function POST(request: NextRequest) {
             name: newProduct.name,
             price: newProduct.price,
             stock: newProduct.stock,
+            hasVariants: newProduct.hasVariants,
+            variantCount: variants?.length || 0,
           }),
           outletId,
           userId,
@@ -206,7 +283,15 @@ export async function POST(request: NextRequest) {
       return newProduct
     })
 
-    return safeJsonCreated(product)
+    // Fetch created variants to return
+    const createdVariants = hasVariants
+      ? await db.productVariant.findMany({
+          where: { productId: product.id, outletId },
+          orderBy: { createdAt: 'asc' },
+        })
+      : []
+
+    return safeJsonCreated({ ...product, variants: createdVariants })
   } catch (error) {
     console.error('Products POST error:', error)
     return safeJsonError('Failed to create product')
