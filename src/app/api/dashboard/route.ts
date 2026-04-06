@@ -3,7 +3,6 @@ import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { getVoidedTxIds } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
-import { ensureMigrated } from '@/lib/auto-migrate'
 
 interface HourBucket {
   hour: number
@@ -19,8 +18,6 @@ export async function GET(request: NextRequest) {
     }
     const outletId = user.outletId
     const isOwner = user.role === 'OWNER'
-
-    ensureMigrated()
 
     const now = new Date()
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())

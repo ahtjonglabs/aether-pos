@@ -4,7 +4,6 @@ import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { parsePagination, resolvePlanType } from '@/lib/api-helpers'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
 import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
-import { ensureMigrated } from '@/lib/auto-migrate'
 
 type SortOption = 'newest' | 'best-selling' | 'low-stock' | 'most-stock'
 
@@ -15,8 +14,6 @@ export async function GET(request: NextRequest) {
       return unauthorized()
     }
     const outletId = user.outletId
-
-    ensureMigrated()
 
     const { searchParams } = request.nextUrl
     const { page, limit, skip } = parsePagination(searchParams)
@@ -110,7 +107,6 @@ export async function GET(request: NextRequest) {
 
     products = (products as Array<Record<string, unknown>>).map((p) => ({
       ...p,
-      hasVariants: !!p.hasVariants,
       _variantCount: variantCountMap.get(p.id) || 0,
     }))
 
@@ -125,7 +121,7 @@ export async function GET(request: NextRequest) {
     ])
 
     // For products with variants, sum up variant stocks
-    const variantProducts = statsProducts.filter((p) => !!p.hasVariants)
+    const variantProducts = statsProducts.filter((p) => p.hasVariants)
     const variantStockMap = new Map<string, { stock: number; lowStock: number }>()
     if (variantProducts.length > 0) {
       const vIds = variantProducts.map((p) => p.id)
@@ -145,7 +141,7 @@ export async function GET(request: NextRequest) {
     let lowStockCount = 0
     let totalInventoryValue = 0
     for (const p of statsProducts) {
-      if (!!p.hasVariants && variantStockMap.has(p.id)) {
+      if (p.hasVariants && variantStockMap.has(p.id)) {
         const vInfo = variantStockMap.get(p.id)!
         lowStockCount += vInfo.lowStock
         totalInventoryValue += Number(p.price) * vInfo.stock
