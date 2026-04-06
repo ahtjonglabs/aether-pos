@@ -20,15 +20,31 @@ export async function GET(
     // Verify product belongs to this outlet
     const product = await db.product.findFirst({
       where: { id, outletId },
+      include: {
+        variants: { select: { id: true, name: true, sku: true, price: true, hpp: true, stock: true } },
+        _count: { select: { variants: true } },
+      },
     })
     if (!product) {
       return safeJsonError('Product not found', 404)
     }
 
+    // Compute aggregated values for variant products
+    const variantIds = product.variants.map((v) => v.id)
+    const aggStock = product.hasVariants && variantIds.length > 0
+      ? product.variants.reduce((s, v) => s + v.stock, 0)
+      : product.stock
+    const aggPrice = product.hasVariants && variantIds.length > 0
+      ? Math.min(...product.variants.map((v) => v.price))
+      : product.price
+    const maxPrice = product.hasVariants && variantIds.length > 0
+      ? Math.max(...product.variants.map((v) => v.price))
+      : product.price
+
     const { limit, skip } = parsePagination(request.nextUrl.searchParams)
 
     // Fetch summary stats and movement logs in parallel
-    const [auditLogs, totalLogs, totalSoldResult, lastRestockLog] =
+    const [auditLogs, variantAuditLogs, totalLogs, totalSoldResult, lastRestockLog] =
       await Promise.all([
         // Audit logs for this product (restock, create, update, sale, adjustments)
         db.auditLog.findMany({
@@ -43,9 +59,23 @@ export async function GET(
             },
           },
           orderBy: { createdAt: 'desc' },
-          skip,
-          take: limit,
         }),
+        // Audit logs for variants (if product has variants)
+        variantIds.length > 0
+          ? db.auditLog.findMany({
+              where: {
+                entityType: 'VARIANT',
+                entityId: { in: variantIds },
+                outletId,
+              },
+              include: {
+                user: {
+                  select: { id: true, name: true, email: true, role: true },
+                },
+              },
+              orderBy: { createdAt: 'desc' },
+            })
+          : Promise.resolve([]),
         db.auditLog.count({
           where: {
             entityId: id,
@@ -102,11 +132,29 @@ export async function GET(
       }
     }
 
+    // Also count variant audit logs for total
+    const variantTotalLogs = variantIds.length > 0
+      ? await db.auditLog.count({
+          where: {
+            entityType: 'VARIANT',
+            entityId: { in: variantIds },
+            outletId,
+          },
+        })
+      : 0
+    const combinedTotalLogs = totalLogs + variantTotalLogs
+
     const totalSold = totalSoldResult._sum.qty || 0
     const revenue = totalSoldResult._sum.subtotal || 0
 
-    // Build movement entries from audit logs
-    const movements = auditLogs.map((log) => {
+    // Merge product and variant audit logs, sort by date desc, apply pagination
+    const allLogs = [
+      ...auditLogs,
+      ...variantAuditLogs,
+    ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+    // Build movement entries from merged audit logs
+    const movements = allLogs.slice(skip, skip + limit).map((log) => {
       let parsedDetails: Record<string, unknown> = {}
       try {
         parsedDetails = JSON.parse(log.details || '{}')
@@ -117,6 +165,7 @@ export async function GET(
       return {
         id: log.id,
         action: log.action,
+        entityType: log.entityType,
         details: parsedDetails,
         user: log.user,
         createdAt: log.createdAt,
@@ -130,20 +179,25 @@ export async function GET(
         sku: product.sku,
         hpp: product.hpp,
         price: product.price,
-        stock: product.stock,
+        stock: aggStock,
         lowStockAlert: product.lowStockAlert,
         image: product.image,
+        hasVariants: !!product.hasVariants,
+        _variantCount: product._count.variants,
+        variants: product.variants,
+        price: aggPrice,
+        _maxPrice: maxPrice,
       },
       summary: {
         totalSold,
         totalRestocked,
-        currentStock: product.stock,
+        currentStock: aggStock,
         revenue,
         lastRestockDate: lastRestockLog?.createdAt?.toISOString() || null,
       },
       movements,
-      totalPages: Math.ceil(totalLogs / limit),
-      totalLogs,
+      totalPages: Math.ceil(combinedTotalLogs / limit),
+      totalLogs: combinedTotalLogs,
     })
   } catch (error) {
     console.error('Product movement GET error:', error)

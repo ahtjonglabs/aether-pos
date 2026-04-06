@@ -25,9 +25,17 @@ export async function POST(
 
     const existing = await db.product.findFirst({
       where: { id, outletId },
+      select: { id: true, name: true, stock: true, hasVariants: true },
     })
     if (!existing) {
       return safeJsonError('Product not found', 404)
+    }
+
+    if (existing.hasVariants) {
+      return safeJsonError(
+        'Produk dengan varian tidak bisa di-restock secara langsung. Gunakan edit produk untuk mengubah stok varian.',
+        400
+      )
     }
 
     const product = await db.$transaction(async (tx) => {

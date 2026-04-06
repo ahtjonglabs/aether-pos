@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
           include: {
             category: { select: { id: true, name: true, color: true } },
             _count: { select: { variants: true } },
+            variants: { select: { id: true, name: true, sku: true, price: true, hpp: true, stock: true } },
           },
         }),
         db.product.count({ where }),
@@ -73,40 +74,119 @@ export async function GET(request: NextRequest) {
       allProducts.sort((a, b) => (soldMap.get(b.id) ?? 0) - (soldMap.get(a.id) ?? 0))
 
       total = count
-      products = allProducts.slice(skip, skip + limit).map((p) => ({
-        ...p,
-        _totalSold: soldMap.get(p.id) ?? 0,
-        hasVariants: !!p.hasVariants,
-        _variantCount: p._count.variants,
-      }))
-    } else {
-      let orderBy: Record<string, string> = { createdAt: 'desc' }
-
-      if (sort === 'low-stock') {
-        orderBy = { stock: 'asc' }
-      } else if (sort === 'most-stock') {
-        orderBy = { stock: 'desc' }
-      }
-
-      const [result, count] = await Promise.all([
+      products = allProducts.slice(skip, skip + limit).map((p) => {
+        // When hasVariants, aggregate stock & price from variants
+        const vList = p.variants || []
+        const aggStock = p.hasVariants && vList.length > 0
+          ? vList.reduce((s: number, v: { stock: number }) => s + v.stock, 0)
+          : p.stock
+        const aggPrice = p.hasVariants && vList.length > 0
+          ? Math.min(...vList.map((v: { price: number }) => v.price))
+          : p.price
+        const maxPrice = p.hasVariants && vList.length > 0
+          ? Math.max(...vList.map((v: { price: number }) => v.price))
+          : p.price
+        return {
+          ...p,
+          _totalSold: soldMap.get(p.id) ?? 0,
+          hasVariants: !!p.hasVariants,
+          _variantCount: p._count.variants,
+          variants: p.variants,
+          // Aggregated display values
+          stock: aggStock,
+          price: aggPrice,
+          _maxPrice: maxPrice,
+        }
+      })
+    } else if (sort === 'low-stock' || sort === 'most-stock') {
+      // For stock-based sorting, fetch all products (no skip/take) to aggregate variant stock in-memory
+      const [allProducts, count] = await Promise.all([
         db.product.findMany({
           where,
-          orderBy,
-          skip,
-          take: limit,
           include: {
             category: { select: { id: true, name: true, color: true } },
             _count: { select: { variants: true } },
+            variants: { select: { id: true, name: true, sku: true, price: true, hpp: true, stock: true } },
           },
         }),
         db.product.count({ where }),
       ])
 
-      products = result.map((p) => ({
-        ...p,
-        hasVariants: !!p.hasVariants,
-        _variantCount: p._count.variants,
-      }))
+      // Helper to compute aggregated stock per product
+      const getAggStock = (p: typeof allProducts[number]) => {
+        const vList = p.variants || []
+        return p.hasVariants && vList.length > 0
+          ? vList.reduce((s: number, v: { stock: number }) => s + v.stock, 0)
+          : p.stock
+      }
+
+      // Sort in-memory by aggregated stock
+      if (sort === 'low-stock') {
+        allProducts.sort((a, b) => getAggStock(a) - getAggStock(b))
+      } else {
+        allProducts.sort((a, b) => getAggStock(b) - getAggStock(a))
+      }
+
+      total = count
+      products = allProducts.slice(skip, skip + limit).map((p) => {
+        const vList = p.variants || []
+        const aggStock = p.hasVariants && vList.length > 0
+          ? vList.reduce((s: number, v: { stock: number }) => s + v.stock, 0)
+          : p.stock
+        const aggPrice = p.hasVariants && vList.length > 0
+          ? Math.min(...vList.map((v: { price: number }) => v.price))
+          : p.price
+        const maxPrice = p.hasVariants && vList.length > 0
+          ? Math.max(...vList.map((v: { price: number }) => v.price))
+          : p.price
+        return {
+          ...p,
+          hasVariants: !!p.hasVariants,
+          _variantCount: p._count.variants,
+          variants: p.variants,
+          stock: aggStock,
+          price: aggPrice,
+          _maxPrice: maxPrice,
+        }
+      })
+    } else {
+      // Default sort (newest / createdAt desc)
+      const [result, count] = await Promise.all([
+        db.product.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+          include: {
+            category: { select: { id: true, name: true, color: true } },
+            _count: { select: { variants: true } },
+            variants: { select: { id: true, name: true, sku: true, price: true, hpp: true, stock: true } },
+          },
+        }),
+        db.product.count({ where }),
+      ])
+
+      products = result.map((p) => {
+        const vList = p.variants || []
+        const aggStock = p.hasVariants && vList.length > 0
+          ? vList.reduce((s: number, v: { stock: number }) => s + v.stock, 0)
+          : p.stock
+        const aggPrice = p.hasVariants && vList.length > 0
+          ? Math.min(...vList.map((v: { price: number }) => v.price))
+          : p.price
+        const maxPrice = p.hasVariants && vList.length > 0
+          ? Math.max(...vList.map((v: { price: number }) => v.price))
+          : p.price
+        return {
+          ...p,
+          hasVariants: !!p.hasVariants,
+          _variantCount: p._count.variants,
+          variants: p.variants,
+          stock: aggStock,
+          price: aggPrice,
+          _maxPrice: maxPrice,
+        }
+      })
       total = count
     }
 
@@ -116,12 +196,32 @@ export async function GET(request: NextRequest) {
       db.category.count({ where: { outletId } }),
       db.product.findMany({
         where: { outletId },
-        select: { price: true, stock: true, lowStockAlert: true },
+        select: {
+          price: true,
+          stock: true,
+          lowStockAlert: true,
+          hasVariants: true,
+          variants: { select: { price: true, stock: true } },
+        },
       }),
     ])
 
-    const lowStockCount = statsProducts.filter((p) => p.stock <= p.lowStockAlert && p.stock >= 0).length
-    const totalInventoryValue = statsProducts.reduce((sum, p) => sum + (Number(p.price) * p.stock), 0)
+    const lowStockCount = statsProducts.filter((p) => {
+      const aggStock = p.hasVariants && p.variants.length > 0
+        ? p.variants.reduce((s, v) => s + v.stock, 0)
+        : p.stock
+      return aggStock <= p.lowStockAlert && aggStock >= 0
+    }).length
+
+    const totalInventoryValue = statsProducts.reduce((sum, p) => {
+      const aggStock = p.hasVariants && p.variants.length > 0
+        ? p.variants.reduce((s, v) => s + v.stock, 0)
+        : p.stock
+      const price = p.hasVariants && p.variants.length > 0
+        ? p.variants.reduce((s, v) => s + v.price, 0) / p.variants.length
+        : Number(p.price)
+      return sum + (price * aggStock)
+    }, 0)
 
     return safeJson({
       products,

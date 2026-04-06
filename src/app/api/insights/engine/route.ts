@@ -60,10 +60,10 @@ export async function GET(request: NextRequest) {
         where: { outletId, createdAt: { gte: yesterdayStart, lt: todayStart }, ...voidExclude },
         select: { total: true },
       }),
-      // All products with stock info
+      // All products with stock info (variant-aware)
       db.product.findMany({
         where: { outletId },
-        select: { id: true, name: true, stock: true, lowStockAlert: true, price: true },
+        select: { id: true, name: true, stock: true, lowStockAlert: true, price: true, hasVariants: true, variants: { select: { price: true, stock: true } } },
       }),
       // Customer counts
       db.customer.count({ where: { outletId } }),
@@ -98,12 +98,26 @@ export async function GET(request: NextRequest) {
     const todayAOV = todayTxCount > 0 ? todayRevenue / todayTxCount : 0
     const yesterdayAOV = yesterdayTxCount > 0 ? yesterdayRevenue / yesterdayTxCount : 0
 
+    // Helpers for variant-aware aggregation
+    const getAggStock = (p: typeof allProducts[number]) => {
+      if (p.hasVariants && p.variants.length > 0) {
+        return p.variants.reduce((s, v) => s + v.stock, 0)
+      }
+      return p.stock
+    }
+    const getAggPrice = (p: typeof allProducts[number]) => {
+      if (p.hasVariants && p.variants.length > 0) {
+        return p.variants.reduce((s, v) => s + v.price, 0) / p.variants.length
+      }
+      return p.price
+    }
+
     // Product stats
     const totalProducts = allProducts.length
-    const outOfStockCount = allProducts.filter((p) => p.stock <= 0).length
-    const lowStockCount = allProducts.filter((p) => p.stock <= p.lowStockAlert).length
+    const outOfStockCount = allProducts.filter((p) => getAggStock(p) <= 0).length
+    const lowStockCount = allProducts.filter((p) => getAggStock(p) <= p.lowStockAlert).length
     const avgProductPrice = totalProducts > 0
-      ? allProducts.reduce((s, p) => s + p.price, 0) / totalProducts
+      ? allProducts.reduce((s, p) => s + getAggPrice(p), 0) / totalProducts
       : 0
 
     // Top selling products (all time, with stock info)
@@ -123,7 +137,7 @@ export async function GET(request: NextRequest) {
         name: item.productName,
         qty: item._sum.qty ?? 0,
         revenue: item._sum.subtotal ?? 0,
-        stock: product?.stock ?? -1,
+        stock: product ? getAggStock(product) : -1,
         lowStockAlert: product?.lowStockAlert ?? 10,
       }
     })
@@ -183,10 +197,10 @@ export async function GET(request: NextRequest) {
         newCustomersThisWeek: newThisWeekCount,
         topSelling: topSelling.slice(0, 5),
         lowStockProducts: allProducts
+          .map((p) => ({ name: p.name, stock: getAggStock(p), lowStockAlert: p.lowStockAlert }))
           .filter((p) => p.stock <= p.lowStockAlert)
           .sort((a, b) => a.stock - b.stock)
-          .slice(0, 5)
-          .map((p) => ({ name: p.name, stock: p.stock, lowStockAlert: p.lowStockAlert })),
+          .slice(0, 5),
       },
       generatedAt: new Date().toISOString(),
     })

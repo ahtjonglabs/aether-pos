@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     // Verify all products belong to this outlet
     const existingProducts = await db.product.findMany({
       where: { id: { in: productIds }, outletId },
-      select: { id: true, name: true, price: true, stock: true, categoryId: true },
+      select: { id: true, name: true, price: true, stock: true, categoryId: true, hasVariants: true },
     })
 
     if (existingProducts.length === 0) {
@@ -134,6 +134,88 @@ export async function POST(request: NextRequest) {
           where: { id: product.id },
           data: updates,
         })
+
+        // Propagate adjustments to variants if the product has them
+        if (product.hasVariants) {
+          // Price adjustment for variants
+          if (priceAdjustment) {
+            const variants = await tx.productVariant.findMany({
+              where: { productId: product.id },
+              select: { id: true, price: true },
+            })
+
+            for (const variant of variants) {
+              const { type, value } = priceAdjustment
+              let variantNewPrice: number
+
+              if (type === 'percent') {
+                variantNewPrice = Math.round(variant.price * (1 + value / 100))
+              } else {
+                variantNewPrice = Math.round(variant.price + value)
+              }
+
+              variantNewPrice = Math.max(0, variantNewPrice)
+              await tx.productVariant.update({
+                where: { id: variant.id },
+                data: { price: variantNewPrice },
+              })
+
+              auditLogs.push({
+                action: 'BULK_UPDATE',
+                entityType: 'PRODUCT_VARIANT',
+                entityId: variant.id,
+                details: JSON.stringify({
+                  parentProductName: product.name,
+                  parentId: product.id,
+                  price: { from: variant.price, to: variantNewPrice },
+                  batchOperation: true,
+                }),
+                outletId,
+                userId,
+              })
+            }
+          }
+
+          // Stock adjustment for variants
+          if (stockAdjustment) {
+            const variants = await tx.productVariant.findMany({
+              where: { productId: product.id },
+              select: { id: true, stock: true },
+            })
+
+            for (const variant of variants) {
+              const { type, value } = stockAdjustment
+              let variantNewStock: number
+
+              if (type === 'add') {
+                variantNewStock = variant.stock + Math.round(value)
+              } else if (type === 'subtract') {
+                variantNewStock = Math.max(0, variant.stock - Math.round(value))
+              } else {
+                variantNewStock = Math.round(value)
+              }
+
+              await tx.productVariant.update({
+                where: { id: variant.id },
+                data: { stock: variantNewStock },
+              })
+
+              auditLogs.push({
+                action: 'BULK_UPDATE',
+                entityType: 'PRODUCT_VARIANT',
+                entityId: variant.id,
+                details: JSON.stringify({
+                  parentProductName: product.name,
+                  parentId: product.id,
+                  stock: { from: variant.stock, to: variantNewStock },
+                  batchOperation: true,
+                }),
+                outletId,
+                userId,
+              })
+            }
+          }
+        }
 
         auditLogs.push({
           action: 'BULK_UPDATE',

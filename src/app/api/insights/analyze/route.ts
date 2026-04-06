@@ -82,7 +82,7 @@ async function aggregateData(outletId: string, tzOffset: number | null): Promise
   const yesterdayAvgOrder = yesterdayTxs.length > 0 ? yesterdayRevenue / yesterdayTxs.length : 0
 
   const [allProducts, categories, topSellingItems, totalCustomers, newThisWeekCount, topSpenders, setting, loyaltyEarned, loyaltyRedeemed, paymentGroups, todayFullTxs, outlet] = await Promise.all([
-    db.product.findMany({ where: { outletId }, select: { id: true, name: true, stock: true, lowStockAlert: true, price: true, hpp: true, categoryId: true, sku: true, image: true } }),
+    db.product.findMany({ where: { outletId }, select: { id: true, name: true, stock: true, lowStockAlert: true, price: true, hpp: true, categoryId: true, sku: true, image: true, hasVariants: true, variants: { select: { price: true, stock: true } } } }),
     db.category.findMany({ where: { outletId }, select: { id: true, name: true, products: { select: { id: true } } } }),
     db.transactionItem.groupBy({ by: ['productName'], where: { transaction: { outletId, ...voidExclude } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { qty: 'desc' } }, take: 10 }),
     db.customer.count({ where: { outletId } }),
@@ -97,10 +97,19 @@ async function aggregateData(outletId: string, tzOffset: number | null): Promise
   ])
 
   const totalProducts = allProducts.length
-  const outOfStock = allProducts.filter(p => p.stock === 0).length
-  const lowStock = allProducts.filter(p => p.stock > 0 && p.stock <= p.lowStockAlert).length
-  const inventoryValue = allProducts.reduce((s, p) => s + (p.price * p.stock), 0)
-  const avgPrice = totalProducts > 0 ? allProducts.reduce((s, p) => s + p.price, 0) / totalProducts : 0
+  const getAggStock = (p: typeof allProducts[number]) =>
+    p.hasVariants && p.variants?.length > 0 ? p.variants.reduce((s, v) => s + v.stock, 0) : p.stock
+  const getAggPrice = (p: typeof allProducts[number]) => {
+    if (p.hasVariants && p.variants?.length > 0) {
+      const totalStock = p.variants.reduce((s, v) => s + v.stock, 0)
+      return totalStock > 0 ? p.variants.reduce((s, v) => s + v.price * v.stock, 0) / totalStock : p.price
+    }
+    return p.price
+  }
+  const outOfStock = allProducts.filter(p => getAggStock(p) === 0).length
+  const lowStock = allProducts.filter(p => { const s = getAggStock(p); return s > 0 && s <= p.lowStockAlert }).length
+  const inventoryValue = allProducts.reduce((s, p) => s + (getAggPrice(p) * getAggStock(p)), 0)
+  const avgPrice = totalProducts > 0 ? allProducts.reduce((s, p) => s + getAggPrice(p), 0) / totalProducts : 0
 
   const avgSpendPerCustomer = totalCustomers > 0
     ? (await db.customer.aggregate({ where: { outletId }, _avg: { totalSpend: true } }))._avg.totalSpend ?? 0
@@ -127,9 +136,9 @@ async function aggregateData(outletId: string, tzOffset: number | null): Promise
 
   // Dead stock: products with stock > 0 but not in top selling items
   const sellingProductNames = new Set(topSellingItems.map(i => i.productName))
-  const deadStock = allProducts.filter(p => p.stock > 0 && !sellingProductNames.has(p.name))
+  const deadStock = allProducts.filter(p => getAggStock(p) > 0 && !sellingProductNames.has(p.name))
   const deadStockCount = deadStock.length
-  const deadStockValue = deadStock.reduce((s, p) => s + (p.price * p.stock), 0)
+  const deadStockValue = deadStock.reduce((s, p) => s + (getAggPrice(p) * getAggStock(p)), 0)
 
   return {
     today: { revenue: todayRevenue, transactions: todayTxs.length, avgOrder: todayAvgOrder },

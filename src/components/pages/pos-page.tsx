@@ -626,6 +626,26 @@ export default function PosPage() {
         )
       }
 
+      // Helper: get aggregated stock (variant-aware)
+      const getAggStock = (p: typeof filtered[number]) => {
+        if (p.hasVariants && p.variants && p.variants.length > 0) {
+          return p.variants.reduce((s: number, v: any) => s + (v.stock || 0), 0)
+        }
+        return p.stock || 0
+      }
+      // Sort: in-stock first (highest stock on top), out-of-stock at the bottom
+      filtered.sort((a, b) => {
+        const aStock = getAggStock(a)
+        const bStock = getAggStock(b)
+        const aInStock = aStock > 0
+        const bInStock = bStock > 0
+        if (aInStock !== bInStock) return aInStock ? -1 : 1
+        // Within same stock status: highest stock first, then alphabetical
+        const stockDiff = bStock - aStock
+        if (stockDiff !== 0) return stockDiff
+        return a.name.localeCompare(b.name)
+      })
+
       const totalPages = Math.max(1, Math.ceil(filtered.length / PRODUCTS_PER_PAGE))
       const skip = (page - 1) * PRODUCTS_PER_PAGE
       const paged = filtered.slice(skip, skip + PRODUCTS_PER_PAGE)
@@ -775,12 +795,40 @@ export default function PosPage() {
   // ==================== VARIANT PICKER ====================
 
   const openVariantPicker = async (product: Product) => {
+    // Optimization: check if product already has variants loaded from cache
+    const cachedVariants = product.variants && product.variants.length > 0 ? product.variants : null
+
+    // If only 1 in-stock variant, add directly without opening picker
+    if (cachedVariants) {
+      const availableVariants = cachedVariants.filter(v => v.stock > 0)
+      if (availableVariants.length === 1) {
+        addToCart(product, 1, availableVariants[0])
+        toast.success(`${product.name} - ${availableVariants[0].name} ditambahkan`)
+        return
+      }
+      // Multiple variants — open picker with cached data (no loading)
+      setVariantPicker({ product, open: true, variants: cachedVariants, loading: false })
+      return
+    }
+
+    // No cached variants — fetch from API
     setVariantPicker({ product, open: true, variants: [], loading: true })
     try {
       const res = await fetch(`/api/products/${product.id}/variants`)
       if (res.ok) {
         const data = await res.json()
-        setVariantPicker((prev) => ({ ...prev, variants: data || [], loading: false }))
+        const variants = data || []
+
+        // If only 1 in-stock variant, add directly and close picker
+        const availableVariants = variants.filter((v: ProductVariant) => v.stock > 0)
+        if (availableVariants.length === 1) {
+          setVariantPicker({ product: null as unknown as Product, open: false, variants: [], loading: false })
+          addToCart(product, 1, availableVariants[0])
+          toast.success(`${product.name} - ${availableVariants[0].name} ditambahkan`)
+          return
+        }
+
+        setVariantPicker((prev) => ({ ...prev, variants, loading: false }))
       } else {
         setVariantPicker((prev) => ({ ...prev, variants: [], loading: false }))
         toast.error('Gagal memuat varian')
@@ -906,8 +954,17 @@ export default function PosPage() {
         await localDB.products
           .where('id')
           .equals(item.product.id)
-          .modify((p) => {
-            p.stock = Math.max(0, (p.stock || 0) - item.qty)
+          .modify((p: any) => {
+            if (item.variant) {
+              // Decrement specific variant stock
+              const v = p.variants?.find((v: any) => v.id === item.variant!.id)
+              if (v) {
+                v.stock = Math.max(0, (v.stock || 0) - item.qty)
+              }
+            } else {
+              // Decrement parent product stock
+              p.stock = Math.max(0, (p.stock || 0) - item.qty)
+            }
             p.updatedAt = new Date().toISOString()
           })
       }
@@ -1149,14 +1206,8 @@ export default function PosPage() {
       )
     }
 
-    // Sort: in-stock products first, out-of-stock at the bottom
-    const sortedProducts = [...products].sort((a, b) => {
-      if (a.stock <= 0 && b.stock > 0) return 1
-      if (a.stock > 0 && b.stock <= 0) return -1
-      return 0
-    })
-
-    return sortedProducts.map((product) => {
+    // Products are already sorted by stock in fetchProducts, no need to re-sort here
+    return products.map((product) => {
       // For variant products, check if any variant is in cart
       const cartItemsForProduct = cart.filter((i) => i.product.id === product.id)
       const hasCartItems = cartItemsForProduct.length > 0
@@ -1164,7 +1215,9 @@ export default function PosPage() {
 
       // For non-variant products, find the single cart item (without variant)
       const cartItem = !isVariantProduct ? cart.find((i) => i.product.id === product.id && !i.variant) : null
-      const outOfStock = isVariantProduct ? false : product.stock <= 0
+      const outOfStock = isVariantProduct
+        ? product.variants.length > 0 && product.variants.every(v => v.stock <= 0)
+        : product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
       const accentColor = catColor ? (CATEGORY_COLORS[catColor] || themeColors) : themeColors
       const lowStock = product.stock > 0 && product.stock <= 5
@@ -1194,7 +1247,7 @@ export default function PosPage() {
           )}
         >
           {/* Product info — clickable area */}
-          {!outOfStock && !hasCartItems && (
+          {!outOfStock && !(hasCartItems && !isVariantProduct) && (
             <button
               className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
               onClick={() => isVariantProduct ? openVariantPicker(product) : addToCart(product)}
@@ -1219,7 +1272,22 @@ export default function PosPage() {
                 {outOfStock ? (
                   <span className="text-[10px] text-red-400 font-medium">Habis</span>
                 ) : isVariantProduct ? (
-                  <span className="text-[10px] text-zinc-500 font-medium">Pilih varian</span>
+                  (() => {
+                    const availableCount = product.variants.filter(v => v.stock > 0).length
+                    const totalCount = product.variants.length
+                    return (
+                      <span className={cn(
+                        'text-[10px] font-medium',
+                        availableCount === 0 ? 'text-red-400' : 'text-violet-400/70'
+                      )}>
+                        {availableCount === totalCount
+                          ? `${totalCount} varian tersedia`
+                          : availableCount > 0
+                            ? `${availableCount}/${totalCount} tersedia`
+                            : 'Semua varian habis'}
+                      </span>
+                    )
+                  })()
                 ) : (
                   <span className={cn(
                     'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
@@ -2270,7 +2338,13 @@ export default function PosPage() {
               </div>
             ) : (
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {variantPicker.variants.map((variant) => {
+                {[...variantPicker.variants].sort((a, b) => {
+                  // In-stock first, then by name
+                  const aOk = a.stock > 0 ? 0 : 1
+                  const bOk = b.stock > 0 ? 0 : 1
+                  if (aOk !== bOk) return aOk - bOk
+                  return a.name.localeCompare(b.name)
+                }).map((variant) => {
                   const isOutOfStock = variant.stock <= 0
                   const cartKey = getCartKey(variantPicker.product.id, variant.id)
                   const existingItem = cart.find((i) => getCartKey(i.product.id, i.variant?.id || null) === cartKey)
@@ -2304,14 +2378,34 @@ export default function PosPage() {
                           </span>
                           {existingItem && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-emerald-500/10 text-emerald-400">
-                              ×{existingItem.qty} di keranjang
+                              ×{existingItem.qty}
                             </span>
                           )}
                         </div>
                       </div>
-                      <p className={cn('text-sm font-bold shrink-0', isOutOfStock ? 'text-zinc-600' : 'text-violet-400')}>
-                        {formatCurrency(variant.price)}
-                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <p className={cn('text-sm font-bold', isOutOfStock ? 'text-zinc-600' : 'text-violet-400')}>
+                          {formatCurrency(variant.price)}
+                        </p>
+                        {existingItem && !isOutOfStock && (
+                          <div className="flex items-center gap-0.5 ml-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); updateQty(variantPicker.product.id, existingItem.qty - 1, variant.id) }}
+                              className="w-6 h-6 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-400 hover:bg-red-500/20 hover:text-red-400 transition-all active:scale-95"
+                            >
+                              {existingItem.qty === 1 ? <Trash2 className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
+                            </button>
+                            <span className="text-[11px] font-bold text-zinc-200 w-5 text-center">{existingItem.qty}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); updateQty(variantPicker.product.id, existingItem.qty + 1, variant.id) }}
+                              disabled={existingItem.qty >= variant.stock}
+                              className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-violet-400 hover:bg-violet-500/30 transition-all active:scale-95 disabled:opacity-30"
+                            >
+                              <Plus className="h-2.5 w-2.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </button>
                   )
                 })}

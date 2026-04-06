@@ -100,10 +100,15 @@ export async function GET(request: NextRequest) {
         ? 'down' : 'stable'
 
     // ── Stock depletion prediction ──
-    const allProducts = await db.product.findMany({
-      where: { outletId, stock: { gt: 0 } },
-      select: { id: true, name: true, stock: true, lowStockAlert: true },
+    const allProductsRaw = await db.product.findMany({
+      where: { outletId },
+      select: { id: true, name: true, stock: true, lowStockAlert: true, hasVariants: true, variants: { select: { price: true, stock: true } } },
     })
+
+    const getAggStock = (p: typeof allProductsRaw[number]) =>
+      p.hasVariants && p.variants?.length > 0 ? p.variants.reduce((s, v) => s + v.stock, 0) : p.stock
+
+    const allProducts = allProductsRaw.filter(p => getAggStock(p) > 0)
 
     // Get sales velocity per product (items sold in last 14 days)
     const salesByProduct = await db.transactionItem.groupBy({
@@ -118,21 +123,22 @@ export async function GET(request: NextRequest) {
 
     const stockPredictions = allProducts
       .map((p) => {
+        const aggStock = getAggStock(p)
         const sold14 = salesMap.get(p.name) ?? 0
         const dailyVelocity = sold14 / 14
-        const daysUntilEmpty = dailyVelocity > 0 ? Math.floor(p.stock / dailyVelocity) : Infinity
+        const daysUntilEmpty = dailyVelocity > 0 ? Math.floor(aggStock / dailyVelocity) : Infinity
         const daysUntilLow = dailyVelocity > 0
-          ? Math.max(0, Math.floor((p.stock - p.lowStockAlert) / dailyVelocity))
+          ? Math.max(0, Math.floor((aggStock - p.lowStockAlert) / dailyVelocity))
           : Infinity
         return {
           name: p.name,
-          stock: p.stock,
+          stock: aggStock,
           lowStockAlert: p.lowStockAlert,
           sold14Days: sold14,
           dailyVelocity: Math.round(dailyVelocity * 100) / 100,
           daysUntilEmpty,
           daysUntilLow,
-          status: p.stock <= p.lowStockAlert
+          status: aggStock <= p.lowStockAlert
             ? 'critical' as const
             : daysUntilEmpty <= 3
               ? 'warning' as const

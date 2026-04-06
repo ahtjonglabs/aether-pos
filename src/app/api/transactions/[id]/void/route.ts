@@ -52,42 +52,71 @@ export async function POST(
     // Fetch transaction items for stock restoration
     const transactionItems = await db.transactionItem.findMany({
       where: { transactionId: id },
-      select: { productId: true, productName: true, qty: true },
+      select: { productId: true, productName: true, variantId: true, variantName: true, qty: true },
     })
 
     // Perform void in a transaction: restore stock + create audit logs
     await db.$transaction(async (tx) => {
       // Restore stock for each item
       for (const item of transactionItems) {
-        // Increment product stock
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.qty } },
-        })
+        if (item.variantId) {
+          // Increment variant stock
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stock: { increment: item.qty } },
+          })
+        } else {
+          // Increment parent product stock
+          await tx.product.update({
+            where: { id: item.productId! },
+            data: { stock: { increment: item.qty } },
+          })
+        }
       }
 
       // Fetch updated stocks for audit logs
-      const updatedProducts = await tx.product.findMany({
-        where: { id: { in: transactionItems.map(i => i.productId) } },
-        select: { id: true, stock: true },
-      })
-      const stockMap = new Map(updatedProducts.map(p => [p.id, p.stock]))
+      const productIds = transactionItems.filter(i => !i.variantId).map(i => i.productId!).filter(Boolean)
+      const variantIds = transactionItems.filter(i => i.variantId).map(i => i.variantId!)
+
+      const productStockMap = new Map<string, number>()
+      if (productIds.length > 0) {
+        const updatedProducts = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, stock: true },
+        })
+        for (const p of updatedProducts) productStockMap.set(p.id, p.stock)
+      }
+
+      const variantStockMap = new Map<string, number>()
+      if (variantIds.length > 0) {
+        const updatedVariants = await tx.productVariant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, stock: true },
+        })
+        for (const v of updatedVariants) variantStockMap.set(v.id, v.stock)
+      }
 
       // Batch create audit logs for stock restoration
       await tx.auditLog.createMany({
-        data: transactionItems.map(item => ({
-          action: 'RESTOCK' as const,
-          entityType: 'PRODUCT' as const,
-          entityId: item.productId,
-          details: JSON.stringify({
-            reason: `Void transaksi ${transaction.invoiceNumber}`,
-            productName: item.productName,
-            quantityAdded: item.qty,
-            newStock: stockMap.get(item.productId) ?? 0,
-          }),
-          outletId,
-          userId,
-        })),
+        data: transactionItems.map(item => {
+          const isVariant = !!item.variantId
+          return {
+            action: 'RESTOCK' as const,
+            entityType: isVariant ? 'VARIANT' as const : 'PRODUCT' as const,
+            entityId: isVariant ? item.variantId! : item.productId!,
+            details: JSON.stringify({
+              reason: `Void transaksi ${transaction.invoiceNumber}`,
+              productName: item.productName,
+              variantName: item.variantName ?? undefined,
+              quantityAdded: item.qty,
+              newStock: isVariant
+                ? (variantStockMap.get(item.variantId!) ?? 0)
+                : (productStockMap.get(item.productId!) ?? 0),
+            }),
+            outletId,
+            userId,
+          }
+        }),
       })
 
       // Create void audit log
@@ -104,6 +133,7 @@ export async function POST(
             voidedAt: new Date().toISOString(),
             itemsRestored: transactionItems.map(i => ({
               productName: i.productName,
+              variantName: i.variantName ?? undefined,
               qty: i.qty,
             })),
           }),

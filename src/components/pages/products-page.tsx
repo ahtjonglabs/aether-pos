@@ -115,6 +115,7 @@ interface Product {
   unit: string
   hasVariants?: boolean
   _variantCount?: number
+  _maxPrice?: number
 }
 
 interface ProductStats {
@@ -452,6 +453,11 @@ export default function ProductsPage() {
 
   const handleRestock = async () => {
     if (!restockProduct || !restockQty || Number(restockQty) <= 0) return
+    if (restockProduct.hasVariants) {
+      toast.error('Produk dengan varian tidak bisa di-restock langsung. Gunakan edit produk untuk mengubah stok varian.')
+      setRestockOpen(false)
+      return
+    }
     setRestocking(true)
     try {
       const res = await fetch(`/api/products/${restockProduct.id}/restock`, {
@@ -1037,7 +1043,12 @@ export default function ProductsPage() {
                       {isOwner && (
                         <TableCell className="text-xs text-zinc-400 text-right py-3 px-3">{formatCurrency(product.hpp)}</TableCell>
                       )}
-                      <TableCell className="text-xs text-zinc-100 font-medium text-right py-3 px-3">{formatCurrency(product.price)}</TableCell>
+                      <TableCell className="text-xs text-zinc-100 font-medium text-right py-3 px-3">
+                        {product.hasVariants && product._maxPrice && product._maxPrice !== product.price
+                          ? <>{formatCurrency(product.price)}<span className="text-zinc-500"> ~ </span>{formatCurrency(product._maxPrice)}</>
+                          : formatCurrency(product.price)
+                        }
+                      </TableCell>
                       <TableCell className="text-xs text-right py-3 px-3">
                         {isPro ? (
                           <div className="flex items-center justify-end gap-1.5">
@@ -1075,12 +1086,17 @@ export default function ProductsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg"
+                            className={`h-7 w-7 rounded-lg ${product.hasVariants ? 'text-zinc-700 cursor-not-allowed' : 'text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
                             onClick={() => {
+                              if (product.hasVariants) {
+                                toast.info('Produk varian tidak bisa di-restock langsung. Gunakan edit produk.')
+                                return
+                              }
                               setRestockProduct(product)
                               setRestockQty('')
                               setRestockOpen(true)
                             }}
+                            disabled={!!product.hasVariants}
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
                           </Button>
@@ -1248,7 +1264,10 @@ export default function ProductsPage() {
                         </span>
                       )}
                       <span className="text-sm font-bold text-zinc-100">
-                        {formatCurrency(product.price)}
+                        {product.hasVariants && product._maxPrice && product._maxPrice !== product.price
+                          ? <>{formatCurrency(product.price)}<span className="text-zinc-500 text-xs"> ~ </span><span className="text-xs">{formatCurrency(product._maxPrice)}</span></>
+                          : formatCurrency(product.price)
+                        }
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1288,12 +1307,17 @@ export default function ProductsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
+                          className={`h-7 w-7 rounded-md ${product.hasVariants ? 'text-zinc-700 cursor-not-allowed' : 'text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
                           onClick={() => {
+                            if (product.hasVariants) {
+                              toast.info('Produk varian tidak bisa di-restock langsung. Gunakan edit produk.')
+                              return
+                            }
                             setRestockProduct(product)
                             setRestockQty('')
                             setRestockOpen(true)
                           }}
+                          disabled={!!product.hasVariants}
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                         </Button>
@@ -1992,7 +2016,7 @@ export default function ProductsPage() {
                   {detailProduct.name}
                 </SheetTitle>
                 <SheetDescription className="text-zinc-500 text-[11px]">
-                  {detailProduct.sku || 'No SKU'} • {formatCurrency(detailProduct.price)}
+                  {detailProduct.sku || 'No SKU'} • {detailProduct._maxPrice && detailProduct._maxPrice !== detailProduct.price ? `${formatCurrency(detailProduct.price)} ~ ${formatCurrency(detailProduct._maxPrice)}` : formatCurrency(detailProduct.price)}
                 </SheetDescription>
               </SheetHeader>
 
@@ -2034,7 +2058,12 @@ export default function ProductsPage() {
                           )}
                           <div>
                             <span className="text-zinc-500 text-[11px]">Price</span>
-                            <p className="text-zinc-200">{formatCurrency(detailData.product.price)}</p>
+                            <p className="text-zinc-200">
+                              {detailData.product._maxPrice && detailData.product._maxPrice !== detailData.product.price
+                                ? <>{formatCurrency(detailData.product.price)}<span className="text-zinc-500 text-[10px]"> ~ </span>{formatCurrency(detailData.product._maxPrice)}</>
+                                : formatCurrency(detailData.product.price)
+                              }
+                            </p>
                           </div>
                           {detailData.product.bruto > 0 && (
                             <div>
@@ -2054,6 +2083,36 @@ export default function ProductsPage() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Variant List Card */}
+                      {detailData.product.hasVariants && detailData.product.variants && detailData.product.variants.length > 0 && (
+                        <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.03] p-3 space-y-2">
+                          <h3 className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                            <Layers className="h-3.5 w-3.5 text-violet-400" />
+                            Varian ({detailData.product.variants.length})
+                          </h3>
+                          <div className="space-y-1.5">
+                            {detailData.product.variants.map((v: any) => {
+                              const isOutOfStock = v.stock <= 0
+                              const isLowStock = v.stock > 0 && v.stock <= (detailData.product.lowStockAlert || 10)
+                              return (
+                                <div key={v.id} className="flex items-center justify-between bg-zinc-800/40 rounded-lg px-2.5 py-2">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium text-zinc-200 truncate">{v.name}</p>
+                                    {v.sku && <p className="text-[10px] text-zinc-600 font-mono">{v.sku}</p>}
+                                  </div>
+                                  <div className="text-right flex-shrink-0 ml-2">
+                                    <p className="text-xs font-medium text-zinc-200">{formatCurrency(v.price)}</p>
+                                    <p className={`text-[10px] ${isOutOfStock ? 'text-red-400 font-medium' : isLowStock ? 'text-amber-400' : 'text-zinc-500'}`}>
+                                      Stok: {formatNumber(v.stock)}
+                                    </p>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Stock Aging (Pro feature) */}
                       {isPro && (

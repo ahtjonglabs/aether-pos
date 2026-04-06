@@ -48,13 +48,20 @@ export async function GET(request: NextRequest) {
     const totalRevenue = revenueResult._sum.total ?? 0
     const totalTransactions = totalTxCount
 
-    // ── Low stock products ──
+    // ── Low stock products (variant-aware aggregation) ──
     const lowStockProducts = await db.product.findMany({
       where: { outletId },
-      orderBy: { stock: 'asc' },
-      select: { id: true, name: true, stock: true, lowStockAlert: true },
+      select: { id: true, name: true, stock: true, lowStockAlert: true, hasVariants: true, variants: { select: { stock: true } } },
     })
-    const lowStockList = lowStockProducts.filter((p) => p.stock <= p.lowStockAlert)
+    const lowStockList = lowStockProducts
+      .map((p) => {
+        const aggStock = p.hasVariants && p.variants.length > 0
+          ? p.variants.reduce((s, v) => s + v.stock, 0)
+          : p.stock
+        return { ...p, stock: aggStock, aggStock }
+      })
+      .filter((p) => p.aggStock <= p.lowStockAlert)
+      .sort((a, b) => a.aggStock - b.aggStock)
 
     // ── Low stock variants ──
     const lowStockVariants = await db.productVariant.findMany({
