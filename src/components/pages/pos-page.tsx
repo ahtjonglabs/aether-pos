@@ -116,6 +116,7 @@ interface CartItem {
   variantId?: string
   variantName?: string
   variantPrice?: number
+  variantStock?: number
 }
 
 interface CheckoutResult {
@@ -398,17 +399,17 @@ export default function PosPage() {
     const calculatePromo = async () => {
       setPromoLoading(true)
       try {
-        const cartSubtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0)
+        const cartSubtotal = cart.reduce((sum, item) => sum + (item.variantPrice || item.product.price) * item.qty, 0)
         const res = await fetch('/api/promos/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: cart.map(item => ({
               productId: item.product.id,
-              productName: item.product.name,
-              price: item.product.price,
+              productName: item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name,
+              price: item.variantPrice || item.product.price,
               qty: item.qty,
-              subtotal: item.product.price * item.qty,
+              subtotal: (item.variantPrice || item.product.price) * item.qty,
             })),
             subtotal: cartSubtotal,
           }),
@@ -691,7 +692,6 @@ export default function PosPage() {
     if (variant.stock <= 0) return
     if (qty <= 0) return
     setCart((prev) => {
-      const cartKey = `${product.id}-${variant.id}`
       const existing = prev.find((item) => item.variantId === variant.id)
       if (existing) {
         const newQty = existing.qty + qty
@@ -699,7 +699,7 @@ export default function PosPage() {
         return prev.map((item) => item.variantId === variant.id ? { ...item, qty: newQty } : item)
       }
       if (qty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
-      return [...prev, { product, qty, variantId: variant.id, variantName: variant.name, variantPrice: variant.price }]
+      return [...prev, { product, qty, variantId: variant.id, variantName: variant.name, variantPrice: variant.price, variantStock: variant.stock }]
     })
   }
 
@@ -733,14 +733,16 @@ export default function PosPage() {
   const setCartItemQty = (productId: string, qty: number, variantId?: string) => {
     if (qty <= 0) { removeFromCart(productId, variantId); return }
     const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
-    if (item && qty > (item.variantId ? 9999 : item.product.stock)) { toast.warning('Stok tidak cukup'); return }
+    const maxStock = item?.variantId ? (item.variantStock ?? 9999) : (item?.product.stock ?? 9999)
+    if (item && qty > maxStock) { toast.warning('Stok tidak cukup'); return }
     setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty } : i)))
   }
 
   const updateQty = (productId: string, newQty: number, variantId?: string) => {
     if (newQty <= 0) { removeFromCart(productId, variantId); return }
     const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
-    if (item && newQty > (item.variantId ? 9999 : item.product.stock)) { toast.warning('Stok tidak cukup'); return }
+    const maxStock = item?.variantId ? (item.variantStock ?? 9999) : (item?.product.stock ?? 9999)
+    if (item && newQty > maxStock) { toast.warning('Stok tidak cukup'); return }
     setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: newQty } : i)))
   }
 
@@ -767,11 +769,12 @@ export default function PosPage() {
     const qty = parseInt(value)
     if (!isNaN(qty) && qty > 0) {
       const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
-      if (item && qty <= (item.variantId ? 9999 : item.product.stock)) {
+      const maxStock = item?.variantId ? (item.variantStock ?? 9999) : (item?.product.stock ?? 9999)
+      if (item && qty <= maxStock) {
         setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty } : i)))
-      } else if (item && qty > (item.variantId ? 9999 : item.product.stock)) {
+      } else if (item && qty > maxStock) {
         toast.warning('Stok tidak cukup')
-        setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: item.variantId ? 9999 : item.product.stock } : i)))
+        setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: maxStock } : i)))
       }
     } else if (value === '' || value === '0') {
       removeFromCart(productId, variantId)
@@ -1168,11 +1171,14 @@ export default function PosPage() {
     }
 
     return products.map((product) => {
-      const cartItem = cart.find((i) => i.product.id === product.id)
-      const outOfStock = product.stock <= 0
+      const cartItem = cart.find((i) => i.product.id === product.id && !i.variantId)
+      // Variant products: parent stock may be 0 but variants have their own stock
+      // Only mark as outOfStock if it's NOT a variant product AND stock is 0
+      const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+      const outOfStock = !isVariantProduct && product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
       const accentColor = catColor ? (CATEGORY_COLORS[catColor] || themeColors) : themeColors
-      const lowStock = product.stock > 0 && product.stock <= 5
+      const lowStock = !isVariantProduct && product.stock > 0 && product.stock <= 5
 
       return (
         <div
@@ -1668,43 +1674,47 @@ export default function PosPage() {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-800/50 border border-zinc-800/50">
+                {cart.map((item) => {
+                  const itemPrice = item.variantPrice || item.product.price
+                  const cartItemId = `${item.product.id}-${item.variantId || ''}`
+                  return (
+                  <div key={cartItemId} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-800/50 border border-zinc-800/50">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-zinc-200 truncate">{item.product.name}</p>
-                      <p className="text-[11px] text-zinc-500">{formatCurrency(item.product.price)} × {item.qty}</p>
-                      <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(item.product.price * item.qty)}</p>
+                      <p className="text-xs font-medium text-zinc-200 truncate">{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name}</p>
+                      <p className="text-[11px] text-zinc-500">{formatCurrency(itemPrice)} × {item.qty}</p>
+                      <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(itemPrice * item.qty)}</p>
                     </div>
                     <div className="flex items-center gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
-                      {editingQtyId === item.product.id ? (
+                        onClick={() => updateQty(item.product.id, item.qty - 1, item.variantId)}><Minus className="h-3.5 w-3.5" /></Button>
+                      {editingQtyId === cartItemId ? (
                         <input
                           type="number"
                           min="1"
-                          max={item.product.stock}
+                          max={item.variantId ? (item.variantStock ?? 9999) : item.product.stock}
                           value={item.qty}
-                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
-                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
-                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value, item.variantId)}
+                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value, item.variantId)}
+                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value, item.variantId)}
                           autoFocus
                           className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-md h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       ) : (
                         <button
-                          onClick={() => setEditingQtyId(item.product.id)}
+                          onClick={() => setEditingQtyId(cartItemId)}
                           className="text-xs text-zinc-200 w-6 text-center font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
                         >
                           {item.qty}
                         </button>
                       )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
+                        onClick={() => updateQty(item.product.id, item.qty + 1, item.variantId)}><Plus className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        onClick={() => removeFromCart(item.product.id, item.variantId)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </ScrollArea>
@@ -1887,43 +1897,47 @@ export default function PosPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
+                  {cart.map((item) => {
+                    const itemPrice = item.variantPrice || item.product.price
+                    const cartItemId = `${item.product.id}-${item.variantId || ''}`
+                    return (
+                    <div key={cartItemId} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-zinc-200 font-medium truncate">{item.product.name}</p>
-                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)} × {item.qty}</p>
+                        <p className="text-xs text-zinc-200 font-medium truncate">{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name}</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(itemPrice)} × {item.qty}</p>
                       </div>
                       <div className="flex items-center gap-0.5">
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-                          onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                        {editingQtyId === item.product.id ? (
+                          onClick={() => updateQty(item.product.id, item.qty - 1, item.variantId)}><Minus className="h-3.5 w-3.5" /></button>
+                        {editingQtyId === cartItemId ? (
                           <input
                             type="number"
                             min="1"
-                            max={item.product.stock}
+                            max={item.variantId ? (item.variantStock ?? 9999) : item.product.stock}
                             value={item.qty}
-                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
-                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
-                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value, item.variantId)}
+                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value, item.variantId)}
+                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value, item.variantId)}
                             autoFocus
                             className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         ) : (
                           <button
-                            onClick={() => setEditingQtyId(item.product.id)}
+                            onClick={() => setEditingQtyId(cartItemId)}
                             className="text-xs w-7 text-center text-zinc-200 font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
                           >
                             {item.qty}
                           </button>
                         )}
                         <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
-                          onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
+                          onClick={() => updateQty(item.product.id, item.qty + 1, item.variantId)}><Plus className="h-3.5 w-3.5" /></button>
                       </div>
-                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
+                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(itemPrice * item.qty)}</p>
                       <button className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></button>
+                        onClick={() => removeFromCart(item.product.id, item.variantId)}><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -2017,12 +2031,15 @@ export default function PosPage() {
             <ScrollArea className="flex-1 -mx-4 px-4">
               <div className="space-y-3 py-1">
                 <div className="space-y-1 text-xs">
-                  {cart.map((item) => (
-                    <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                      <span>{item.product.name} × {item.qty}</span>
-                      <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                  {cart.map((item) => {
+                    const itemPrice = item.variantPrice || item.product.price
+                    return (
+                    <div key={`${item.product.id}-${item.variantId || ''}`} className="flex justify-between text-zinc-300 py-0.5">
+                      <span>{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name} × {item.qty}</span>
+                      <span className="font-medium">{formatCurrency(itemPrice * item.qty)}</span>
                     </div>
-                  ))}
+                    )
+                  })}
                   <Separator className="bg-zinc-800 my-1.5" />
                   <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                   {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
@@ -2070,12 +2087,15 @@ export default function PosPage() {
             </DialogHeader>
             <div className="space-y-3 py-1">
               <div className="space-y-1 text-xs">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                    <span>{item.product.name} × {item.qty}</span>
-                    <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                {cart.map((item) => {
+                  const itemPrice = item.variantPrice || item.product.price
+                  return (
+                  <div key={`${item.product.id}-${item.variantId || ''}`} className="flex justify-between text-zinc-300 py-0.5">
+                    <span>{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name} × {item.qty}</span>
+                    <span className="font-medium">{formatCurrency(itemPrice * item.qty)}</span>
                   </div>
-                ))}
+                  )
+                })}
                 <Separator className="bg-zinc-800 my-1.5" />
                 <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                 {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}

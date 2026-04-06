@@ -957,8 +957,10 @@ export default function ProductsPage() {
               </TableHeader>
               <TableBody>
                 {products.map((product) => {
-                  const isOutOfStock = product.stock === 0
-                  const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
+                  // For variant products, don't flag as out-of-stock based on parent stock
+                  const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+                  const isOutOfStock = !isVariantProduct && product.stock === 0
+                  const isLowStock = !isVariantProduct && product.stock > 0 && product.stock <= product.lowStockAlert
                   const isSelected = selectedIds.has(product.id)
 
                   let rowClass = 'border-zinc-800/60 hover:bg-zinc-800/40 transition-colors'
@@ -1140,8 +1142,9 @@ export default function ProductsPage() {
         ) : (
           <div className="space-y-2.5">
             {products.map((product) => {
-              const isOutOfStock = product.stock === 0
-              const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
+              const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+              const isOutOfStock = !isVariantProduct && product.stock === 0
+              const isLowStock = !isVariantProduct && product.stock > 0 && product.stock <= product.lowStockAlert
 
               let cardBorder = 'border-zinc-800/60'
               if (isPro) {

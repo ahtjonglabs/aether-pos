@@ -79,15 +79,46 @@ export async function POST(request: NextRequest) {
 
       const productMap = new Map(products.map((p) => [p.id, p]))
 
+      // Also fetch variants referenced by items for stock validation
+      const variantIds = items
+        .map((item: { variantId?: string | null }) => item.variantId)
+        .filter((id): id is string => !!id)
+
+      const variantMap = new Map<string, { id: string; name: string; stock: number }>()
+      if (variantIds.length > 0) {
+        const variants = await tx.productVariant.findMany({
+          where: { id: { in: variantIds } },
+          select: { id: true, name: true, stock: true },
+        })
+        for (const v of variants) {
+          variantMap.set(v.id, v)
+        }
+      }
+
       for (const item of items) {
         const product = productMap.get(item.productId)
         if (!product) {
           throw new Error(`Product ${item.productName} not found`)
         }
-        if (product.stock < item.qty) {
-          throw new Error(
-            `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.qty}`
-          )
+
+        if (item.variantId) {
+          // For variant items, check variant stock
+          const variant = variantMap.get(item.variantId)
+          if (!variant) {
+            throw new Error(`Variant ${item.variantName || item.variantId} not found`)
+          }
+          if (variant.stock < item.qty) {
+            throw new Error(
+              `Insufficient stock for ${product.name} - ${variant.name}. Available: ${variant.stock}, Requested: ${item.qty}`
+            )
+          }
+        } else {
+          // For non-variant items, check parent product stock
+          if (product.stock < item.qty) {
+            throw new Error(
+              `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.qty}`
+            )
+          }
         }
       }
 
