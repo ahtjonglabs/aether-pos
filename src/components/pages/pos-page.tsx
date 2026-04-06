@@ -955,25 +955,23 @@ export default function PosPage() {
         retryCount: 0,
       })
 
-      // STEP 1b: Decrement stock locally in IndexedDB to prevent overselling while offline
-      for (const item of cart) {
-        await localDB.products
+      // STEP 1b: Decrement stock locally in IndexedDB to prevent overselling while offline (parallel)
+      await Promise.all(cart.map(item =>
+        localDB.products
           .where('id')
           .equals(item.product.id)
           .modify((p: any) => {
             if (item.variant) {
-              // Decrement specific variant stock
               const v = p.variants?.find((v: any) => v.id === item.variant!.id)
               if (v) {
                 v.stock = Math.max(0, (v.stock || 0) - item.qty)
               }
             } else {
-              // Decrement parent product stock
               p.stock = Math.max(0, (p.stock || 0) - item.qty)
             }
             p.updatedAt = new Date().toISOString()
           })
-      }
+      ))
 
       // STEP 2: If online, sync immediately
       if (isOnline) {
@@ -1443,17 +1441,17 @@ export default function PosPage() {
             </div>
           )}
           <p className="text-lg font-bold">{settings.receiptBusinessName}</p>
-          {settings.receiptAddress && <p className="text-xs text-zinc-500">{settings.receiptAddress}</p>}
-          {settings.receiptPhone && <p className="text-xs text-zinc-500">{settings.receiptPhone}</p>}
+          {settings.receiptAddress && <p className="text-xs text-zinc-700">{settings.receiptAddress}</p>}
+          {settings.receiptPhone && <p className="text-xs text-zinc-700">{settings.receiptPhone}</p>}
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
         {/* Transaction Info */}
         <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-500">Invoice</span><span className="font-bold">{checkoutResult.invoiceNumber}</span></div>
-          <div className="flex"><span className="text-zinc-500">Tanggal</span><span className="font-medium">{formatReceiptDateTime()}</span></div>
-          <div className="flex"><span className="text-zinc-500">Customer</span><span className="font-medium">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
+          <div className="flex"><span className="text-zinc-700">Invoice</span><span className="font-bold">{checkoutResult.invoiceNumber}</span></div>
+          <div className="flex"><span className="text-zinc-700">Tanggal</span><span className="font-medium">{formatReceiptDateTime()}</span></div>
+          <div className="flex"><span className="text-zinc-700">Customer</span><span className="font-medium">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
           {isOfflineReceipt && <div className="flex"><span className="text-amber-600 text-xs">Status</span><span className="text-amber-600 text-xs font-semibold">Offline — Pending Sync</span></div>}
         </div>
 
@@ -1461,10 +1459,10 @@ export default function PosPage() {
 
         {/* Items Table Header */}
         <div className="flex items-center py-1">
-          <span className="flex-1 text-xs font-bold text-zinc-500">ITEM</span>
-          <span className="w-12 text-center text-xs font-bold text-zinc-500">QTY</span>
-          <span className="w-16 text-right text-xs font-bold text-zinc-500">HARGA</span>
-          <span className="w-20 text-right text-xs font-bold text-zinc-500">SUBTOTAL</span>
+          <span className="flex-1 text-xs font-bold text-zinc-700">ITEM</span>
+          <span className="w-12 text-center text-xs font-bold text-zinc-700">QTY</span>
+          <span className="w-16 text-right text-xs font-bold text-zinc-700">HARGA</span>
+          <span className="w-20 text-right text-xs font-bold text-zinc-700">SUBTOTAL</span>
         </div>
         <div className="border-t border-dashed border-zinc-300" />
 
@@ -1473,11 +1471,11 @@ export default function PosPage() {
           {cart.map((item) => (
             <div key={getCartKey(item.product.id, item.variant?.id || null)} className="space-y-0.5">
               <p className="font-semibold text-xs">{item.product.name}</p>
-              {item.variant && <p className="text-[10px] text-zinc-600">{item.variant.name}</p>}
+              {item.variant && <p className="text-[10px] text-zinc-800">{item.variant.name}</p>}
               <div className="flex items-center">
-                <span className="flex-1 text-[11px] text-zinc-600">{formatCurrency(getItemPrice(item))}/pcs</span>
+                <span className="flex-1 text-[11px] text-zinc-800">{formatCurrency(getItemPrice(item))}/pcs</span>
                 <span className="w-12 text-center text-[11px] font-bold">{item.qty}</span>
-                <span className="w-16 text-right text-[11px] text-zinc-600">{formatCurrency(getItemPrice(item))}</span>
+                <span className="w-16 text-right text-[11px] text-zinc-800">{formatCurrency(getItemPrice(item))}</span>
                 <span className="w-20 text-right text-xs font-bold">{formatCurrency(getItemPrice(item) * item.qty)}</span>
               </div>
             </div>
@@ -1488,10 +1486,10 @@ export default function PosPage() {
 
         {/* Totals */}
         <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-500">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
+          <div className="flex"><span className="text-zinc-700">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
           {pointsDiscount > 0 && <div className="flex text-emerald-600"><span className="font-medium">Poin Diskon</span><span className="font-bold">-{formatCurrency(pointsDiscount)}</span></div>}
           {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="font-medium">Promo: {selectedPromo.name}</span><span className="font-bold">-{formatCurrency(promoDiscount)}</span></div>}
-          {ppnAmount > 0 && <div className="flex"><span className="text-zinc-500">PPN ({settings.ppnRate}%)</span><span className="font-medium">+{formatCurrency(ppnAmount)}</span></div>}
+          {ppnAmount > 0 && <div className="flex"><span className="text-zinc-700">PPN ({settings.ppnRate}%)</span><span className="font-medium">+{formatCurrency(ppnAmount)}</span></div>}
           <div className="border-t border-dashed border-zinc-300 my-2" />
           <div className="flex text-base font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
         </div>
@@ -1500,8 +1498,8 @@ export default function PosPage() {
 
         {/* Payment */}
         <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-500">Pembayaran</span><span className="font-bold uppercase">{paymentMethod}</span></div>
-          <div className="flex"><span className="text-zinc-500">Dibayar</span><span className="font-medium">{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
+          <div className="flex"><span className="text-zinc-700">Pembayaran</span><span className="font-bold uppercase">{paymentMethod}</span></div>
+          <div className="flex"><span className="text-zinc-700">Dibayar</span><span className="font-medium">{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
           {paymentMethod === 'CASH' && change > 0 && <div className="flex font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>}
         </div>
 
@@ -1510,7 +1508,7 @@ export default function PosPage() {
           <>
             <div className="border-t border-dashed border-zinc-300 my-2" />
             <div className="text-center py-3">
-              <p className="text-xs text-zinc-400">{settings.receiptFooter}</p>
+              <p className="text-xs text-zinc-600">{settings.receiptFooter}</p>
             </div>
           </>
         )}
@@ -1688,7 +1686,7 @@ export default function PosPage() {
       </div>
 
       {/* Desktop Layout */}
-      <div className="hidden md:grid md:grid-cols-5 gap-4 min-h-[calc(100vh-10rem)]">
+      <div className="hidden md:grid md:grid-cols-5 gap-4 h-[calc(100vh-10rem)]">
         {/* Products - Left */}
         <div className="md:col-span-3 flex flex-col">
           {/* Search */}
@@ -1708,11 +1706,11 @@ export default function PosPage() {
           {renderCategoryChips()}
 
           {/* Product Grid */}
-          <ScrollArea className="flex-1">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 pb-3">
               {renderProductGrid()}
             </div>
-          </ScrollArea>
+          </div>
           {renderPagination()}
         </div>
 
@@ -1732,7 +1730,7 @@ export default function PosPage() {
 
           {renderCustomerSelector(false)}
 
-          <ScrollArea className="flex-1 px-4 py-2">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-2">
             {cart.length === 0 ? (
               <div className="text-center py-12">
                 <div className="w-16 h-16 rounded-2xl bg-zinc-800 flex items-center justify-center mx-auto mb-3">
@@ -1787,7 +1785,7 @@ export default function PosPage() {
                 })}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
           {/* Summary & Payment */}
           <div className="border-t border-zinc-800 p-4 space-y-3 bg-zinc-900">
