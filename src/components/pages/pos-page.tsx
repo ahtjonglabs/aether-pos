@@ -187,6 +187,7 @@ export default function PosPage() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const syncingRef = useRef(false)
+  const checkoutSyncRef = useRef(false)
   const receiptContentRef = useRef<HTMLDivElement>(null)
   const initialSyncDone = useRef(false)
 
@@ -506,7 +507,7 @@ export default function PosPage() {
 
   // Auto-sync when coming back online
   useEffect(() => {
-    if (isOnline && initialSyncDone.current && !syncingRef.current) {
+    if (isOnline && initialSyncDone.current && !syncingRef.current && !checkoutSyncRef.current) {
       syncingRef.current = true
       const timer = setTimeout(async () => {
         try {
@@ -615,14 +616,19 @@ export default function PosPage() {
         filtered = filtered.filter(p => p.categoryId === categoryId)
       }
 
-      // Search filter
+      // Search filter — also match variant SKUs
       if (search.trim()) {
         const q = search.trim().toLowerCase()
         filtered = filtered.filter(
           (p) =>
             p.name.toLowerCase().includes(q) ||
             (p.sku && p.sku.toLowerCase().includes(q)) ||
-            (p.barcode && p.barcode.toLowerCase().includes(q))
+            (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+            // Match variant SKU or variant name
+            (p.hasVariants && p.variants && p.variants.some((v: any) =>
+              (v.sku && v.sku.toLowerCase().includes(q)) ||
+              v.name.toLowerCase().includes(q)
+            ))
         )
       }
 
@@ -971,37 +977,47 @@ export default function PosPage() {
 
       // STEP 2: If online, sync immediately
       if (isOnline) {
+        checkoutSyncRef.current = true
         try {
           const unsyncedTx = await localDB.transactions.get(localId)
           if (unsyncedTx) {
-            const syncRes = await fetch('/api/transactions/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: [unsyncedTx] }),
-            })
-            const syncData = await syncRes.json()
-            if (syncRes.ok && syncData.synced > 0) {
-              await localDB.transactions.update(localId, {
-                isSynced: 1,
-                syncedAt: Date.now(),
-                invoiceNumber: syncData.results?.[0]?.invoiceNumber,
-                serverTransactionId: syncData.results?.[0]?.serverId,
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 20000)
+            try {
+              const syncRes = await fetch('/api/transactions/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ transactions: [unsyncedTx] }),
+                signal: controller.signal,
               })
-              const invoiceNum = syncData.results?.[0]?.invoiceNumber || `OFF-${Date.now().toString(36).toUpperCase()}`
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum })
-              toast.success(`Pembayaran berhasil! Invoice: ${invoiceNum}`)
-            } else {
-              const error = syncData.results?.[0]?.error || 'Gagal sync ke server'
+              clearTimeout(timeoutId)
+              const syncData = await syncRes.json()
+              if (syncRes.ok && syncData.synced > 0) {
+                await localDB.transactions.update(localId, {
+                  isSynced: 1,
+                  syncedAt: Date.now(),
+                  invoiceNumber: syncData.results?.[0]?.invoiceNumber,
+                  serverTransactionId: syncData.results?.[0]?.serverId,
+                })
+                const invoiceNum = syncData.results?.[0]?.invoiceNumber || `OFF-${Date.now().toString(36).toUpperCase()}`
+                setCheckoutResult({ success: true, invoiceNumber: invoiceNum })
+                toast.success(`Pembayaran berhasil! Invoice: ${invoiceNum}`)
+              } else {
+                const error = syncData.results?.[0]?.error || syncData.error || 'Gagal sync ke server'
+                const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+                setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan lokal', syncError: error })
+                toast.warning('Tersimpan lokal — akan sync otomatis', { description: error })
+              }
+            } catch (syncErr) {
+              clearTimeout(timeoutId)
+              console.error('Immediate sync failed:', syncErr)
               const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan lokal', syncError: error })
-              toast.warning('Tersimpan lokal — akan sync otomatis', { description: error })
+              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
+              toast.warning('Tersimpan offline — akan sync otomatis')
             }
           }
-        } catch (syncErr) {
-          console.error('Immediate sync failed:', syncErr)
-          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
-          toast.warning('Tersimpan offline — akan sync otomatis')
+        } finally {
+          checkoutSyncRef.current = false
         }
       } else {
         const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
@@ -1234,6 +1250,10 @@ export default function PosPage() {
           : formatCurrency(product.price))
         : formatCurrency(product.price)
 
+      const totalCartQty = isVariantProduct
+        ? cartItemsForProduct.reduce((sum, ci) => sum + ci.qty, 0)
+        : (cartItem?.qty || 0)
+
       return (
         <div
           key={product.id}
@@ -1242,20 +1262,26 @@ export default function PosPage() {
             outOfStock
               ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30 p-2.5 md:p-3'
               : hasCartItems
-              ? `${accentColor.border} ${accentColor.bg} ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
+              ? `${accentColor.border} ${accentColor.bg} ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')} cursor-pointer active:scale-[0.98]`
               : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm cursor-pointer active:scale-[0.98]'
           )}
         >
-          {/* Product info — clickable area */}
-          {!outOfStock && !(hasCartItems && !isVariantProduct) && (
+          {/* Entire card is clickable */}
+          {!outOfStock && (
             <button
-              className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
+              className="absolute inset-0 z-[2] rounded-2xl md:rounded-xl"
               onClick={() => isVariantProduct ? openVariantPicker(product) : addToCart(product)}
             />
           )}
+          {/* Qty bubble badge */}
+          {hasCartItems && !outOfStock && (
+            <div className="absolute -top-1.5 -right-1.5 z-[3] flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold shadow-lg shadow-emerald-500/30 pointer-events-none">
+              {totalCartQty}
+            </div>
+          )}
           <div className={cn(
-            'relative z-[1]',
-            hasCartItems ? 'p-2 md:p-2.5' : 'p-2.5 md:p-3'
+            'relative z-[1] pointer-events-none',
+            'p-2.5 md:p-3'
           )}>
             <div className="flex items-start justify-between gap-1 mb-1 md:mb-1.5">
               <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate">{product.name}</p>
@@ -1267,8 +1293,7 @@ export default function PosPage() {
               )}
             </div>
             <p className={cn('text-xs md:text-sm font-bold', isVariantProduct ? 'text-violet-400' : accentColor.text)}>{displayPrice}</p>
-            {!hasCartItems && (
-              <div className="flex items-center justify-between mt-1.5">
+            <div className="flex items-center justify-between mt-1.5">
                 {outOfStock ? (
                   <span className="text-[10px] text-red-400 font-medium">Habis</span>
                 ) : isVariantProduct ? (
@@ -1300,83 +1325,6 @@ export default function PosPage() {
                   </span>
                 )}
               </div>
-            )}
-
-            {/* In-cart summary for variant products */}
-            {isVariantProduct && hasCartItems && (
-              <div className="mt-2 space-y-1">
-                {cartItemsForProduct.map((ci) => (
-                  <div key={getCartKey(ci.product.id, ci.variant?.id || null)} className="flex items-center justify-between gap-1">
-                    <span className="text-[10px] text-zinc-400 truncate">{ci.variant?.name || ''}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); updateQty(product.id, ci.qty - 1, ci.variant?.id) }}
-                        className="w-5 h-5 rounded bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-400 hover:bg-red-500/20 hover:text-red-400 transition-all"
-                      >
-                        {ci.qty === 1 ? <Trash2 className="h-2 w-2" /> : <Minus className="h-2 w-2" />}
-                      </button>
-                      <span className="text-[10px] font-bold text-zinc-200 w-4 text-center">{ci.qty}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); updateQty(product.id, ci.qty + 1, ci.variant?.id) }}
-                        disabled={ci.qty >= getItemStock(ci)}
-                        className="w-5 h-5 rounded bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-30"
-                      >
-                        <Plus className="h-2 w-2" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  onClick={(e) => { e.stopPropagation(); openVariantPicker(product) }}
-                  className="w-full text-center text-[9px] text-violet-400 hover:text-violet-300 font-medium mt-1 py-0.5 rounded-md hover:bg-violet-500/10 transition-colors"
-                >
-                  + Tambah Varian
-                </button>
-              </div>
-            )}
-
-            {/* In-cart QTY stepper for non-variant products */}
-            {cartItem && (
-              <div className="flex items-center justify-between mt-2 gap-1.5">
-                <button
-                  onClick={(e) => { e.stopPropagation(); updateQty(product.id, cartItem.qty - 1) }}
-                  className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-95 shrink-0"
-                >
-                  {cartItem.qty === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                </button>
-                <div className="flex-1 text-center">
-                  {editingQtyId === product.id ? (
-                    <input
-                      type="number"
-                      min="1"
-                      max={product.stock}
-                      value={editingQtyValue}
-                      onChange={(e) => setEditingQtyValue(e.target.value)}
-                      onBlur={() => { confirmEditQty() }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-full text-center text-sm font-bold text-zinc-100 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); startEditQty(product.id, cartItem.qty) }}
-                      className="w-full text-center focus:outline-none cursor-pointer group"
-                    >
-                      <span className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{cartItem.qty}</span>
-                      <span className="text-[9px] text-zinc-500 block leading-none">/ {product.stock}</span>
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={(e) => { e.stopPropagation(); addToCart(product) }}
-                  disabled={cartItem.qty >= product.stock}
-                  className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )

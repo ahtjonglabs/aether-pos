@@ -4,17 +4,21 @@ import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { generateInvoiceNumber } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
+interface SyncTransactionItem {
+  productId: string
+  productName: string
+  price: number
+  qty: number
+  subtotal: number
+  variantId?: string | null
+  variantName?: string | null
+}
+
 interface SyncTransaction {
   id?: number
   payload: {
     customerId: string | null
-    items: Array<{
-      productId: string
-      productName: string
-      price: number
-      qty: number
-      subtotal: number
-    }>
+    items: SyncTransactionItem[]
     subtotal: number
     discount: number
     pointsUsed: number
@@ -23,6 +27,8 @@ interface SyncTransaction {
     paymentMethod: string
     paidAmount: number
     change: number
+    promoId?: string | null
+    promoDiscount?: number
   }
   createdAt: number // timestamp
 }
@@ -74,38 +80,68 @@ export async function POST(request: NextRequest) {
         const transactionDate = new Date(createdAt)
 
         const result = await db.$transaction(async (txDb) => {
-          // 1. Validate all products exist and have enough stock
+          // 1. Collect all variant IDs from items to batch-fetch
+          const variantIds = payload.items
+            .map((item) => item.variantId)
+            .filter((id): id is string => !!id)
+
+          // Batch-fetch products and variants
           const productIds = payload.items.map((item) => item.productId)
-          // H2: Filter products by outletId to prevent cross-outlet sync
           const products = await txDb.product.findMany({
             where: { id: { in: productIds }, outletId },
           })
-
           const productMap = new Map(products.map((p) => [p.id, p]))
 
+          // Batch-fetch all variants needed
+          const variants = variantIds.length > 0
+            ? await txDb.productVariant.findMany({
+                where: { id: { in: variantIds }, outletId },
+              })
+            : []
+          const variantMap = new Map(variants.map((v) => [v.id, v]))
+
+          // 2. Validate all items (stock check against variant or parent product)
           for (const item of payload.items) {
             const product = productMap.get(item.productId)
             if (!product) {
               throw new Error(`Product ${item.productName} not found in this outlet`)
             }
-            if (product.stock < item.qty) {
-              throw new Error(
-                `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.qty}`
-              )
+
+            if (item.variantId) {
+              // Variant item: validate variant exists, belongs to product, and has stock
+              const variant = variantMap.get(item.variantId)
+              if (!variant) {
+                throw new Error(`Varian tidak ditemukan untuk ${item.productName}`)
+              }
+              if (variant.productId !== item.productId) {
+                throw new Error(`Varian tidak cocok dengan produk ${item.productName}`)
+              }
+              if (variant.stock < item.qty) {
+                throw new Error(
+                  `Stok ${item.variantName || item.productName} tidak cukup. Tersedia: ${variant.stock}, Diminta: ${item.qty}`
+                )
+              }
+            } else {
+              // Non-variant item: validate against parent product stock
+              if (product.stock < item.qty) {
+                throw new Error(
+                  `Stok ${product.name} tidak cukup. Tersedia: ${product.stock}, Diminta: ${item.qty}`
+                )
+              }
             }
           }
 
-          // 2. Validate payment for CASH
+          // 3. Validate payment for CASH
           if (payload.paymentMethod === 'CASH') {
             if (payload.paidAmount < payload.total) {
-              throw new Error('Insufficient payment amount')
+              throw new Error('Jumlah bayar kurang dari total')
             }
           }
 
-          // 3. Generate invoice number
+          // 4. Generate invoice number
           const invoiceNumber = generateInvoiceNumber()
 
-          // 3b. Check for invoice uniqueness
+          // 4b. Check for invoice uniqueness
           const existingInvoice = await txDb.transaction.findUnique({
             where: { invoiceNumber },
           })
@@ -113,7 +149,7 @@ export async function POST(request: NextRequest) {
             throw new Error('Invoice number collision — please try again')
           }
 
-          // 4. Create Transaction record
+          // 5. Create Transaction record
           const transaction = await txDb.transaction.create({
             data: {
               invoiceNumber,
@@ -132,35 +168,77 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          // 5. Batch create TransactionItems, update stocks, batch create audit logs
+          // 6. Create TransactionItems — with variant support
           await txDb.transactionItem.createMany({
             data: payload.items.map((item) => {
               const product = productMap.get(item.productId)!
+              let itemHpp = product.hpp
+
+              // Use variant HPP if variant is specified
+              if (item.variantId) {
+                const variant = variantMap.get(item.variantId)
+                if (variant) {
+                  itemHpp = variant.hpp
+                }
+              }
+
               return {
                 productId: item.productId,
                 productName: item.productName,
+                variantId: item.variantId || null,
+                variantName: item.variantName || null,
                 price: item.price,
                 qty: item.qty,
                 subtotal: item.subtotal,
-                hpp: product.hpp,
+                hpp: itemHpp,
                 transactionId: transaction.id,
               }
             }),
           })
 
-          // Update stock for all items
+          // 7. Update stock — decrement variant stock OR parent product stock
           for (const item of payload.items) {
-            await txDb.product.update({
-              where: { id: item.productId },
-              data: { stock: { decrement: item.qty } },
-            })
+            if (item.variantId) {
+              // Decrement variant stock
+              await txDb.productVariant.update({
+                where: { id: item.variantId },
+                data: { stock: { decrement: item.qty } },
+              })
+            } else {
+              // Decrement parent product stock
+              await txDb.product.update({
+                where: { id: item.productId },
+                data: { stock: { decrement: item.qty } },
+              })
+            }
           }
 
-          // Batch create audit logs
-          await txDb.auditLog.createMany({
-            data: payload.items.map((item) => {
-              const product = productMap.get(item.productId)!
-              return {
+          // 8. Create audit logs — VARIANT type for variant items, PRODUCT for normal
+          const auditLogs = []
+          for (const item of payload.items) {
+            const product = productMap.get(item.productId)!
+            if (item.variantId) {
+              const variant = variantMap.get(item.variantId)
+              auditLogs.push({
+                action: 'SALE' as const,
+                entityType: 'VARIANT' as const,
+                entityId: item.variantId,
+                details: JSON.stringify({
+                  invoiceNumber,
+                  productName: item.productName,
+                  variantName: item.variantName,
+                  quantitySold: item.qty,
+                  previousStock: variant?.stock || 0,
+                  newStock: (variant?.stock || 0) - item.qty,
+                  syncedFromOffline: true,
+                  originalCreatedAt: createdAt,
+                }),
+                outletId,
+                userId,
+                createdAt: transactionDate,
+              })
+            } else {
+              auditLogs.push({
                 action: 'SALE' as const,
                 entityType: 'PRODUCT' as const,
                 entityId: item.productId,
@@ -176,11 +254,14 @@ export async function POST(request: NextRequest) {
                 outletId,
                 userId,
                 createdAt: transactionDate,
-              }
-            }),
-          })
+              })
+            }
+          }
+          if (auditLogs.length > 0) {
+            await txDb.auditLog.createMany({ data: auditLogs })
+          }
 
-          // 6. Handle customer loyalty
+          // 9. Handle customer loyalty
           if (payload.customerId) {
             const customer = await txDb.customer.findFirst({
               where: { id: payload.customerId, outletId },
@@ -193,7 +274,7 @@ export async function POST(request: NextRequest) {
 
             if (pointsToUse > customer.points) {
               throw new Error(
-                `Insufficient points. Available: ${customer.points}, Requested: ${pointsToUse}`
+                `Poin customer tidak cukup. Tersedia: ${customer.points}, Digunakan: ${pointsToUse}`
               )
             }
 

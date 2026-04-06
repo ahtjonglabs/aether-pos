@@ -37,6 +37,13 @@ export async function GET(request: NextRequest) {
       { wch: 15 }, // Punya Varian
     ]
 
+    // Add data validation (dropdown) for SATUAN column (F2:F1000)
+    const dvSatuan = {
+      type: 'list',
+      allowBlank: true,
+      sqref: 'F2:F1000',
+      formulas: ['"pcs,ml,lt,gr,kg,box,pack,botol,gelas,mangkuk,porsi,bungkus,sachet,dus,rim,lembar,meter,cm,ons"'],
+    }
     // Add data validation (dropdown) for Punya Varian column (H2:H1000)
     const dvVariant = {
       type: 'list',
@@ -44,7 +51,7 @@ export async function GET(request: NextRequest) {
       sqref: 'H2:H1000',
       formulas: ['"ya,tidak"'],
     }
-    ws['!dataValidation'] = [dvVariant]
+    ws['!dataValidation'] = [dvSatuan, dvVariant]
 
     XLSX.utils.book_append_sheet(wb, ws, 'Produk')
 
@@ -60,10 +67,16 @@ export async function GET(request: NextRequest) {
       ['QTY / STOK', 'Jumlah stok awal', '50', 'Tidak'],
       ['SATUAN', 'Unit produk (lihat daftar satuan di bawah)', 'porsi', 'Tidak'],
       ['KATEGORI', 'Nama kategori (auto-create jika belum ada)', 'Makanan', 'Tidak'],
-      ['PUNYA VARIAN', 'Apakah produk memiliki varian? Isi "ya" atau "tidak"', 'ya', 'Tidak'],
+      ['PUNYA VARIAN', 'Isi "ya" jika produk punya varian, lalu isi varian di sheet "Varian Produk"', 'ya', 'Tidak'],
       [''],
       ['DAFTAR SATUAN YANG TERSEDIA:'],
       ['pcs, ml, lt, gr, kg, box, pack, botol, gelas, mangkuk, porsi, bungkus, sachet, dus, rim, lembar, meter, cm, ons'],
+      [''],
+      ['CARA UPLOAD PRODUK VARIAN:'],
+      ['1. Isi produk di sheet "Produk" dengan "Punya Varian" = ya'],
+      ['2. Isi varian di sheet "Varian Produk" dengan Nama Produk yang SAMA PERSIS'],
+      ['3. Harga Jual & Stok di sheet Produk akan diabaikan untuk produk varian (diambil dari varian)'],
+      ['4. Minimal 1 varian per produk'],
       [''],
       ['CATATAN:'],
       ['• Kolom bertanda * wajib diisi'],
@@ -71,7 +84,10 @@ export async function GET(request: NextRequest) {
       ['• Jika Nama Produk sudah ada, baris tersebut akan dilewati (skip)'],
       ['• Kategori baru akan otomatis dibuat jika belum ada di sistem'],
       ['• Harga harus dalam format angka tanpa titik/koma (contoh: 25000, bukan 25.000)'],
-      ['• Untuk produk dengan varian, isi kolom "Punya Varian" = "ya", lalu tambahkan varian via menu Edit Produk di aplikasi'],
+      ['• Untuk produk dengan varian, isi kolom "Punya Varian" = "ya", lalu isi varian di sheet "Varian Produk"'],
+      ['• Produk yang ditandai "Punya Varian" = ya wajib memiliki minimal 1 baris varian di sheet "Varian Produk"'],
+      ['• Nama Produk di sheet "Varian Produk" harus SAMA PERSIS dengan Nama Produk di sheet "Produk" (case-sensitive)'],
+      ['• Upload produk utama terlebih dahulu, baru upload varian di sheet terpisah atau gunakan upload ulang file yang sama'],
     ]
 
     const wsGuide = XLSX.utils.aoa_to_sheet(guideData)
@@ -84,31 +100,21 @@ export async function GET(request: NextRequest) {
 
     XLSX.utils.book_append_sheet(wb, wsGuide, 'Panduan')
 
-    // === Sheet 3: Varian Produk (Instructions) ===
+    // === Sheet 3: Varian Produk ===
     const variantData = [
-      ['Panduan Upload Varian Produk'],
-      [''],
-      ['Langkah:'],
-      ['1. Upload produk utama terlebih dahulu melalui sheet "Produk"'],
-      ['2. Setel "Punya Varian" = ya di sheet Produk untuk produk yang memiliki varian'],
-      ['3. Setel Harga Jual dan Stok produk utama = harga terendah / total stok semua varian'],
-      ['4. Gunakan menu "Edit Produk" di aplikasi untuk menambahkan varian secara manual'],
-      [''],
-      ['Atau upload varian melalui sheet ini (opsional):'],
-      ['Nama Produk', 'Nama Varian', 'SKU Varian', 'HPP', 'Harga Jual', 'Stok'],
-      ['Nasi Goreng', 'Original', 'SKU-001-A', 10000, 25000, 50],
-      ['Nasi Goreng', 'Spesial', 'SKU-001-B', 15000, 30000, 30],
-      ['Es Teh', 'Manis', 'SKU-002-A', 2000, 8000, 100],
-      ['Es Teh', 'Less Sugar', 'SKU-002-B', 2000, 8000, 80],
+      ['NAMA PRODUK*', 'NAMA VARIAN*', 'SKU VARIAN', 'HPP (Rp)', 'HARGA JUAL* (Rp)', 'STOK'],
+      ['Kopi Susu Gula Aren', 'Small', 'SKU-004-S', 4000, 12000, 30],
+      ['Kopi Susu Gula Aren', 'Medium', 'SKU-004-M', 5000, 15000, 50],
+      ['Kopi Susu Gula Aren', 'Large', 'SKU-004-L', 6000, 18000, 20],
     ]
     const wsVariants = XLSX.utils.aoa_to_sheet(variantData)
     wsVariants['!cols'] = [
       { wch: 25 }, // Nama Produk
       { wch: 20 }, // Nama Varian
       { wch: 18 }, // SKU Varian
-      { wch: 12 }, // HPP
-      { wch: 15 }, // Harga Jual
-      { wch: 8 },  // Stok
+      { wch: 15 }, // HPP (Rp)
+      { wch: 22 }, // Harga Jual* (Rp)
+      { wch: 10 }, // Stok
     ]
     XLSX.utils.book_append_sheet(wb, wsVariants, 'Varian Produk')
 

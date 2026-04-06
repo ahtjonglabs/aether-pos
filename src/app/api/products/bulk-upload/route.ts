@@ -278,8 +278,101 @@ export async function POST(request: NextRequest) {
       created++
     }
 
+    // === Process "Varian Produk" sheet if it exists ===
+    let variantsCreated = 0
+    let variantsSkipped = 0
+
+    const variantSheetName = workbook.SheetNames.find(
+      (n) => normalizeHeader(n).includes('varian')
+    )
+
+    if (variantSheetName) {
+      const variantSheet = workbook.Sheets[variantSheetName]
+      const variantRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(variantSheet, { defval: '' })
+
+      console.log(`[Bulk Upload] Found variant sheet "${variantSheetName}" with ${variantRows.length} rows`)
+
+      // Cache parent products by name for this outlet to reduce DB queries
+      const productCache = new Map<string, { id: string; hasVariants: boolean }>()
+
+      for (let i = 0; i < variantRows.length; i++) {
+        try {
+          const vRow = variantRows[i]
+          const rowNum = i + 2 // Excel rows start at 1, header is row 1
+
+          const parentName = String(findColumn(vRow, ['NAMA PRODUK*', 'NAMA PRODUK', 'Nama Produk', 'Nama', 'NAME', 'name', 'Product Name', 'Produk']) || '').trim()
+          const variantName = String(findColumn(vRow, ['NAMA VARIAN*', 'NAMA VARIAN', 'Nama Varian', 'Variant Name', 'Varian']) || '').trim()
+          const variantSku = String(findColumn(vRow, ['SKU VARIAN', 'SKU Varian', 'SKU', 'sku']) || '').trim() || null
+          const variantHpp = sanitizeNumber(findColumn(vRow, ['HPP (Rp)', 'HPP', 'Harga Pokok', 'harga_pokok', 'Cost', 'Modal']))
+          const variantPrice = sanitizeNumber(findColumn(vRow, ['HARGA JUAL* (Rp)', 'HARGA JUAL (Rp)', 'HARGA JUAL', 'Harga Jual', 'Harga', 'Price', 'harga_jual', 'harga', 'price', 'Sell Price', 'Jual']))
+          const variantStock = sanitizeNumber(findColumn(vRow, ['STOK', 'Stok', 'stok', 'Stock', 'stock', 'QTY', 'qty', 'Quantity', 'Jumlah']))
+
+          // Validate required fields
+          if (!parentName) {
+            errors.push(`Baris ${rowNum} (Varian): Nama Produk wajib diisi`)
+            continue
+          }
+
+          if (!variantName) {
+            errors.push(`Baris ${rowNum} (Varian): Nama Varian wajib diisi`)
+            continue
+          }
+
+          if (!variantPrice || variantPrice <= 0) {
+            errors.push(`Baris ${rowNum} (Varian): Harga Jual harus lebih dari 0 (Produk: ${parentName}, Varian: ${variantName})`)
+            continue
+          }
+
+          // Find parent product by name + outletId (use cache)
+          let parentProduct = productCache.get(parentName)
+          if (!parentProduct) {
+            const found = await db.product.findFirst({
+              where: { name: parentName, outletId },
+            })
+            if (!found) {
+              errors.push(`Baris ${rowNum}: Produk "${parentName}" tidak ditemukan. Upload produk terlebih dahulu`)
+              variantsSkipped++
+              continue
+            }
+            parentProduct = { id: found.id, hasVariants: !!found.hasVariants }
+            productCache.set(parentName, parentProduct)
+          }
+
+          // Create variant
+          await db.productVariant.create({
+            data: {
+              name: variantName,
+              sku: variantSku,
+              hpp: variantHpp,
+              price: variantPrice,
+              stock: variantStock,
+              productId: parentProduct.id,
+              outletId,
+            },
+          })
+
+          // Set hasVariants = true on parent product
+          if (!parentProduct.hasVariants) {
+            await db.product.update({
+              where: { id: parentProduct.id },
+              data: { hasVariants: true },
+            })
+            parentProduct.hasVariants = true
+          }
+
+          variantsCreated++
+        } catch (variantError) {
+          const rowNum = i + 2
+          const errMessage = variantError instanceof Error ? variantError.message : 'Unknown error'
+          console.error(`[Bulk Upload] Variant row ${rowNum} error:`, variantError)
+          errors.push(`Baris ${rowNum} (Varian): Gagal memproses — ${errMessage}`)
+          variantsSkipped++
+        }
+      }
+    }
+
     // Create audit log for bulk upload
-    if (created > 0) {
+    if (created > 0 || variantsCreated > 0) {
       await safeAuditLog({
         action: 'CREATE',
         entityType: 'PRODUCT',
@@ -287,6 +380,8 @@ export async function POST(request: NextRequest) {
           bulkUpload: true,
           created,
           skipped,
+          variantsCreated,
+          variantsSkipped,
           errors: errors.length,
           fileName: file.name,
         }),
@@ -298,6 +393,8 @@ export async function POST(request: NextRequest) {
     return safeJson({
       created,
       skipped,
+      variantsCreated,
+      variantsSkipped,
       errors,
     })
   } catch (error) {

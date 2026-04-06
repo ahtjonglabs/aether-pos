@@ -136,6 +136,7 @@ type SortOption = 'newest' | 'best-selling' | 'low-stock' | 'most-stock'
 interface MovementLog {
   id: string
   action: string
+  entityType: string
   details: Record<string, unknown>
   user: {
     id: string
@@ -227,19 +228,28 @@ function getActionBadge(action: string) {
 }
 
 function getActionDescription(action: string, details: Record<string, unknown>): string {
+  const variantName = details.variantName as string | undefined
+  const variantLabel = variantName ? ` [${variantName}]` : ''
+
   switch (action) {
     case 'CREATE':
       return `Product created — Price: ${formatCurrency(Number(details.price) || 0)}, Stock: ${formatNumber(Number(details.stock) || 0)}`
     case 'RESTOCK':
-      return `+${formatNumber(Number(details.quantityAdded) || 0)} units (Stock: ${formatNumber(Number(details.previousStock) || 0)} → ${formatNumber(Number(details.newStock) || 0)})`
+      return `+${formatNumber(Number(details.quantityAdded) || 0)} units${variantLabel} (Stock: ${formatNumber(Number(details.previousStock) || 0)} → ${formatNumber(Number(details.newStock) || 0)})`
     case 'SALE':
-      return `Sold ${formatNumber(Number(details.qty) || 0)} units — ${formatCurrency(Number(details.subtotal) || 0)}`
+      return `Sold ${formatNumber(Number(details.quantitySold) || Number(details.qty) || 0)} units${variantLabel} — ${formatCurrency(Number(details.subtotal) || 0)}`
     case 'UPDATE':
+      if (details.variantCount !== undefined) {
+        return `Product updated — ${Number(details.variantCount)} variant(s)`
+      }
+      if (variantName) {
+        return `Variant "${variantName}" updated`
+      }
       return 'Product details updated'
     case 'DELETE':
       return 'Product deleted'
     case 'ADJUSTMENT':
-      return `Stock adjusted — ${details.reason || 'No reason'}`
+      return `Stock adjusted${variantLabel} — ${details.reason || 'No reason'}`
     case 'BULK_UPDATE':
       return 'Bulk update applied'
     default:
@@ -2091,21 +2101,35 @@ export default function ProductsPage() {
                             <Layers className="h-3.5 w-3.5 text-violet-400" />
                             Varian ({detailData.product.variants.length})
                           </h3>
-                          <div className="space-y-1.5">
+                          {/* Table header */}
+                          <div className="grid grid-cols-4 gap-1 px-2 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                            <div className="col-span-1">Nama / SKU</div>
+                            <div className="text-right">HPP</div>
+                            <div className="text-right">Harga</div>
+                            <div className="text-right">Stok</div>
+                          </div>
+                          <div className="space-y-1">
                             {detailData.product.variants.map((v: any) => {
                               const isOutOfStock = v.stock <= 0
                               const isLowStock = v.stock > 0 && v.stock <= (detailData.product.lowStockAlert || 10)
                               return (
-                                <div key={v.id} className="flex items-center justify-between bg-zinc-800/40 rounded-lg px-2.5 py-2">
-                                  <div className="min-w-0">
+                                <div key={v.id} className="grid grid-cols-4 gap-1 bg-zinc-800/40 rounded-lg px-2.5 py-2 items-center">
+                                  <div className="min-w-0 col-span-1">
                                     <p className="text-xs font-medium text-zinc-200 truncate">{v.name}</p>
-                                    {v.sku && <p className="text-[10px] text-zinc-600 font-mono">{v.sku}</p>}
+                                    {v.sku && <p className="text-[10px] text-zinc-600 font-mono truncate">{v.sku}</p>}
                                   </div>
-                                  <div className="text-right flex-shrink-0 ml-2">
+                                  <div className="text-right col-span-1">
+                                    {isOwner && (
+                                      <p className="text-[11px] text-zinc-500">{formatCurrency(v.hpp)}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right col-span-1">
                                     <p className="text-xs font-medium text-zinc-200">{formatCurrency(v.price)}</p>
-                                    <p className={`text-[10px] ${isOutOfStock ? 'text-red-400 font-medium' : isLowStock ? 'text-amber-400' : 'text-zinc-500'}`}>
-                                      Stok: {formatNumber(v.stock)}
-                                    </p>
+                                  </div>
+                                  <div className="text-right col-span-1">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium ${isOutOfStock ? 'bg-red-500/10 text-red-400' : isLowStock ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-800 text-zinc-500'}`}>
+                                      {formatNumber(v.stock)}
+                                    </span>
                                   </div>
                                 </div>
                               )
@@ -2242,6 +2266,12 @@ export default function ProductsPage() {
                                         {log.user?.name || log.user?.email || 'System'}
                                       </span>
                                       <span>{formatDate(log.createdAt)}</span>
+                                      {log.entityType === 'VARIANT' && (
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] px-1 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                                          <Layers className="h-2 w-2" />
+                                          Variant
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
