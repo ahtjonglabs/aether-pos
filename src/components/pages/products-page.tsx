@@ -958,7 +958,7 @@ export default function ProductsPage() {
               <TableBody>
                 {products.map((product) => {
                   // For variant products, don't flag as out-of-stock based on parent stock
-                  const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+                  const isVariantProduct = !!product.hasVariants && (product._variantCount || 0) > 0
                   const isOutOfStock = !isVariantProduct && product.stock === 0
                   const isLowStock = !isVariantProduct && product.stock > 0 && product.stock <= product.lowStockAlert
                   const isSelected = selectedIds.has(product.id)
@@ -1009,7 +1009,7 @@ export default function ProductsPage() {
                                 </span>
                               )}
                               {product.name}
-                              {product.hasVariants && product._variantCount ? (
+                              {!!product.hasVariants && product._variantCount ? (
                                 <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[9px] px-1.5 py-0 h-4 ml-1">
                                   <Layers className="h-2.5 w-2.5 mr-0.5" />
                                   {product._variantCount} varian
@@ -1142,7 +1142,7 @@ export default function ProductsPage() {
         ) : (
           <div className="space-y-2.5">
             {products.map((product) => {
-              const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+              const isVariantProduct = !!product.hasVariants && (product._variantCount || 0) > 0
               const isOutOfStock = !isVariantProduct && product.stock === 0
               const isLowStock = !isVariantProduct && product.stock > 0 && product.stock <= product.lowStockAlert
 

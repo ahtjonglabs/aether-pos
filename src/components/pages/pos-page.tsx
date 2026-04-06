@@ -644,7 +644,7 @@ export default function PosPage() {
           addToCart(product)
           setProductSearch('')
           toast.success(`${product.name} ditambahkan`)
-        } else if (product.hasVariants) {
+        } else if (!!product.hasVariants) {
           openVariantPicker(product)
         }
       }
@@ -723,7 +723,7 @@ export default function PosPage() {
   }
 
   const handleProductClick = (product: Product) => {
-    if (product.hasVariants) {
+    if (!!product.hasVariants) {
       openVariantPicker(product)
     } else {
       addToCart(product)
@@ -1174,7 +1174,7 @@ export default function PosPage() {
       const cartItem = cart.find((i) => i.product.id === product.id && !i.variantId)
       // Variant products: parent stock may be 0 but variants have their own stock
       // Only mark as outOfStock if it's NOT a variant product AND stock is 0
-      const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
+      const isVariantProduct = !!product.hasVariants && (product._variantCount || 0) > 0
       const outOfStock = !isVariantProduct && product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
       const accentColor = catColor ? (CATEGORY_COLORS[catColor] || themeColors) : themeColors
@@ -1217,10 +1217,10 @@ export default function PosPage() {
                       : 'bg-zinc-800/80 text-zinc-500'
                   )}>
                     <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
-                    {product.hasVariants ? (product._variantCount || 0) + ' varian' : product.stock}
+                    {!!product.hasVariants ? (product._variantCount || 0) + ' varian' : product.stock}
                   </span>
                 )}
-                {product.hasVariants && (
+                {!!product.hasVariants && (
                   <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[9px] px-1.5 py-0 h-4">
                     <Layers className="h-2.5 w-2.5 mr-0.5" />
                     Varian

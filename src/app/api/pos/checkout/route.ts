@@ -5,6 +5,7 @@ import { generateInvoiceNumber, resolvePlanType } from '@/lib/api-helpers'
 import { notifyNewTransaction } from '@/lib/notify'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
+import { ensureMigrated } from '@/lib/auto-migrate'
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +15,8 @@ export async function POST(request: NextRequest) {
     }
     const userId = user.id
     const outletId = user.outletId
+
+    ensureMigrated()
 
     const body = await request.json()
     const {
