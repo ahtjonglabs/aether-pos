@@ -86,7 +86,6 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertCircle,
-  Layers,
 } from 'lucide-react'
 // Collapsible removed — analytics section removed in redesign
 import { ProGate } from '@/components/shared/pro-gate'
@@ -113,9 +112,6 @@ interface Product {
   categoryId: string | null
   category?: { id: string; name: string; color: string } | null
   unit: string
-  hasVariants?: boolean
-  variants?: Array<{ id: string; name: string; sku: string | null; price: number; hpp: number; stock: number; lowStockAlert: number }>
-  _variantCount?: number
 }
 
 interface ProductStats {
@@ -957,10 +953,8 @@ export default function ProductsPage() {
               </TableHeader>
               <TableBody>
                 {products.map((product) => {
-                  // For variant products, don't flag as out-of-stock based on parent stock
-                  const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
-                  const isOutOfStock = !isVariantProduct && product.stock === 0
-                  const isLowStock = !isVariantProduct && product.stock > 0 && product.stock <= product.lowStockAlert
+                  const isOutOfStock = product.stock === 0
+                  const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
                   const isSelected = selectedIds.has(product.id)
 
                   let rowClass = 'border-zinc-800/60 hover:bg-zinc-800/40 transition-colors'
@@ -1009,12 +1003,6 @@ export default function ProductsPage() {
                                 </span>
                               )}
                               {product.name}
-                              {product.hasVariants && product._variantCount ? (
-                                <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[9px] px-1.5 py-0 h-4 ml-1">
-                                  <Layers className="h-2.5 w-2.5 mr-0.5" />
-                                  {product._variantCount} varian
-                                </Badge>
-                              ) : null}
                             </span>
                           </div>
                         </div>
@@ -1142,9 +1130,8 @@ export default function ProductsPage() {
         ) : (
           <div className="space-y-2.5">
             {products.map((product) => {
-              const isVariantProduct = product.hasVariants && (product._variantCount || 0) > 0
-              const isOutOfStock = !isVariantProduct && product.stock === 0
-              const isLowStock = !isVariantProduct && product.stock > 0 && product.stock <= product.lowStockAlert
+              const isOutOfStock = product.stock === 0
+              const isLowStock = product.stock > 0 && product.stock <= product.lowStockAlert
 
               let cardBorder = 'border-zinc-800/60'
               if (isPro) {

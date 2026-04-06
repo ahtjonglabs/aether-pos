@@ -11,14 +11,7 @@ export const maxDuration = 60
 
 const MAX_ROWS = 500
 
-// Unified unit list (must match template route)
-const VALID_UNITS = [
-  'pcs', 'ml', 'lt', 'liter', 'gr', 'gram', 'kg',
-  'box', 'pack', 'botol', 'gelas', 'mangkuk', 'porsi', 'bungkus',
-  'sachet', 'dus', 'rim', 'lembar', 'meter', 'cm', 'ons',
-  'lusin', 'set', 'pasang', 'kaleng', 'batang', 'butir', 'buah', 'ekor',
-  'kapsul', 'tablet', 'tube',
-]
+const VALID_UNITS = ['pcs', 'ml', 'lt', 'gr', 'kg', 'box', 'pack', 'botol', 'gelas', 'mangkuk', 'porsi', 'bungkus', 'sachet', 'dus', 'rim', 'lembar', 'meter', 'cm', 'ons']
 
 // ============================================================
 // Number Parsing Helper — Handles Indonesian & US formats
@@ -86,22 +79,6 @@ function getCol(row: Record<string, unknown>, ...keys: string[]): unknown {
 }
 
 // ============================================================
-// Parsed row interface
-// ============================================================
-
-interface ParsedRow {
-  rowNum: number          // Excel row number for error messages
-  name: string            // Product name
-  variantName: string     // Variant name (empty = simple product row)
-  sku: string | null
-  hpp: number
-  price: number
-  stock: number
-  unit: string
-  categoryRaw: string
-}
-
-// ============================================================
 // POST: Bulk Upload
 // ============================================================
 
@@ -162,78 +139,29 @@ export async function POST(request: NextRequest) {
     }
     const sheet = workbook.Sheets[sheetName]
 
-    // ── Parse all rows as arrays (header: 1 mode) ──
-    // This allows us to find the header row dynamically,
-    // supporting templates with instruction rows at the top.
-    const allRows = XLSX.utils.sheet_to_json<(string | number | null | boolean)[]>(sheet, {
-      header: 1,
-      defval: '',
-    })
+    // Use raw: true to get actual number values from Excel
+    const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
 
-    if (allRows.length === 0) {
-      return safeJsonError('File kosong — tidak ada data', 400)
-    }
-
-    // ── Find the header row ──
-    // Look for a row containing key column name "Nama Produk"
-    let headerIdx = -1
-    for (let i = 0; i < Math.min(allRows.length, 10); i++) { // Search only first 10 rows
-      const row = allRows[i]
-      const rowStr = row.map(c => String(c).toLowerCase().trim())
-      if (rowStr.some(c => c.includes('nama produk') || c.includes('nama barang') || c.includes('product name'))) {
-        headerIdx = i
-        break
-      }
-    }
-
-    if (headerIdx === -1) {
-      return safeJsonError(
-        'Header kolom tidak ditemukan. Pastikan file memiliki baris header dengan kolom "Nama Produk". ' +
-        'Gunakan template terbaru dari menu "Unduh Template".',
-        400,
-      )
-    }
-
-    // Extract headers (strip * markers and trim)
-    const headers = allRows[headerIdx].map(h =>
-      String(h).replace(/\*+/g, '').trim(),
+    // Filter out completely empty rows
+    const rows = rawRows.filter(row =>
+      Object.values(row).some(v => v !== undefined && v !== null && String(v).trim() !== '')
     )
-    const colCount = headers.length
 
-    // ── Build data rows as objects ──
-    const rawRows = allRows.slice(headerIdx + 1)
-
-    // Filter out empty rows and convert to objects
-    const dataRows: Record<string, unknown>[] = []
-    for (let i = 0; i < rawRows.length; i++) {
-      const raw = rawRows[i]
-      // Skip completely empty rows
-      if (!raw.some(cell => cell !== '' && cell !== null && cell !== undefined)) continue
-
-      const obj: Record<string, unknown> = {}
-      // Pad row to match header length
-      while (raw.length < colCount) raw.push('')
-      for (let c = 0; c < colCount; c++) {
-        obj[headers[c]] = raw[c] ?? ''
-      }
-      dataRows.push(obj)
+    console.log('[bulk-upload] Parsed', rows.length, 'rows from file:', file.name)
+    if (rows.length > 0) {
+      console.log('[bulk-upload] Columns:', Object.keys(rows[0]))
+      console.log('[bulk-upload] First row sample:', JSON.stringify(rows[0]).substring(0, 300))
     }
 
-    console.log('[bulk-upload] Parsed', dataRows.length, 'data rows from file:', file.name)
-    if (dataRows.length > 0) {
-      console.log('[bulk-upload] Headers:', headers)
-      console.log('[bulk-upload] First row sample:', JSON.stringify(dataRows[0]).substring(0, 400))
+    if (rows.length === 0) {
+      return safeJsonError('File tidak memiliki data baris. Pastikan baris pertama adalah header kolom.', 400)
     }
 
-    if (dataRows.length === 0) {
-      return safeJsonError('File tidak memiliki data baris. Pastikan baris pertama setelah header berisi data produk.', 400)
+    if (rows.length > MAX_ROWS) {
+      return safeJsonError(`Maksimal ${MAX_ROWS} baris per upload. File Anda memiliki ${rows.length} baris.`, 400)
     }
 
-    if (dataRows.length > MAX_ROWS) {
-      return safeJsonError(`Maksimal ${MAX_ROWS} baris per upload. File Anda memiliki ${dataRows.length} baris.`, 400)
-    }
-
-    // ── Check product limit ONCE before processing ──
+    // Check product limit ONCE before processing
     let currentProductCount = 0
     const maxProducts = outletPlan.features.maxProducts
     if (!isUnlimited(maxProducts)) {
@@ -243,11 +171,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── Cache & lookups ──
+    // Cache categories & existing product names to minimize DB queries
     const categoryCache = new Map<string, string | null>()
     const existingNames = new Set<string>()
 
-    // Pre-fetch all existing product names for this outlet
+    // Pre-fetch all existing product names for this outlet (much faster than N queries)
     const existingProducts = await db.product.findMany({
       where: { outletId },
       select: { name: true },
@@ -256,95 +184,56 @@ export async function POST(request: NextRequest) {
       existingNames.add(p.name.toLowerCase().trim())
     }
 
-    // ── Phase 1: Parse & validate all rows ──
-    // Group rows by product name (case-insensitive)
-    const productGroups = new Map<string, ParsedRow[]>()
-    const errors: string[] = []
-    let totalDataRows = dataRows.length
-
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = dataRows[i]
-      // Excel row number: headerIdx is 0-based, header is at headerIdx,
-      // data starts at headerIdx + 1 (which is Excel row headerIdx + 2)
-      // dataRows[0] = allRows[headerIdx + 1] = Excel row headerIdx + 2
-      // dataRows[i] = Excel row headerIdx + 2 + i
-      const rowNum = headerIdx + 2 + i
-
-      // Map column names (case-insensitive flexible matching)
-      const name = String(getCol(row, 'Nama Produk', 'Nama', 'Nama Barang', 'Product Name', 'Product', 'name', 'NAME')).trim()
-      const variantName = String(getCol(row, 'Nama Varian', 'Varian', 'Variant', 'variant name', 'Ukuran', 'Size')).trim()
-      const sku = String(getCol(row, 'SKU', 'Kode', 'Kode Produk', 'sku', 'Code')).trim() || null
-      const hpp = parseNum(getCol(row, 'HPP', 'Harga Pokok', 'Cost', 'Modal', 'hpp', 'harga_pokok', 'Harga Modal'))
-      const price = parseNum(getCol(row, 'Harga Jual', 'Harga', 'Price', 'harga_jual', 'harga', 'price', 'PRICE', 'Sell Price', 'Jual'))
-      const stock = parseNum(getCol(row, 'Stok', 'Stock', 'Qty', 'Quantity', 'stock', 'stok', 'Jumlah'))
-      const unitRaw = String(getCol(row, 'Satuan', 'Unit', 'satuan', 'unit') || 'pcs').trim().toLowerCase()
-      const categoryRaw = String(getCol(row, 'Kategori', 'Kategori Produk', 'Category', 'kategori', 'category')).trim()
-
-      // Validate required: product name
-      if (!name) {
-        errors.push(`Baris ${rowNum}: Nama produk wajib diisi`)
-        continue
-      }
-
-      // Validate required: price (only for rows without variant name, or all variant rows)
-      // We'll do full validation during processing, but catch obvious errors here
-      if (!variantName && (!price || price <= 0)) {
-        errors.push(`Baris ${rowNum}: Harga Jual harus lebih dari 0 (Nama: ${name})`)
-        continue
-      }
-
-      const unit = VALID_UNITS.includes(unitRaw) ? unitRaw : 'pcs'
-      const hppVal = Math.max(0, hpp)
-      const stockVal = Math.max(0, Math.round(stock))
-
-      const key = name.toLowerCase().trim()
-      if (!productGroups.has(key)) {
-        productGroups.set(key, [])
-      }
-      productGroups.get(key)!.push({
-        rowNum,
-        name,
-        variantName,
-        sku,
-        hpp: hppVal,
-        price,
-        stock: stockVal,
-        unit,
-        categoryRaw,
-      })
-    }
-
-    // ── Phase 2: Process product groups in a transaction ──
+    // Process rows in a transaction
     let created = 0
-    let createdVariants = 0
     let skipped = 0
+    const errors: string[] = []
 
     await db.$transaction(async (tx) => {
-      for (const [key, groupRows] of productGroups) {
-        const productName = groupRows[0].name
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const rowNum = i + 2 // Excel rows start at 1, header is row 1
 
-        // Skip duplicates (by name + outletId, case-insensitive)
-        if (existingNames.has(key)) {
-          skipped += groupRows.length
+        // Map column names (case-insensitive flexible matching)
+        const name = String(getCol(row, 'Nama', 'Nama Produk', 'Nama Barang', 'Product Name', 'Product', 'name', 'NAME')).trim()
+        const sku = String(getCol(row, 'SKU', 'Kode', 'Kode Produk', 'sku', 'Code')).trim() || null
+        const hpp = parseNum(getCol(row, 'HPP', 'Harga Pokok', 'Cost', 'Modal', 'hpp', 'harga_pokok', 'Harga Modal'))
+        const price = parseNum(getCol(row, 'Harga Jual', 'Harga', 'Price', 'harga_jual', 'harga', 'price', 'PRICE', 'Sell Price', 'Jual'))
+        const stock = parseNum(getCol(row, 'Stok', 'Stock', 'Qty', 'Quantity', 'stock', 'stok', 'Jumlah'))
+        const unitRaw = String(getCol(row, 'Satuan', 'Unit', 'satuan', 'unit') || 'pcs').trim().toLowerCase()
+        const categoryRaw = String(getCol(row, 'Kategori', 'Kategori Produk', 'Category', 'kategori', 'category')).trim()
+
+        // Validate required fields
+        if (!name) {
+          errors.push(`Baris ${rowNum}: Nama produk wajib diisi`)
           continue
         }
+
+        if (!price || price <= 0) {
+          errors.push(`Baris ${rowNum}: Harga Jual harus lebih dari 0 (Nama: ${name}, nilai: "${getCol(row, 'Harga Jual', 'Harga', 'Price')}")`)
+          continue
+        }
+
+        const unit = VALID_UNITS.includes(unitRaw) ? unitRaw : 'pcs'
+        const hppVal = Math.max(0, hpp)
+        const stockVal = Math.max(0, Math.round(stock))
 
         // Check product limit
         if (!isUnlimited(maxProducts)) {
           if (currentProductCount + created >= maxProducts) {
-            errors.push(`Batas produk (${maxProducts}) sudah tercapai, upload dihentikan`)
+            errors.push(`Baris ${rowNum}: Batas produk (${maxProducts}) sudah tercapai, upload dihentikan`)
             break
           }
         }
 
-        // Determine if this is a variant product
-        const variantRows = groupRows.filter(r => r.variantName)
-        const isVariantProduct = variantRows.length > 0
+        // Skip duplicates (by name + outletId, case-insensitive)
+        if (existingNames.has(name.toLowerCase().trim())) {
+          skipped++
+          continue
+        }
 
-        // Use first row's category for the product
-        const categoryRaw = groupRows.find(r => r.categoryRaw)?.categoryRaw || ''
+        // Auto-create category if needed (with cache)
         let categoryId: string | null = null
-
         if (categoryRaw) {
           if (categoryCache.has(categoryRaw)) {
             categoryId = categoryCache.get(categoryRaw)!
@@ -369,129 +258,27 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (isVariantProduct) {
-          // ── Variant Product ──
-          // Use first row's unit for the parent product
-          const unit = groupRows[0].unit
-          // Use first variant row's price as product base price (for display)
-          const firstVariantRow = variantRows[0]
-          const basePrice = firstVariantRow.price > 0 ? firstVariantRow.price : 0
+        // Create product
+        await tx.product.create({
+          data: {
+            name,
+            sku,
+            hpp: hppVal,
+            price,
+            stock: stockVal,
+            unit,
+            categoryId,
+            outletId,
+          },
+        })
 
-          if (basePrice <= 0) {
-            errors.push(`Baris ${firstVariantRow.rowNum}: Harga Jual varian "${firstVariantRow.variantName}" harus lebih dari 0`)
-            continue
-          }
-
-          // Get SKU from a non-variant row if available, otherwise null
-          const parentSku = groupRows.find(r => !r.variantName)?.sku || null
-
-          // Create parent product with hasVariants: true
-          const product = await tx.product.create({
-            data: {
-              name: productName,
-              sku: parentSku,
-              hpp: 0,
-              price: basePrice,
-              stock: 0,
-              unit,
-              categoryId,
-              outletId,
-              hasVariants: true,
-            },
-          })
-
-          // Track variant names within this product to catch duplicates
-          const variantNamesSeen = new Set<string>()
-
-          // Create each variant
-          for (const vr of variantRows) {
-            // Validate variant price
-            if (!vr.price || vr.price <= 0) {
-              errors.push(`Baris ${vr.rowNum}: Harga Jual varian "${vr.variantName}" harus lebih dari 0 (diabaikan)`)
-              continue
-            }
-
-            // Check duplicate variant name within this product
-            const variantKey = vr.variantName.toLowerCase().trim()
-            if (variantNamesSeen.has(variantKey)) {
-              errors.push(`Baris ${vr.rowNum}: Nama varian "${vr.variantName}" duplikat dalam produk "${productName}" (diabaikan)`)
-              continue
-            }
-            variantNamesSeen.add(variantKey)
-
-            await tx.productVariant.create({
-              data: {
-                name: vr.variantName,
-                sku: vr.sku,
-                price: vr.price,
-                hpp: vr.hpp,
-                stock: vr.stock,
-                lowStockAlert: 10,
-                productId: product.id,
-                outletId,
-              },
-            })
-            createdVariants++
-          }
-
-          // Warn if there were non-variant rows mixed in
-          const nonVariantRows = groupRows.filter(r => !r.variantName)
-          if (nonVariantRows.length > 0) {
-            for (const nvr of nonVariantRows) {
-              errors.push(
-                `Baris ${nvr.rowNum}: Baris tanpa "Nama Varian" pada produk "${productName} yang memiliki varian. ` +
-                `Baris ini diabaikan — gunakan hanya baris dengan varian untuk produk bervariasi.`,
-              )
-            }
-          }
-
-          // Track newly created name
-          existingNames.add(key)
-          created++
-
-        } else {
-          // ── Simple Product (no variants) ──
-          // Use first row's data
-          const r = groupRows[0]
-
-          if (!r.price || r.price <= 0) {
-            // This should have been caught in Phase 1, but double-check
-            errors.push(`Baris ${r.rowNum}: Harga Jual harus lebih dari 0 (Nama: ${r.name})`)
-            continue
-          }
-
-          await tx.product.create({
-            data: {
-              name: productName,
-              sku: r.sku,
-              hpp: r.hpp,
-              price: r.price,
-              stock: r.stock,
-              unit: r.unit,
-              categoryId,
-              outletId,
-              hasVariants: false,
-            },
-          })
-
-          // Warn if multiple rows for the same simple product
-          if (groupRows.length > 1) {
-            for (let gi = 1; gi < groupRows.length; gi++) {
-              errors.push(
-                `Baris ${groupRows[gi].rowNum}: Produk "${productName}" sudah terdaftar di baris ${groupRows[0].rowNum}. ` +
-                `Untuk produk tanpa varian, cukup isi satu baris. Baris ini diabaikan.`,
-              )
-            }
-          }
-
-          // Track newly created name
-          existingNames.add(key)
-          created++
-        }
+        // Track newly created name to avoid duplicates within same upload
+        existingNames.add(name.toLowerCase().trim())
+        created++
       }
     }, { timeout: 30000 })
 
-    // ── Audit log ──
+    // Create audit log for bulk upload
     if (created > 0) {
       await safeAuditLog({
         action: 'CREATE',
@@ -499,7 +286,6 @@ export async function POST(request: NextRequest) {
         details: JSON.stringify({
           bulkUpload: true,
           created,
-          createdVariants,
           skipped,
           errors: errors.length,
           fileName: file.name,
@@ -511,10 +297,8 @@ export async function POST(request: NextRequest) {
 
     return safeJson({
       created,
-      createdVariants,
       skipped,
       errors,
-      totalRows: totalDataRows,
     })
   } catch (error) {
     console.error('Bulk upload error:', error)

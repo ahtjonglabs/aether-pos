@@ -1,13 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { SessionProvider, useSession } from 'next-auth/react'
 import { usePageStore } from '@/hooks/use-page-store'
 import { useSidebarStore } from '@/components/layout/sidebar'
 import Sidebar from '@/components/layout/sidebar'
 import MobileBottomNav from '@/components/layout/mobile-bottom-nav'
 import AuthView from '@/components/auth/auth-view'
-import LandingPage from '@/components/pages/landing-page'
 import DashboardPage from '@/components/pages/dashboard-page'
 import ProductsPage from '@/components/pages/products-page'
 import CustomersPage from '@/components/pages/customers-page'
@@ -17,8 +15,6 @@ import AuditLogPage from '@/components/pages/audit-log-page'
 import CrewPage from '@/components/pages/crew-page'
 import SettingsPage from '@/components/pages/settings-page'
 import { Loader2 } from 'lucide-react'
-
-type AuthScreen = 'landing' | 'auth'
 
 function AppContent() {
   // Reduce session polling to every 5 minutes to prevent premature session expiry detection
@@ -30,9 +26,6 @@ function AppContent() {
   const { currentPage } = usePageStore()
   const { collapsed } = useSidebarStore()
 
-  // Track auth screen: landing (default) or auth (login/register form)
-  const [authScreen, setAuthScreen] = useState<AuthScreen>('landing')
-
   if (status === 'loading') {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -42,16 +35,7 @@ function AppContent() {
   }
 
   if (!session) {
-    if (authScreen === 'landing') {
-      return (
-        <LandingPage
-          onLogin={() => setAuthScreen('auth')}
-          onRegister={() => setAuthScreen('auth')}
-        />
-      )
-    }
-    // Show auth view with a back-to-landing option
-    return <AuthViewWithBack onBack={() => setAuthScreen('landing')} />
+    return <AuthView />
   }
 
   const renderPage = () => {
@@ -92,24 +76,6 @@ function AppContent() {
           {renderPage()}
         </div>
       </main>
-    </div>
-  )
-}
-
-// Wrapper that adds a "← Kembali" button to the AuthView
-function AuthViewWithBack({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="relative">
-      <button
-        onClick={onBack}
-        className="fixed top-4 left-4 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/80 border border-zinc-700/80 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700/80 transition-all duration-200 text-xs font-medium backdrop-blur-sm"
-      >
-        <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-        Kembali
-      </button>
-      <AuthView />
     </div>
   )
 }
