@@ -50,12 +50,19 @@ export async function GET(
       select: { name: true, address: true, phone: true },
     })
 
+    // Get receipt settings (logo, business name)
+    const outletSettings = await db.outletSetting.findUnique({
+      where: { outletId },
+      select: { receiptLogo: true, receiptBusinessName: true },
+    })
+
     return safeJson({
       id: transaction.id,
       invoiceNumber: transaction.invoiceNumber,
       subtotal: transaction.subtotal,
       discount: transaction.discount,
       pointsUsed: transaction.pointsUsed,
+      taxAmount: transaction.taxAmount,
       total: transaction.total,
       paymentMethod: transaction.paymentMethod,
       paidAmount: transaction.paidAmount,
@@ -78,6 +85,8 @@ export async function GET(
       voidInfo,
       syncStatus: 'synced' as const,
       outlet: outlet || { name: 'Aether POS', address: '', phone: '' },
+      receiptLogo: outletSettings?.receiptLogo || '',
+      receiptBusinessName: outletSettings?.receiptBusinessName || outlet?.name || 'Aether POS',
     })
   } catch (error) {
     console.error('Transaction detail GET error:', error)

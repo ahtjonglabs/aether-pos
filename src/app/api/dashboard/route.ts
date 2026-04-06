@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
-import { getVoidedTxIds } from '@/lib/api-helpers'
+import { getVoidedTxIds, parseTzOffset, getTodayRangeTz, getHourInTimezone } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 interface HourBucket {
@@ -19,9 +19,15 @@ export async function GET(request: NextRequest) {
     const outletId = user.outletId
     const isOwner = user.role === 'OWNER'
 
-    const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
+    // Timezone-aware date ranges from client device
+    const tzOffset = parseTzOffset(request.nextUrl.searchParams)
+    const { todayStart, yesterdayStart } = tzOffset !== null
+      ? getTodayRangeTz(tzOffset)
+      : (() => {
+          const now = new Date()
+          const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          return { todayStart: ts, yesterdayStart: new Date(ts.getTime() - 86_400_000) }
+        })()
 
     // Get voided transaction IDs to exclude from all calculations
     const voidedTxIds = await getVoidedTxIds(db, outletId)
@@ -67,6 +73,7 @@ export async function GET(request: NextRequest) {
       select: {
         subtotal: true,
         discount: true,
+        taxAmount: true,
         total: true,
         createdAt: true,
         items: {
@@ -77,6 +84,7 @@ export async function GET(request: NextRequest) {
 
     const todayBrutto = todayTransactions.reduce((s, t) => s + t.subtotal, 0)
     const todayDiscount = todayTransactions.reduce((s, t) => s + t.discount, 0)
+    const todayTax = todayTransactions.reduce((s, t) => s + (t.taxAmount || 0), 0)
     const todayRevenue = todayTransactions.reduce((s, t) => s + t.total, 0)
     const todayTxCount = todayTransactions.length
 
@@ -132,7 +140,9 @@ export async function GET(request: NextRequest) {
         revenue: 0,
       }))
       for (const t of todayTransactions) {
-        const hour = t.createdAt.getHours()
+        const hour = tzOffset !== null
+          ? getHourInTimezone(t.createdAt, tzOffset)
+          : t.createdAt.getHours()
         buckets[hour].transactionCount += 1
         buckets[hour].revenue += t.total
       }
@@ -156,6 +166,7 @@ export async function GET(request: NextRequest) {
       todayRevenue,
       todayBrutto,
       todayDiscount,
+      todayTax,
       todayTransactions: todayTxCount,
       todayProfit: isOwner ? todayProfit : null,
 

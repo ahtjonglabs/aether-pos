@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       subtotal,
       discount,
       pointsUsed,
+      taxAmount,
       total,
       paymentMethod,
       paidAmount,
@@ -79,46 +80,15 @@ export async function POST(request: NextRequest) {
 
       const productMap = new Map(products.map((p) => [p.id, p]))
 
-      // Also fetch variants referenced by items for stock validation
-      const variantIds = items
-        .map((item: { variantId?: string | null }) => item.variantId)
-        .filter((id): id is string => !!id)
-
-      const variantMap = new Map<string, { id: string; name: string; stock: number }>()
-      if (variantIds.length > 0) {
-        const variants = await tx.productVariant.findMany({
-          where: { id: { in: variantIds } },
-          select: { id: true, name: true, stock: true },
-        })
-        for (const v of variants) {
-          variantMap.set(v.id, v)
-        }
-      }
-
       for (const item of items) {
         const product = productMap.get(item.productId)
         if (!product) {
           throw new Error(`Product ${item.productName} not found`)
         }
-
-        if (item.variantId) {
-          // For variant items, check variant stock
-          const variant = variantMap.get(item.variantId)
-          if (!variant) {
-            throw new Error(`Variant ${item.variantName || item.variantId} not found`)
-          }
-          if (variant.stock < item.qty) {
-            throw new Error(
-              `Insufficient stock for ${product.name} - ${variant.name}. Available: ${variant.stock}, Requested: ${item.qty}`
-            )
-          }
-        } else {
-          // For non-variant items, check parent product stock
-          if (product.stock < item.qty) {
-            throw new Error(
-              `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.qty}`
-            )
-          }
+        if (product.stock < item.qty) {
+          throw new Error(
+            `Insufficient stock for ${product.name}. Available: ${product.stock}, Requested: ${item.qty}`
+          )
         }
       }
 
@@ -147,6 +117,7 @@ export async function POST(request: NextRequest) {
           subtotal,
           discount: discount || 0,
           pointsUsed: pointsUsed || 0,
+          taxAmount: taxAmount || 0,
           total,
           paymentMethod,
           paidAmount: paidAmount || 0,
@@ -158,13 +129,11 @@ export async function POST(request: NextRequest) {
       })
 
       // 5. Batch create TransactionItems, batch update stocks, batch create audit logs
-      const itemData = items.map((item: { productId: string; productName: string; price: number; qty: number; variantId?: string | null; variantName?: string | null }) => {
+      const itemData = items.map((item: { productId: string; productName: string; price: number; qty: number }) => {
         const product = productMap.get(item.productId)!
         return {
           productId: item.productId,
           productName: item.productName,
-          variantId: item.variantId || null,
-          variantName: item.variantName || null,
           price: item.price,
           qty: item.qty,
           subtotal: item.price * item.qty,
@@ -175,25 +144,16 @@ export async function POST(request: NextRequest) {
 
       await tx.transactionItem.createMany({ data: itemData })
 
-      // Batch update stock for all items (for variant items, update variant stock)
+      // Batch update stock for all items
       for (const item of items) {
-        if (item.variantId) {
-          // Update variant stock
-          await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: { stock: { decrement: item.qty } },
-          })
-        } else {
-          // Update product stock
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { stock: { decrement: item.qty } },
-          })
-        }
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.qty } },
+        })
       }
 
       // Batch create audit logs
-      const auditData = items.map((item: { productId: string; productName: string; price: number; qty: number; variantId?: string | null; variantName?: string | null }) => {
+      const auditData = items.map((item: { productId: string; productName: string; qty: number }) => {
         const product = productMap.get(item.productId)!
         return {
           action: 'SALE' as const,
@@ -205,8 +165,6 @@ export async function POST(request: NextRequest) {
             quantitySold: item.qty,
             previousStock: product.stock,
             newStock: product.stock - item.qty,
-            variantId: item.variantId || undefined,
-            variantName: item.variantName || undefined,
           }),
           outletId,
           userId,

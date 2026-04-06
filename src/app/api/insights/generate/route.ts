@@ -1,21 +1,30 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
-import { getVoidedTxIds } from '@/lib/api-helpers'
+import { getVoidedTxIds, parseTzOffset, getTodayRangeTz, getHourInTimezone } from '@/lib/api-helpers'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 import ZAI from 'z-ai-web-dev-sdk'
 
 export const maxDuration = 60
 
 // ── Reusable data aggregator (same logic as GET /api/insights) ──
-async function aggregateInsightData(outletId: string) {
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
-  const dayOfWeek = now.getDay()
-  const weekStart = new Date(todayStart.getTime() - ((dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 86_400_000))
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const weekAgo = new Date(todayStart.getTime() - 7 * 86_400_000)
+async function aggregateInsightData(outletId: string, tzOffset: number | null) {
+  const { todayStart, yesterdayStart, dayOfWeek, weekStart, monthStart, weekAgo } = tzOffset !== null
+    ? getTodayRangeTz(tzOffset)
+    : (() => {
+        const now = new Date()
+        const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const dow = now.getDay()
+        const mondayOff = dow === 0 ? 6 : dow - 1
+        return {
+          todayStart: ts,
+          yesterdayStart: new Date(ts.getTime() - 86_400_000),
+          dayOfWeek: dow,
+          weekStart: new Date(ts.getTime() - mondayOff * 86_400_000),
+          monthStart: new Date(now.getFullYear(), now.getMonth(), 1),
+          weekAgo: new Date(ts.getTime() - 7 * 86_400_000),
+        }
+      })()
 
   const voidedTxIds = await getVoidedTxIds(db, outletId)
   const voidedIdArray = Array.from(voidedTxIds).filter(Boolean) as string[]
@@ -63,7 +72,9 @@ async function aggregateInsightData(outletId: string) {
   const hourBuckets = new Map<number, { count: number; revenue: number }>()
   for (let h = 0; h < 24; h++) hourBuckets.set(h, { count: 0, revenue: 0 })
   for (const t of todayFullTxs) {
-    const h = t.createdAt.getHours()
+    const h = tzOffset !== null
+      ? getHourInTimezone(t.createdAt, tzOffset)
+      : t.createdAt.getHours()
     const b = hourBuckets.get(h)!
     b.count++
     b.revenue += t.total
@@ -166,7 +177,8 @@ export async function POST(request: NextRequest) {
     if (user.role !== 'OWNER') return safeJsonError('Owner only', 403)
 
     // Aggregate data
-    const data = await aggregateInsightData(user.outletId)
+    const tzOffset = parseTzOffset(request.nextUrl.searchParams)
+    const data = await aggregateInsightData(user.outletId, tzOffset)
     const dataContext = buildDataContext(data)
     const outletName = data.outlet.name
 

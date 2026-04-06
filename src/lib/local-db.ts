@@ -25,8 +25,6 @@ export interface CachedProduct {
   lowStockAlert: number
   image: string | null
   categoryId: string | null
-  hasVariants: boolean
-  _variantCount: number
   updatedAt: string
 }
 

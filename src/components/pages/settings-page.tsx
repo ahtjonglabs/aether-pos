@@ -59,6 +59,7 @@ import {
   Tag,
   Palette,
   Receipt,
+  ReceiptText,
   Save,
   Plus,
   Pencil,
@@ -78,6 +79,11 @@ import {
   WifiOff,
   Link2,
   Unlink2,
+  CircleHelp,
+  ExternalLink,
+  MessageSquare,
+  UserCircle,
+  Bot,
 } from 'lucide-react'
 
 // ==================== TYPES ====================
@@ -95,6 +101,8 @@ interface SettingsData {
   receiptFooter: string
   receiptLogo: string
   themePrimaryColor: string
+  ppnEnabled: boolean
+  ppnRate: number
   telegramChatId: string | null
   telegramBotToken: string | null
   notifyOnTransaction: boolean
@@ -173,14 +181,10 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
 
   const tabs = [
     { value: 'plan', label: 'Plan & Langganan', icon: <Crown className="h-4 w-4" /> },
-    { value: 'payment', label: 'Pembayaran', icon: <Banknote className="h-4 w-4" /> },
-    { value: 'outlet', label: 'Info Outlet', icon: <Store className="h-4 w-4" /> },
-    { value: 'loyalty', label: 'Loyalty', icon: <Star className="h-4 w-4" /> },
-    ...(isOwner ? [{ value: 'promo', label: 'Promo', icon: <Tag className="h-4 w-4" /> }] : []),
-    { value: 'theme', label: 'Tema & Struk', icon: <Palette className="h-4 w-4" /> },
+    { value: 'outlet', label: 'Outlet & Struk', icon: <Store className="h-4 w-4" /> },
+    ...(isOwner ? [{ value: 'kasir', label: 'Pembayaran & Promo', icon: <Banknote className="h-4 w-4" /> }] : [{ value: 'kasir', label: 'Kasir', icon: <Banknote className="h-4 w-4" /> }]),
     ...(isOwner ? [{ value: 'telegram', label: 'Telegram', icon: <Send className="h-4 w-4" /> }] : []),
     { value: 'account', label: 'Akun', icon: <KeyRound className="h-4 w-4" /> },
-    ...(isOwner ? [{ value: 'multi-outlet', label: 'Outlet Cabang', icon: <Building2 className="h-4 w-4" /> }] : []),
   ]
 
   return (
@@ -205,22 +209,27 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         <TabsContent value="plan">
           <PlanTab />
         </TabsContent>
-        <TabsContent value="payment">
-          <PaymentMethodsTab />
-        </TabsContent>
         <TabsContent value="outlet">
-          <OutletInfoTab />
+          <OutletAndReceiptTab />
+          {isOwner && (
+            <div className="mt-4">
+              <ProGate feature="multiOutlet" label="Multi-Outlet" description="Kelola beberapa outlet dalam satu akun" minHeight="200px">
+                <MultiOutletTab />
+              </ProGate>
+            </div>
+          )}
         </TabsContent>
-        <TabsContent value="loyalty">
-          <LoyaltyTab />
-        </TabsContent>
-        {isOwner && (
-          <TabsContent value="promo">
-            <PromoTab />
-          </TabsContent>
-        )}
-        <TabsContent value="theme">
-          <ThemeReceiptTab />
+        <TabsContent value="kasir">
+          <PaymentMethodsTab />
+          <div className="mt-4">
+            <LoyaltyTab />
+          </div>
+          {isOwner && (
+            <div className="mt-4 space-y-4">
+              <TaxTab />
+              <PromoTab />
+            </div>
+          )}
         </TabsContent>
         {isOwner && (
           <TabsContent value="telegram">
@@ -232,13 +241,7 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         <TabsContent value="account">
           <AccountTab />
         </TabsContent>
-        {isOwner && (
-          <TabsContent value="multi-outlet">
-            <ProGate feature="multiOutlet" label="Multi-Outlet" description="Kelola beberapa outlet dalam satu akun" minHeight="200px">
-              <MultiOutletTab />
-            </ProGate>
-          </TabsContent>
-        )}
+
       </div>
     </Tabs>
   )
@@ -307,6 +310,17 @@ function useSettings() {
   }, [settings])
 
   return { settings, setSettings, loading, saving, saveSettings, refetch: fetchSettings }
+}
+
+// ==================== TAB: OUTLET & RECEIPT (Combined) ====================
+
+function OutletAndReceiptTab() {
+  return (
+    <div className="space-y-4">
+      <OutletInfoTab />
+      <ThemeReceiptTab />
+    </div>
+  )
 }
 
 // ==================== TAB 1: PAYMENT METHODS ====================
@@ -423,7 +437,138 @@ function PaymentMethodsTab() {
   )
 }
 
-// ==================== TAB 2: OUTLET INFO ====================
+// ==================== TAB 2: TAX / PPN ====================
+
+function TaxTab() {
+  const { settings, loading, saving, saveSettings } = useSettings()
+  const [edits, setEdits] = useState<Record<string, string | boolean> | null>(null)
+
+  const ppnEnabled = edits?.ppnEnabled ?? settings?.ppnEnabled ?? false
+  const ppnRate = edits?.ppnRate ?? (settings ? String(settings.ppnRate) : '11')
+  const dirty = edits !== null
+
+  const handleChange = (key: string, value: string | boolean) => {
+    setEdits((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = async () => {
+    if (!settings) {
+      toast.error('Pengaturan belum dimuat, silakan tunggu')
+      return
+    }
+    const ok = await saveSettings({
+      ppnEnabled: ppnEnabled as boolean,
+      ppnRate: Number(ppnRate),
+    })
+    if (ok) setEdits(null)
+  }
+
+  // Example calculation
+  const rate = Number(ppnRate) || 11
+  const exampleSubtotal = 100000
+  const exampleTax = Math.round(exampleSubtotal * rate / 100)
+  const exampleTotal = exampleSubtotal + exampleTax
+
+  if (loading) {
+    return (
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardContent className="p-4 space-y-3">
+          <Skeleton className="h-5 w-36 bg-zinc-800" />
+          <Skeleton className="h-16 bg-zinc-800 rounded-lg" />
+          <Skeleton className="h-9 bg-zinc-800" />
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="bg-zinc-900 border-zinc-800">
+      <CardContent className="p-4 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-100">Pajak PPN</h2>
+          <p className="text-xs text-zinc-400 mt-0.5">Atur Pajak Pertambahan Nilai untuk transaksi</p>
+        </div>
+
+        {/* Enable toggle */}
+        <div className="flex items-center justify-between p-3 rounded-lg border border-zinc-800 bg-zinc-800/50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <ReceiptText className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-200">Aktifkan PPN</p>
+              <p className="text-[11px] text-zinc-500">Pajak otomatis ditambahkan ke setiap transaksi</p>
+            </div>
+          </div>
+          <Switch
+            checked={ppnEnabled}
+            onCheckedChange={(v) => handleChange('ppnEnabled', v)}
+            className="data-[state=checked]:bg-emerald-500"
+          />
+        </div>
+
+        {ppnEnabled && (
+          <>
+            <Separator className="bg-zinc-800" />
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ppn-rate" className="text-xs text-zinc-300">
+                Tarif PPN (%)
+              </Label>
+              <div className="relative">
+                <Input
+                  id="ppn-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={ppnRate}
+                  onChange={(e) => handleChange('ppnRate', e.target.value)}
+                  placeholder="11"
+                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm pr-10"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span>
+              </div>
+              <p className="text-[10px] text-zinc-600">Tarif PPN standar Indonesia: 11%</p>
+            </div>
+
+            {/* Example formula */}
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <p className="text-[11px] font-medium text-emerald-400 uppercase tracking-wider mb-1.5">Contoh Perhitungan</p>
+              <div className="space-y-1 text-xs text-zinc-300">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span className="font-medium">{formatCurrency(exampleSubtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>PPN ({rate}%)</span>
+                  <span className="font-medium text-emerald-400">+{formatCurrency(exampleTax)}</span>
+                </div>
+                <div className="flex justify-between border-t border-emerald-500/20 pt-1 mt-1">
+                  <span className="font-semibold text-zinc-200">Total</span>
+                  <span className="font-bold text-emerald-300">{formatCurrency(exampleTotal)}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+          >
+            {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+            Simpan
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ==================== TAB 3: OUTLET INFO ====================
 
 function OutletInfoTab() {
   const { settings, loading, saving, saveSettings, refetch } = useSettings()
@@ -1179,16 +1324,43 @@ function ThemeReceiptTab() {
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="receipt-logo" className="text-xs text-zinc-300">Logo URL</Label>
-              <Input
-                id="receipt-logo"
-                value={receiptLogo}
-                onChange={(e) => handleChange('receiptLogo', e.target.value)}
-                placeholder="https://example.com/logo.png"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-              />
-              <p className="text-[11px] text-zinc-500">Masukkan URL gambar logo</p>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-logo" className="text-xs text-zinc-300">Logo Outlet (Image URL)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="receipt-logo"
+                  value={receiptLogo}
+                  onChange={(e) => handleChange('receiptLogo', e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                />
+                {receiptLogo && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 h-9 w-9 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    onClick={() => handleChange('receiptLogo', '')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {receiptLogo && (
+                <div className="mt-1 flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+                  <img
+                    src={receiptLogo}
+                    alt="Logo Preview"
+                    className="h-14 w-14 rounded-lg object-contain bg-white p-1"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-emerald-400">Logo berhasil dimuat</p>
+                    <p className="text-[10px] text-zinc-500 truncate mt-0.5">{receiptLogo}</p>
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-zinc-500">Masukkan URL gambar logo. Logo akan ditampilkan pada struk belanja.</p>
             </div>
           </div>
         </CardContent>
@@ -1206,6 +1378,9 @@ function ThemeReceiptTab() {
             <div className="w-64 bg-white text-zinc-900 rounded-lg p-4 shadow-lg font-mono text-[11px] space-y-1.5">
               {/* Header */}
               <div className="text-center space-y-0.5">
+                {receiptLogo && (
+                  <img src={receiptLogo} alt="Logo" className="h-10 w-10 mx-auto object-contain mb-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                )}
                 <p className="font-bold text-xs text-zinc-900">
                   {receiptBusinessName || 'Nama Usaha'}
                 </p>
@@ -1406,6 +1581,67 @@ function TelegramTab() {
 
   return (
     <div className="space-y-4">
+      {/* Setup Instructions */}
+      <Card className="bg-sky-500/5 border-sky-500/15">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0">
+              <CircleHelp className="h-4 w-4 text-sky-400" />
+            </div>
+            <h2 className="text-sm font-semibold text-zinc-100">Cara Setup Telegram Bot</h2>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-sky-400">1</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200">Buat Bot Token dari BotFather</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Buka Telegram, cari <span className="text-sky-300 font-medium">@BotFather</span>. Kirim pesan <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-sky-300">/newbot</code>, ikuti instruksi, lalu copy <span className="text-zinc-300">Bot Token</span> yang diberikan.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-sky-400">2</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200">Dapatkan Chat ID</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Kirim pesan apapun ke bot yang baru dibuat. Lalu buka browser, akses:{' '}
+                  <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-[10px] text-sky-300 break-all">
+                    https://api.telegram.org/bot{'{TOKEN}'}/getUpdates
+                  </code>
+                  {' '}Cari <span className="text-zinc-300">chat.id</span> di response JSON.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <div className="w-6 h-6 rounded-full bg-sky-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <span className="text-[11px] font-bold text-sky-400">3</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200">Masukkan & Test Koneksi</p>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  Paste <span className="text-zinc-300">Bot Token</span> dan <span className="text-zinc-300">Chat ID</span> di form bawah, lalu klik <span className="text-emerald-400 font-medium">Test Koneksi</span>. Jika berhasil, klik <span className="text-emerald-400 font-medium">Simpan</span>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-zinc-800/40 border border-zinc-700/40">
+            <MessageSquare className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-zinc-400">
+              <span className="text-amber-400 font-medium">Tips:</span> Pastikan bot sudah di-Start (klik Start di chat bot) sebelum test koneksi. Chat ID biasanya berupa angka (contoh: <span className="text-zinc-300">123456789</span>).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Connection Card */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">

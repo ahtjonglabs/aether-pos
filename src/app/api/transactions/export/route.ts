@@ -29,14 +29,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
-    const dateFromMs = searchParams.get('dateFromMs') || ''
-    const dateToMs = searchParams.get('dateToMs') || ''
     const cashierId = searchParams.get('cashierId') || ''
     const paymentMethod = searchParams.get('paymentMethod') || ''
 
     const where: Record<string, unknown> = { outletId }
 
-    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null, dateFromMs || null, dateToMs || null)
+    const dateFilter = buildDateFilter(dateFrom || null, dateTo || null)
     if (Object.keys(dateFilter).length > 0) {
       where.createdAt = dateFilter
     }
@@ -56,6 +54,7 @@ export async function GET(request: NextRequest) {
         invoiceNumber: true,
         subtotal: true,
         discount: true,
+        taxAmount: true,
         total: true,
         paymentMethod: true,
         paidAmount: true,
@@ -72,6 +71,9 @@ export async function GET(request: NextRequest) {
             price: true,
             qty: true,
             subtotal: true,
+            product: {
+              select: { sku: true },
+            },
           },
         },
         createdAt: true,
@@ -94,40 +96,73 @@ export async function GET(request: NextRequest) {
 
     const voidSet = new Set(voidLogs.map((l) => l.entityId))
 
-    // Build export rows: one row per transaction
+    // === Sheet 1: Detail Transaksi (one row per item) ===
+    const detailRows: Record<string, unknown>[] = []
+    for (const t of transactions) {
+      for (const item of t.items) {
+        detailRows.push({
+          'No': detailRows.length + 1,
+          'Invoice #': t.invoiceNumber,
+          'Tanggal': formatDate(t.createdAt),
+          'Jam': t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          'Kasir': t.user?.name || '-',
+          'Customer': t.customer?.name || 'Walk-in',
+          'Nama Produk': item.productName,
+          'SKU': item.product?.sku || '-',
+          'QTY': item.qty,
+          'Harga Satuan': formatCurrency(item.price),
+          'Subtotal Item': formatCurrency(item.subtotal),
+          'Metode Pembayaran': t.paymentMethod,
+          'PPN': formatCurrency(t.taxAmount),
+          'Total Transaksi': formatCurrency(t.total),
+          'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
+        })
+      }
+    }
+
+    const detailSheet = XLSX.utils.json_to_sheet(detailRows)
+    const detailColWidths = Object.keys(detailRows[0] || {}).map((key) => ({
+      wch: Math.max(
+        key.length + 2,
+        ...detailRows.map((r) => String(r[key as keyof typeof r] || '').length)
+      ),
+    }))
+    detailSheet['!cols'] = detailColWidths
+
+    // === Sheet 2: Ringkasan (one row per transaction, summary only) ===
     const rows = transactions.map((t) => ({
+      'No': transactions.indexOf(t) + 1,
       'Invoice #': t.invoiceNumber,
       'Tanggal': formatDate(t.createdAt),
+      'Jam': t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
       'Kasir': t.user?.name || '-',
       'Customer': t.customer?.name || 'Walk-in',
+      'Jumlah Item': t.items.reduce((s, i) => s + i.qty, 0),
       'Metode Pembayaran': t.paymentMethod,
       'Subtotal': formatCurrency(t.subtotal),
       'Diskon': formatCurrency(t.discount),
+      'PPN': formatCurrency(t.taxAmount),
       'Total': formatCurrency(t.total),
       'Dibayar': formatCurrency(t.paidAmount),
       'Kembalian': formatCurrency(t.change),
-      'Items': t.items.map((i) => `${i.productName} (${i.qty}x)`).join(', '),
       'Status': voidSet.has(t.id) ? 'VOID' : 'Aktif',
     }))
 
-    const worksheet = XLSX.utils.json_to_sheet(rows)
-
-    // Auto-size columns
+    const summarySheet = XLSX.utils.json_to_sheet(rows)
     const colWidths = Object.keys(rows[0] || {}).map((key) => ({
       wch: Math.max(
         key.length + 2,
         ...rows.map((r) => String(r[key as keyof typeof r] || '').length)
       ),
     }))
-    worksheet['!cols'] = colWidths
+    summarySheet['!cols'] = colWidths
 
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions')
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detail Transaksi')
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Ringkasan')
 
     const dateRange = dateFrom && dateTo ? `${dateFrom}_to_${dateTo}` : 'all'
-    // Sanitize filename to prevent header injection
-    const sanitizedRange = dateRange.replace(/[^\w.-]/g, '_')
-    const filename = `transactions_${sanitizedRange}.xlsx`
+    const filename = `transactions_${dateRange}.xlsx`
 
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
 
