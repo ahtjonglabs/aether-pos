@@ -1,11 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-import Image from 'next/image'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,10 +21,6 @@ import {
   Users,
   Receipt,
   Lock,
-  Check,
-  X,
-  Eye,
-  EyeOff,
 } from 'lucide-react'
 
 const features = [
@@ -81,24 +75,6 @@ const formVariants = {
 const inputClasses =
   'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-11 text-sm rounded-lg focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/50 transition-all duration-200'
 
-// Password strength checker
-const getPasswordStrength = (password: string) => {
-  if (!password) return { score: 0, label: '', color: '', checks: [] }
-  const checks = [
-    { label: 'Minimal 8 karakter', met: password.length >= 8 },
-    { label: 'Huruf besar (A-Z)', met: /[A-Z]/.test(password) },
-    { label: 'Huruf kecil (a-z)', met: /[a-z]/.test(password) },
-    { label: 'Angka (0-9)', met: /[0-9]/.test(password) },
-    { label: 'Simbol (!@#$...)', met: /[^A-Za-z0-9]/.test(password) },
-  ]
-  const score = checks.filter(c => c.met).length
-  if (score <= 1) return { score, label: 'Sangat Lemah', color: 'bg-red-500', textColor: 'text-red-400', checks }
-  if (score === 2) return { score, label: 'Lemah', color: 'bg-orange-500', textColor: 'text-orange-400', checks }
-  if (score === 3) return { score, label: 'Cukup', color: 'bg-amber-500', textColor: 'text-amber-400', checks }
-  if (score === 4) return { score, label: 'Kuat', color: 'bg-emerald-400', textColor: 'text-emerald-400', checks }
-  return { score, label: 'Sangat Kuat', color: 'bg-emerald-500', textColor: 'text-emerald-400', checks }
-}
-
 export default function AuthView() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
@@ -112,11 +88,8 @@ export default function AuthView() {
   const [regOwnerName, setRegOwnerName] = useState('')
   const [regEmail, setRegEmail] = useState('')
   const [regPassword, setRegPassword] = useState('')
-  const [showRegPassword, setShowRegPassword] = useState(false)
 
   const [direction, setDirection] = useState(0)
-
-  const passwordStrength = useMemo(() => getPasswordStrength(regPassword), [regPassword])
 
   const toggleMode = () => {
     const newDirection = mode === 'login' ? 1 : -1
@@ -209,8 +182,8 @@ export default function AuthView() {
             transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
           >
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-11 h-11 rounded-xl bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center overflow-hidden">
-                <Image src="/logo.svg" alt="Logo" width={28} height={28} className="object-contain" priority />
+              <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                <Store className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-zinc-50 tracking-tight">
@@ -327,8 +300,8 @@ export default function AuthView() {
             transition={{ duration: 0.5 }}
             className="lg:hidden flex items-center justify-center gap-3 mb-8"
           >
-            <div className="w-10 h-10 rounded-xl bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center overflow-hidden">
-              <Image src="/logo.svg" alt="Logo" width={24} height={24} className="object-contain" priority />
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+              <Store className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
               <h1 className="text-lg font-bold text-zinc-50 tracking-tight">
@@ -550,57 +523,16 @@ export default function AuthView() {
                         >
                           Password
                         </Label>
-                        <div className="relative">
-                          <Input
-                            id="reg-password"
-                            type={showRegPassword ? 'text' : 'password'}
-                            placeholder="Minimal 8 karakter"
-                            value={regPassword}
-                            onChange={(e) => setRegPassword(e.target.value)}
-                            required
-                            minLength={8}
-                            className={cn(inputClasses, 'pr-10')}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowRegPassword(!showRegPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
-                          >
-                            {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                        {/* Password Strength Bar */}
-                        {regPassword && (
-                          <div className="space-y-2 pt-1">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                                <motion.div
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${(passwordStrength.score / 5) * 100}%` }}
-                                  transition={{ duration: 0.3, ease: 'easeOut' }}
-                                  className={cn('h-full rounded-full', passwordStrength.color)}
-                                />
-                              </div>
-                              <span className={cn('text-[10px] font-semibold min-w-[72px] text-right', passwordStrength.textColor)}>
-                                {passwordStrength.label}
-                              </span>
-                            </div>
-                            <div className="space-y-1">
-                              {passwordStrength.checks.map((check) => (
-                                <div key={check.label} className="flex items-center gap-1.5">
-                                  {check.met ? (
-                                    <Check className="h-3 w-3 text-emerald-400 shrink-0" />
-                                  ) : (
-                                    <X className="h-3 w-3 text-zinc-600 shrink-0" />
-                                  )}
-                                  <span className={cn('text-[11px]', check.met ? 'text-emerald-400/80' : 'text-zinc-600')}>
-                                    {check.label}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <Input
+                          id="reg-password"
+                          type="password"
+                          placeholder="Minimal 8 karakter"
+                          value={regPassword}
+                          onChange={(e) => setRegPassword(e.target.value)}
+                          required
+                          minLength={8}
+                          className={inputClasses}
+                        />
                       </div>
 
                       {/* Account Type - Default Free */}

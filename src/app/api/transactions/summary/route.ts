@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
-import { buildDateFilter, buildDateFilterTz, getVoidedTxIds, getHourInTimezone } from '@/lib/api-helpers'
+import { buildDateFilter, buildDateFilterTz, getVoidedTxIds } from '@/lib/api-helpers'
 import { getOutletPlan } from '@/lib/plan-config'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
@@ -99,7 +99,6 @@ export async function GET(request: NextRequest) {
     const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0)
     const totalBrutto = transactions.reduce((sum, t) => sum + t.subtotal, 0)
     const totalDiscount = transactions.reduce((sum, t) => sum + t.discount, 0)
-    const totalTax = transactions.reduce((sum, t) => sum + (t.taxAmount || 0), 0)
     const totalTransactions = transactions.length
     const avgTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
 
@@ -151,15 +150,13 @@ export async function GET(request: NextRequest) {
         revenue: p.revenue,
       }))
 
-    // Hourly breakdown (transaction count per hour, timezone-aware)
+    // Hourly breakdown (transaction count per hour)
     const hourlyMap = new Map<number, number>()
     for (let h = 0; h < 24; h++) {
       hourlyMap.set(h, 0)
     }
     for (const t of transactions) {
-      const hour = tzOffset !== null && !isNaN(tzOffset)
-        ? getHourInTimezone(t.createdAt, tzOffset)
-        : new Date(t.createdAt).getHours()
+      const hour = new Date(t.createdAt).getHours()
       hourlyMap.set(hour, (hourlyMap.get(hour) || 0) + 1)
     }
     const hourlyBreakdown = Array.from(hourlyMap.entries()).map(([hour, count]) => ({
@@ -171,7 +168,6 @@ export async function GET(request: NextRequest) {
       totalRevenue,
       totalBrutto,
       totalDiscount,
-      totalTax,
       totalTransactions,
       avgTransaction,
       totalItemsSold,

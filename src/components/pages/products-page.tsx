@@ -86,6 +86,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertCircle,
+  Layers,
 } from 'lucide-react'
 // Collapsible removed — analytics section removed in redesign
 import { ProGate } from '@/components/shared/pro-gate'
@@ -112,6 +113,9 @@ interface Product {
   categoryId: string | null
   category?: { id: string; name: string; color: string } | null
   unit: string
+  hasVariants?: boolean
+  variants?: Array<{ id: string; name: string; sku: string | null; price: number; hpp: number; stock: number; lowStockAlert: number }>
+  _variantCount?: number
 }
 
 interface ProductStats {
@@ -434,14 +438,13 @@ export default function ProductsPage() {
     try {
       const res = await fetch(`/api/products/${deleteId}`, { method: 'DELETE' })
       if (res.ok) {
-        toast.success('Produk berhasil dihapus')
+        toast.success('Product deleted')
         fetchProducts()
       } else {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data.error || 'Gagal menghapus produk')
+        toast.error('Failed to delete product')
       }
     } catch {
-      toast.error('Gagal menghapus produk')
+      toast.error('Failed to delete product')
     } finally {
       setDeleting(false)
       setDeleteId(null)
@@ -1004,6 +1007,12 @@ export default function ProductsPage() {
                                 </span>
                               )}
                               {product.name}
+                              {product.hasVariants && product._variantCount ? (
+                                <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[9px] px-1.5 py-0 h-4 ml-1">
+                                  <Layers className="h-2.5 w-2.5 mr-0.5" />
+                                  {product._variantCount} varian
+                                </Badge>
+                              ) : null}
                             </span>
                           </div>
                         </div>
@@ -1472,14 +1481,14 @@ export default function ProductsPage() {
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent className="bg-zinc-900 border-zinc-800">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-zinc-100 text-sm font-semibold">Hapus Produk</AlertDialogTitle>
+            <AlertDialogTitle className="text-zinc-100 text-sm font-semibold">Delete Product</AlertDialogTitle>
             <AlertDialogDescription className="text-zinc-400 text-xs">
-              Yakin ingin menghapus <span className="text-zinc-200 font-medium">{products.find(p => p.id === deleteId)?.name}</span>? Riwayat transaksi tetap tersimpan, tapi data produk akan dihapus permanen.
+              Are you sure? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs">
-              Batal
+              Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
@@ -1487,7 +1496,7 @@ export default function ProductsPage() {
               className="bg-red-500 hover:bg-red-600 text-white h-8 text-xs"
             >
               {deleting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-              Hapus
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

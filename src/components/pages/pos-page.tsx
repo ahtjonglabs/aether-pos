@@ -23,6 +23,7 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet'
+import { motion } from 'framer-motion'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -55,6 +56,7 @@ import {
   AlertCircle,
   Store,
   Tag,
+  Layers,
 } from 'lucide-react'
 import {
   Select,
@@ -72,6 +74,16 @@ import { usePageStore } from '@/hooks/use-page-store'
 
 // ==================== TYPES ====================
 
+interface ProductVariant {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  hpp: number
+  stock: number
+  lowStockAlert: number
+}
+
 interface Product {
   id: string
   name: string
@@ -81,6 +93,8 @@ interface Product {
   barcode: string | null
   categoryId: string | null
   image: string | null
+  hasVariants?: boolean
+  _variantCount?: number
 }
 
 interface Category {
@@ -99,6 +113,9 @@ interface Customer {
 interface CartItem {
   product: Product
   qty: number
+  variantId?: string
+  variantName?: string
+  variantPrice?: number
 }
 
 interface CheckoutResult {
@@ -119,8 +136,6 @@ interface OutletSettings {
   receiptFooter: string
   receiptLogo: string
   themePrimaryColor: string
-  ppnEnabled: boolean
-  ppnRate: number
 }
 
 interface OutletInfo {
@@ -196,8 +211,6 @@ export default function PosPage() {
     receiptFooter: 'Terima kasih atas kunjungan Anda!',
     receiptLogo: '',
     themePrimaryColor: 'emerald',
-    ppnEnabled: false,
-    ppnRate: 11,
   })
 
   // Outlet info (from settings API)
@@ -228,8 +241,6 @@ export default function PosPage() {
               receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
               receiptLogo: data.receiptLogo || '',
               themePrimaryColor: data.themePrimaryColor || 'emerald',
-              ppnEnabled: data.ppnEnabled ?? false,
-              ppnRate: data.ppnRate || 11,
             })
             // Extract outlet info from settings response
             if (data.outlet) {
@@ -258,8 +269,6 @@ export default function PosPage() {
               receiptFooter: (cached.receiptFooter as string) || 'Terima kasih atas kunjungan Anda!',
               receiptLogo: (cached.receiptLogo as string) || '',
               themePrimaryColor: (cached.themePrimaryColor as string) || 'emerald',
-              ppnEnabled: (cached.ppnEnabled as boolean) ?? false,
-              ppnRate: (cached.ppnRate as number) || 11,
             })
             // Extract outlet info from cached settings
             const cachedOutlet = cached.outlet as { id: string; name: string; address: string | null; phone: string | null } | undefined
@@ -298,8 +307,6 @@ export default function PosPage() {
                 receiptFooter: data.receiptFooter || 'Terima kasih atas kunjungan Anda!',
                 receiptLogo: data.receiptLogo || '',
                 themePrimaryColor: data.themePrimaryColor || 'emerald',
-                ppnEnabled: data.ppnEnabled ?? false,
-                ppnRate: data.ppnRate || 11,
               })
             }
           }
@@ -348,6 +355,7 @@ export default function PosPage() {
   // Cart
   const [cart, setCart] = useState<CartItem[]>([])
   const [pointsToUse, setPointsToUse] = useState(0)
+  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
 
   // Promo
   const [selectedPromo, setSelectedPromo] = useState<{ id: string; name: string; type: string; discount: number; description: string } | null>(null)
@@ -428,33 +436,12 @@ export default function PosPage() {
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(null)
   const [receiptOpen, setReceiptOpen] = useState(false)
   const [mobileCartOpen, setMobileCartOpen] = useState(false)
-  const [editingQtyId, setEditingQtyId] = useState<string | null>(null)
-  const [editingQtyValue, setEditingQtyValue] = useState('')
-  const qtyInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Inline QTY Edit Handlers ──
-  const startEditQty = (productId: string, currentQty: number) => {
-    setEditingQtyId(productId)
-    setEditingQtyValue(String(currentQty))
-    setTimeout(() => qtyInputRef.current?.focus(), 50)
-  }
-
-  const confirmEditQty = () => {
-    if (!editingQtyId) return
-    const val = parseInt(editingQtyValue, 10)
-    if (isNaN(val) || val <= 0) {
-      removeFromCart(editingQtyId)
-    } else {
-      updateQty(editingQtyId, val)
-    }
-    setEditingQtyId(null)
-    setEditingQtyValue('')
-  }
-
-  const cancelEditQty = () => {
-    setEditingQtyId(null)
-    setEditingQtyValue('')
-  }
+  // Variant picker
+  const [variantPickerOpen, setVariantPickerOpen] = useState(false)
+  const [variantPickerProduct, setVariantPickerProduct] = useState<Product | null>(null)
+  const [variantPickerVariants, setVariantPickerVariants] = useState<ProductVariant[]>([])
+  const [variantPickerLoading, setVariantPickerLoading] = useState(false)
 
   // Online/offline detection
   useEffect(() => {
@@ -502,10 +489,20 @@ export default function PosPage() {
               }
               toast.success(`${data.synced} transaction(s) auto-synced!`)
             }
+            // Check for auth error on transaction sync
+            if (res.status === 401 || res.status === 403) {
+              toast.error('Sesi telah berakhir. Silakan login ulang untuk sync transaksi.', { duration: 5000 })
+              syncingRef.current = false
+              setDataSyncing(false)
+              return
+            }
           }
 
           setDataSyncing(true)
           const result = await syncAllData()
+          if (result.hasAuthError) {
+            toast.error('Sesi telah berakhir. Silakan login ulang untuk sync data.', { duration: 5000 })
+          }
           syncSettingsFromServer() // cache settings for offline (fire-and-forget)
           fetchProducts(productSearch, productPage, selectedCategoryId)
           loadCategoriesFromCache()
@@ -537,7 +534,9 @@ export default function PosPage() {
           loadCustomersFromCache()
           const times = await getAllSyncTimes()
           setLastSyncTimes(times)
-          if (result.products.count > 0 || result.customers.count > 0) {
+          if (result.hasAuthError) {
+            toast.error('Sesi telah berakhir. Silakan login ulang untuk sync data.', { duration: 5000 })
+          } else if (result.products.count > 0 || result.customers.count > 0) {
             toast.success(`Data synced: ${result.products.count} produk, ${result.categories.count} kategori, ${result.customers.count} customer`)
           }
         } catch {
@@ -640,10 +639,12 @@ export default function PosPage() {
     if (e.key === 'Enter' && productSearch.trim()) {
       if (products.length === 1 && !productsLoading) {
         const product = products[0]
-        if (product.stock > 0) {
+        if (product.stock > 0 && !product.hasVariants) {
           addToCart(product)
           setProductSearch('')
           toast.success(`${product.name} ditambahkan`)
+        } else if (product.hasVariants) {
+          openVariantPicker(product)
         }
       }
     }
@@ -665,34 +666,86 @@ export default function PosPage() {
 
   // ==================== CART LOGIC ====================
 
-  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.qty, 0), [cart])
+  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + (item.variantPrice || item.product.price) * item.qty, 0), [cart])
   const maxPointsToUse = selectedCustomer ? selectedCustomer.points : 0
   const pointsDiscount = pointsToUse * settings.loyaltyPointValue
-  const ppnAmount = settings.ppnEnabled ? Math.round(subtotal * settings.ppnRate / 100) : 0
-  const total = Math.max(0, subtotal - pointsDiscount - promoDiscount + ppnAmount)
+  const total = Math.max(0, subtotal - pointsDiscount - promoDiscount)
   const change = paymentMethod === 'CASH' ? Math.max(0, Number(paidAmount) - total) : 0
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, qty: number = 1) => {
     if (product.stock <= 0) return
+    if (qty <= 0) return
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id)
+      const existing = prev.find((item) => item.product.id === product.id && !item.variantId)
       if (existing) {
-        if (existing.qty >= product.stock) { toast.warning('Stok tidak cukup'); return prev }
-        return prev.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item)
+        const newQty = existing.qty + qty
+        if (newQty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return prev.map((item) => item.product.id === product.id && !item.variantId ? { ...item, qty: newQty } : item)
       }
-      return [...prev, { product, qty: 1 }]
+      if (qty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
+      return [...prev, { product, qty }]
     })
   }
 
-  const updateQty = (productId: string, newQty: number) => {
-    if (newQty <= 0) { removeFromCart(productId); return }
-    const item = cart.find((i) => i.product.id === productId)
-    if (item && newQty > item.product.stock) { toast.warning('Stok tidak cukup'); return }
-    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty: newQty } : i)))
+  const addToCartWithVariant = (product: Product, variant: ProductVariant, qty: number = 1) => {
+    if (variant.stock <= 0) return
+    if (qty <= 0) return
+    setCart((prev) => {
+      const cartKey = `${product.id}-${variant.id}`
+      const existing = prev.find((item) => item.variantId === variant.id)
+      if (existing) {
+        const newQty = existing.qty + qty
+        if (newQty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return prev.map((item) => item.variantId === variant.id ? { ...item, qty: newQty } : item)
+      }
+      if (qty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
+      return [...prev, { product, qty, variantId: variant.id, variantName: variant.name, variantPrice: variant.price }]
+    })
   }
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((i) => i.product.id !== productId))
+  const openVariantPicker = async (product: Product) => {
+    setVariantPickerProduct(product)
+    setVariantPickerOpen(true)
+    setVariantPickerLoading(true)
+    try {
+      const res = await fetch(`/api/products/${product.id}/variants`)
+      if (res.ok) {
+        const data = await res.json()
+        setVariantPickerVariants(data.variants || [])
+      } else {
+        toast.error('Gagal memuat varian')
+      }
+    } catch {
+      toast.error('Gagal memuat varian')
+    } finally {
+      setVariantPickerLoading(false)
+    }
+  }
+
+  const handleProductClick = (product: Product) => {
+    if (product.hasVariants) {
+      openVariantPicker(product)
+    } else {
+      addToCart(product)
+    }
+  }
+
+  const setCartItemQty = (productId: string, qty: number, variantId?: string) => {
+    if (qty <= 0) { removeFromCart(productId, variantId); return }
+    const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
+    if (item && qty > (item.variantId ? 9999 : item.product.stock)) { toast.warning('Stok tidak cukup'); return }
+    setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty } : i)))
+  }
+
+  const updateQty = (productId: string, newQty: number, variantId?: string) => {
+    if (newQty <= 0) { removeFromCart(productId, variantId); return }
+    const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
+    if (item && newQty > (item.variantId ? 9999 : item.product.stock)) { toast.warning('Stok tidak cukup'); return }
+    setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: newQty } : i)))
+  }
+
+  const removeFromCart = (productId: string, variantId?: string) => {
+    setCart((prev) => prev.filter((i) => !(i.product.id === productId && i.variantId === variantId)))
   }
 
   const clearCart = () => {
@@ -708,6 +761,38 @@ export default function PosPage() {
 
   const handlePointsChange = (value: string) => {
     setPointsToUse(Math.min(Number(value) || 0, maxPointsToUse))
+  }
+
+  const handleQtyInputChange = (productId: string, value: string, variantId?: string) => {
+    const qty = parseInt(value)
+    if (!isNaN(qty) && qty > 0) {
+      const item = cart.find((i) => i.product.id === productId && i.variantId === variantId)
+      if (item && qty <= (item.variantId ? 9999 : item.product.stock)) {
+        setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty } : i)))
+      } else if (item && qty > (item.variantId ? 9999 : item.product.stock)) {
+        toast.warning('Stok tidak cukup')
+        setCart((prev) => prev.map((i) => (i.product.id === productId && i.variantId === variantId ? { ...i, qty: item.variantId ? 9999 : item.product.stock } : i)))
+      }
+    } else if (value === '' || value === '0') {
+      removeFromCart(productId, variantId)
+      setEditingQtyId(null)
+    }
+  }
+
+  const handleQtyInputBlur = (productId: string, value: string, variantId?: string) => {
+    const qty = parseInt(value)
+    if (!isNaN(qty) && qty > 0) {
+      setCartItemQty(productId, qty, variantId)
+    }
+    setEditingQtyId(null)
+  }
+
+  const handleQtyInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, productId: string, value: string, variantId?: string) => {
+    if (e.key === 'Enter') {
+      handleQtyInputBlur(productId, value, variantId)
+    } else if (e.key === 'Escape') {
+      setEditingQtyId(null)
+    }
   }
 
   // ==================== QUICK NOMINAL ====================
@@ -786,15 +871,16 @@ export default function PosPage() {
         customerId: selectedCustomer?.id || null,
         items: cart.map((item) => ({
           productId: item.product.id,
-          productName: item.product.name,
-          price: item.product.price,
+          productName: item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name,
+          price: item.variantPrice || item.product.price,
           qty: item.qty,
-          subtotal: item.product.price * item.qty,
+          subtotal: (item.variantPrice || item.product.price) * item.qty,
+          variantId: item.variantId || null,
+          variantName: item.variantName || null,
         })),
         subtotal,
         discount: pointsDiscount + promoDiscount,
         pointsUsed: pointsToUse,
-        taxAmount: ppnAmount,
         total,
         paymentMethod,
         paidAmount: paymentMethod === 'CASH' ? Number(paidAmount) : total,
@@ -803,69 +889,108 @@ export default function PosPage() {
         promoDiscount,
       }
 
-      // STEP 1: Save to IndexedDB first
-      const localId = await localDB.transactions.add({
-        payload: checkoutPayload,
-        isSynced: 0,
-        createdAt: Date.now(),
-        retryCount: 0,
-      })
+      if (isOnline) {
+        // ─── ONLINE: Use direct checkout API ───
+        try {
+          const res = await fetch('/api/pos/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(checkoutPayload),
+          })
+          const data = await res.json()
 
-      // STEP 1b: Decrement stock locally in IndexedDB to prevent overselling while offline
-      for (const item of cart) {
-        await localDB.products
-          .where('id')
-          .equals(item.product.id)
-          .modify((p) => {
+          if (res.ok && data.success) {
+            // Save to IndexedDB as already synced (for local history)
+            await localDB.transactions.add({
+              payload: checkoutPayload,
+              isSynced: 1,
+              createdAt: Date.now(),
+              syncedAt: Date.now(),
+              invoiceNumber: data.invoiceNumber,
+              serverTransactionId: null,
+              retryCount: 0,
+            })
+
+            setCheckoutResult({ success: true, invoiceNumber: data.invoiceNumber })
+            toast.success(`Pembayaran berhasil! Invoice: ${data.invoiceNumber}`)
+          } else {
+            // Online checkout failed — check if it's a retryable error
+            const isServerError = res.status >= 500
+            const error = data.error || 'Checkout gagal'
+
+            if (isServerError) {
+              // Server error — fall back to offline mode
+              const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+              await localDB.transactions.add({
+                payload: checkoutPayload,
+                isSynced: 0,
+                createdAt: Date.now(),
+                retryCount: 0,
+              })
+              // Decrement stock locally
+              for (const item of cart) {
+                await localDB.products.where('id').equals(item.product.id).modify((p) => {
+                  p.stock = Math.max(0, (p.stock || 0) - item.qty)
+                  p.updatedAt = new Date().toISOString()
+                })
+              }
+              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: error })
+              toast.warning('Server error — tersimpan offline', { description: error })
+            } else {
+              // Validation error (4xx) — DON'T fall back to offline, show error to user
+              toast.error(error, { description: 'Periksa data dan coba lagi' })
+              setCheckingOut(false)
+              return  // Exit without proceeding to receipt
+            }
+          }
+        } catch {
+          // Network error — fall back to offline mode
+          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+          await localDB.transactions.add({
+            payload: checkoutPayload,
+            isSynced: 0,
+            createdAt: Date.now(),
+            retryCount: 0,
+          })
+          for (const item of cart) {
+            await localDB.products.where('id').equals(item.product.id).modify((p) => {
+              p.stock = Math.max(0, (p.stock || 0) - item.qty)
+              p.updatedAt = new Date().toISOString()
+            })
+          }
+          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
+          toast.warning('Offline — transaksi tersimpan lokal')
+        }
+      } else {
+        // ─── OFFLINE: Save locally and queue for sync ───
+        const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
+        await localDB.transactions.add({
+          payload: checkoutPayload,
+          isSynced: 0,
+          createdAt: Date.now(),
+          retryCount: 0,
+        })
+        // Decrement stock locally to prevent overselling
+        for (const item of cart) {
+          await localDB.products.where('id').equals(item.product.id).modify((p) => {
             p.stock = Math.max(0, (p.stock || 0) - item.qty)
             p.updatedAt = new Date().toISOString()
           })
-      }
-
-      // STEP 2: If online, sync immediately
-      if (isOnline) {
-        try {
-          const unsyncedTx = await localDB.transactions.get(localId)
-          if (unsyncedTx) {
-            const syncRes = await fetch('/api/transactions/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ transactions: [unsyncedTx] }),
-            })
-            const syncData = await syncRes.json()
-            if (syncRes.ok && syncData.synced > 0) {
-              await localDB.transactions.update(localId, {
-                isSynced: 1,
-                syncedAt: Date.now(),
-                invoiceNumber: syncData.results?.[0]?.invoiceNumber,
-                serverTransactionId: syncData.results?.[0]?.serverId,
-              })
-              const invoiceNum = syncData.results?.[0]?.invoiceNumber || `OFF-${Date.now().toString(36).toUpperCase()}`
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum })
-              toast.success(`Pembayaran berhasil! Invoice: ${invoiceNum}`)
-            } else {
-              const error = syncData.results?.[0]?.error || 'Gagal sync ke server'
-              const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-              setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan lokal', syncError: error })
-              toast.warning('Tersimpan lokal — akan sync otomatis', { description: error })
-            }
-          }
-        } catch (syncErr) {
-          console.error('Immediate sync failed:', syncErr)
-          const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
-          setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Tersimpan offline', syncError: 'Tidak dapat terhubung ke server' })
-          toast.warning('Tersimpan offline — akan sync otomatis')
         }
-      } else {
-        const invoiceNum = `OFF-${Date.now().toString(36).toUpperCase()}`
         setCheckoutResult({ success: true, invoiceNumber: invoiceNum, message: 'Transaksi offline' })
         toast.warning('Offline — transaksi tersimpan lokal', { duration: 5000 })
       }
 
       setCheckoutOpen(false)
       setReceiptOpen(true)
-      fetchProducts(productSearch, productPage, selectedCategoryId)
-      loadCustomersFromCache()
+
+      // Refresh data from server (online) or local cache (offline)
+      if (isOnline) {
+        syncAllData().catch(() => {})
+      } else {
+        fetchProducts(productSearch, productPage, selectedCategoryId)
+        loadCustomersFromCache()
+      }
     } catch {
       toast.error('Checkout gagal')
     } finally {
@@ -884,54 +1009,31 @@ export default function PosPage() {
   const handleReceiptPrint = () => {
     const content = receiptContentRef.current?.innerHTML
     if (!content) return
-    const win = window.open('', '_blank', 'width=320,height=800')
+    const win = window.open('', '_blank', 'width=320,height=600')
     if (!win) { toast.error('Gagal membuka jendela cetak'); return }
     win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 13px; width: 300px; margin: 0 auto; padding: 16px 14px; color: #000; font-weight: 600; line-height: 1.5; }
+        body { font-family: 'Courier New', monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; color: #000; }
         .text-center { text-align: center; }
         .text-right { text-align: right; }
-        .font-bold { font-weight: 800; }
-        .font-semibold { font-weight: 700; }
-        .font-medium { font-weight: 600; }
-        .text-sm { font-size: 12px; }
-        .text-xs { font-size: 11px; }
-        .text-[11px] { font-size: 11px; font-weight: 600; }
-        .space-y-1 > * + * { margin-top: 5px; }
-        .space-y-0\.5 > * + * { margin-top: 2px; }
-        .space-y-1\.5 > * + * { margin-top: 7px; }
-        .space-y-2 > * + * { margin-top: 10px; }
-        .py-2 { padding-top: 10px; padding-bottom: 10px; }
-        .py-1 { padding-top: 5px; padding-bottom: 5px; }
-        .py-3 { padding-top: 14px; padding-bottom: 14px; }
-        .my-2 { margin-top: 10px; margin-bottom: 10px; }
-        .mt-2 { margin-top: 10px; }
-        .mb-3 { margin-bottom: 12px; }
-        .mb-2 { margin-bottom: 8px; }
-        .mb-4 { margin-bottom: 16px; }
-        .border-t, .border-dashed { border-top: 1.5px dashed #555; }
-        .border-zinc-300 { border-color: #555; }
-        .flex { display: flex; justify-content: space-between; align-items: baseline; }
-        .text-zinc-500 { color: #444; font-weight: 600; }
-        .text-zinc-600 { color: #555; font-weight: 600; }
-        .text-zinc-400 { color: #777; }
+        .font-bold { font-weight: bold; }
+        .text-sm { font-size: 11px; }
+        .text-xs { font-size: 10px; }
+        .space-y-1 > * + * { margin-top: 4px; }
+        .space-y-2 > * + * { margin-top: 8px; }
+        .py-2 { padding-top: 8px; padding-bottom: 8px; }
+        .py-1 { padding-top: 4px; padding-bottom: 4px; }
+        .mt-2 { margin-top: 8px; }
+        .border-t { border-top: 1px dashed #999; }
+        .flex { display: flex; justify-content: space-between; }
+        .text-zinc-500 { color: #666; }
+        .text-zinc-400 { color: #999; }
         .text-emerald-600 { color: #059669; }
-        .text-zinc-900 { color: #000; font-weight: 700; }
-        .text-base { font-size: 18px; }
-        .text-amber-600 { color: #b45309; }
-        .uppercase { text-transform: uppercase; }
-        .items-center { align-items: center; }
-        .gap-1 { gap: 4px; }
-        .gap-2 { gap: 8px; }
-        .inline-flex { display: inline-flex; }
-        img { max-width: 48px; max-height: 48px; object-fit: contain; }
-        @media print {
-          img { max-width: 48px; max-height: 48px; object-fit: contain; }
-          body { margin: 0; padding: 10px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          @page { margin: 0; size: 80mm auto; }
-        }
+        .text-base { font-size: 16px; }
+        .font-medium { font-weight: 500; }
+        .text-amber-600 { color: #d97706; }
+        @media print { body { margin: 0; padding: 5px; } }
       </style>
     </head><body>${content}</body></html>`)
     win.document.close()
@@ -959,6 +1061,10 @@ export default function PosPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactions: pending }),
       })
+      if (res.status === 401 || res.status === 403) {
+        toast.error('Sesi telah berakhir. Silakan login ulang untuk sync transaksi.', { duration: 5000 })
+        return
+      }
       const data = await res.json()
 
       if (res.ok) {
@@ -1009,10 +1115,11 @@ export default function PosPage() {
   // ==================== RENDER HELPERS ====================
 
   const renderCategoryChips = () => (
-    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
+    <div className="bg-zinc-900/30 md:bg-transparent rounded-2xl md:rounded-none p-2 md:p-0 mb-1 md:mb-0">
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
       <button
         onClick={() => handleCategorySelect(null)}
-        className={`shrink-0 px-3 py-1.5 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
+        className={`shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
           !selectedCategoryId
             ? `${themeColors.activeBg} ${themeColors.text} ${themeColors.border} shadow-sm`
             : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
@@ -1028,7 +1135,7 @@ export default function PosPage() {
           <button
             key={cat.id}
             onClick={() => handleCategorySelect(cat.id)}
-            className={`shrink-0 px-3 py-1.5 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
+            className={`shrink-0 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] font-medium border transition-all backdrop-blur-sm ${
               isActive
                 ? `${colors.activeBg} ${colors.text} ${colors.border} shadow-sm`
                 : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
@@ -1038,6 +1145,7 @@ export default function PosPage() {
           </button>
         )
       })}
+      </div>
     </div>
   )
 
@@ -1059,14 +1167,7 @@ export default function PosPage() {
       )
     }
 
-    // Sort: in-stock products first, out-of-stock at the bottom
-    const sortedProducts = [...products].sort((a, b) => {
-      if (a.stock <= 0 && b.stock > 0) return 1
-      if (a.stock > 0 && b.stock <= 0) return -1
-      return 0
-    })
-
-    return sortedProducts.map((product) => {
+    return products.map((product) => {
       const cartItem = cart.find((i) => i.product.id === product.id)
       const outOfStock = product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
@@ -1074,60 +1175,97 @@ export default function PosPage() {
       const lowStock = product.stock > 0 && product.stock <= 5
 
       return (
-        <button
+        <div
           key={product.id}
-          onClick={() => !outOfStock && addToCart(product)}
-          disabled={outOfStock}
           className={cn(
-            'relative group p-3.5 md:p-3 min-h-[80px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200 active:scale-[0.98]',
+            'relative group min-h-[68px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200',
             outOfStock
-              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30'
+              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30 p-2.5 md:p-3'
               : cartItem
-              ? `${accentColor.border} ${accentColor.bg} hover:shadow-lg hover:shadow-emerald-500/5 ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
-              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm'
+              ? `${accentColor.border} ${accentColor.bg} ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
+              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm cursor-pointer active:scale-[0.98]'
           )}
         >
-          {cartItem && (
-            editingQtyId === cartItem.product.id ? (
-              <input
-                ref={qtyInputRef}
-                type="number"
-                min="0"
-                max={cartItem.product.stock}
-                value={editingQtyValue}
-                onChange={(e) => setEditingQtyValue(e.target.value)}
-                onBlur={confirmEditQty}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
-                onClick={(e) => e.stopPropagation()}
-                className="absolute -top-2 -right-2 w-10 h-6 rounded-full bg-emerald-500 text-white text-[11px] font-bold text-center border-2 border-white shadow-lg z-10 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            ) : (
-              <div
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10 cursor-pointer hover:scale-110 active:scale-95 transition-transform"
-                onClick={(e) => { e.stopPropagation(); startEditQty(cartItem.product.id, cartItem.qty) }}
-              >
-                {cartItem.qty}
-              </div>
-            )
+          {/* Product info — clickable area */}
+          {!outOfStock && !cartItem && (
+            <button
+              className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
+              onClick={() => handleProductClick(product)}
+            />
           )}
-          <p className="text-xs font-medium text-zinc-200 truncate mb-1.5 pr-6">{product.name}</p>
-          <p className={`text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
-          <div className="flex items-center justify-between mt-1.5">
-            {outOfStock ? (
-              <span className="text-[10px] text-red-400 font-medium">Habis</span>
-            ) : (
-              <span className={cn(
-                'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
-                lowStock
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'bg-zinc-800/80 text-zinc-500'
-              )}>
-                <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
-                {product.stock}
-              </span>
+          <div className={cn(
+            'relative z-[1]',
+            cartItem ? 'p-2 md:p-2.5' : 'p-2.5 md:p-3'
+          )}>
+            <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate mb-1 md:mb-1.5">{product.name}</p>
+            <p className={`text-xs md:text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
+            {!cartItem && (
+              <div className="flex items-center justify-between mt-1.5">
+                {outOfStock ? (
+                  <span className="text-[10px] text-red-400 font-medium">Habis</span>
+                ) : (
+                  <span className={cn(
+                    'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                    lowStock
+                      ? 'bg-amber-500/10 text-amber-400'
+                      : 'bg-zinc-800/80 text-zinc-500'
+                  )}>
+                    <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
+                    {product.hasVariants ? (product._variantCount || 0) + ' varian' : product.stock}
+                  </span>
+                )}
+                {product.hasVariants && (
+                  <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[9px] px-1.5 py-0 h-4">
+                    <Layers className="h-2.5 w-2.5 mr-0.5" />
+                    Varian
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {/* In-cart QTY stepper */}
+            {cartItem && (
+              <div className="flex items-center justify-between mt-2 gap-1.5">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCartItemQty(product.id, cartItem.qty - 1, cartItem.variantId) }}
+                  className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-95 shrink-0"
+                >
+                  {cartItem.qty === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                </button>
+                <div className="flex-1 text-center">
+                  {editingQtyId === `${product.id}-${cartItem.variantId || ''}` ? (
+                    <input
+                      type="number"
+                      min="1"
+                      max={product.stock}
+                      value={cartItem.qty}
+                      onChange={(e) => handleQtyInputChange(product.id, e.target.value, cartItem.variantId)}
+                      onBlur={(e) => handleQtyInputBlur(product.id, (e.target as HTMLInputElement).value, cartItem.variantId)}
+                      onKeyDown={(e) => handleQtyInputKeyDown(e, product.id, (e.target as HTMLInputElement).value, cartItem.variantId)}
+                      autoFocus
+                      className="w-full text-center text-sm font-bold text-zinc-100 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingQtyId(`${product.id}-${cartItem.variantId || ''}`) }}
+                      className="w-full text-center focus:outline-none cursor-pointer group"
+                    >
+                      <span className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{cartItem.qty}</span>
+                      <span className="text-[9px] text-zinc-500 block leading-none">/ {product.stock}</span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); addToCart(product) }}
+                  disabled={cartItem.qty >= product.stock}
+                  className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
             )}
           </div>
-        </button>
+        </div>
       )
     })
   }
@@ -1230,55 +1368,32 @@ export default function PosPage() {
   const renderReceiptContent = () => {
     if (!checkoutResult) return null
     return (
-      <div ref={receiptContentRef} className="space-y-2">
-        {/* Header — Business Info */}
-        <div className="text-center space-y-2 py-3">
-          {settings.receiptLogo && (
-            <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-              <img
-                src={settings.receiptLogo}
-                alt="Logo"
-                style={{ width: '48px', height: '48px', objectFit: 'contain', borderRadius: '8px', display: 'inline-block' }}
-                crossOrigin="anonymous"
-              />
-            </div>
-          )}
-          <p className="text-lg font-bold">{settings.receiptBusinessName}</p>
-          {settings.receiptAddress && <p className="text-xs text-zinc-500">{settings.receiptAddress}</p>}
-          {settings.receiptPhone && <p className="text-xs text-zinc-500">{settings.receiptPhone}</p>}
+      <div ref={receiptContentRef} className="space-y-1">
+        <div className="text-center space-y-1 py-2">
+          {settings.receiptLogo && <p className="text-base">LOGO</p>}
+          <p className="text-base font-bold">{settings.receiptBusinessName}</p>
+          {settings.receiptAddress && <p className="text-[11px] text-zinc-500">{settings.receiptAddress}</p>}
+          {settings.receiptPhone && <p className="text-[11px] text-zinc-500">{settings.receiptPhone}</p>}
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        {/* Transaction Info */}
-        <div className="space-y-1 py-2">
+        <div className="space-y-0.5 py-2">
           <div className="flex"><span className="text-zinc-500">Invoice</span><span className="font-bold">{checkoutResult.invoiceNumber}</span></div>
-          <div className="flex"><span className="text-zinc-500">Tanggal</span><span className="font-medium">{formatReceiptDateTime()}</span></div>
-          <div className="flex"><span className="text-zinc-500">Customer</span><span className="font-medium">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
-          {isOfflineReceipt && <div className="flex"><span className="text-amber-600 text-xs">Status</span><span className="text-amber-600 text-xs font-semibold">Offline — Pending Sync</span></div>}
+          <div className="flex"><span className="text-zinc-500">Tanggal</span><span>{formatReceiptDateTime()}</span></div>
+          <div className="flex"><span className="text-zinc-500">Customer</span><span>{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
+          {isOfflineReceipt && <div className="flex"><span className="text-amber-600 text-xs">Status</span><span className="text-amber-600 text-xs font-medium">Offline — Pending Sync</span></div>}
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        {/* Items Table Header */}
-        <div className="flex items-center py-1">
-          <span className="flex-1 text-xs font-bold text-zinc-500">ITEM</span>
-          <span className="w-12 text-center text-xs font-bold text-zinc-500">QTY</span>
-          <span className="w-16 text-right text-xs font-bold text-zinc-500">HARGA</span>
-          <span className="w-20 text-right text-xs font-bold text-zinc-500">SUBTOTAL</span>
-        </div>
-        <div className="border-t border-dashed border-zinc-300" />
-
-        {/* Items */}
-        <div className="space-y-2 py-2">
-          {cart.map((item) => (
-            <div key={item.product.id} className="space-y-0.5">
-              <p className="font-semibold text-xs">{item.product.name}</p>
-              <div className="flex items-center">
-                <span className="flex-1 text-[11px] text-zinc-600">{formatCurrency(item.product.price)}/pcs</span>
-                <span className="w-12 text-center text-[11px] font-bold">{item.qty}</span>
-                <span className="w-16 text-right text-[11px] text-zinc-600">{formatCurrency(item.product.price)}</span>
-                <span className="w-20 text-right text-xs font-bold">{formatCurrency(item.product.price * item.qty)}</span>
+        <div className="space-y-1.5 py-2">
+          {cart.map((item, idx) => (
+            <div key={`${item.product.id}-${item.variantId || ''}-${idx}`} className="space-y-0.5">
+              <p className="font-medium text-[11px]">{item.variantName ? `${item.product.name} - ${item.variantName}` : item.product.name}</p>
+              <div className="flex text-[11px] text-zinc-600">
+                <span>{item.qty} x {formatCurrency(item.variantPrice || item.product.price)}</span>
+                <span className="font-medium text-zinc-900">{formatCurrency((item.variantPrice || item.product.price) * item.qty)}</span>
               </div>
             </div>
           ))}
@@ -1286,31 +1401,27 @@ export default function PosPage() {
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        {/* Totals */}
-        <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-500">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
-          {pointsDiscount > 0 && <div className="flex text-emerald-600"><span className="font-medium">Poin Diskon</span><span className="font-bold">-{formatCurrency(pointsDiscount)}</span></div>}
-          {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="font-medium">Promo: {selectedPromo.name}</span><span className="font-bold">-{formatCurrency(promoDiscount)}</span></div>}
-          {ppnAmount > 0 && <div className="flex"><span className="text-zinc-500">PPN ({settings.ppnRate}%)</span><span className="font-medium">+{formatCurrency(ppnAmount)}</span></div>}
+        <div className="space-y-0.5 py-2">
+          <div className="flex"><span className="text-zinc-500">Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+          {pointsDiscount > 0 && <div className="flex text-emerald-600"><span>Poin Diskon</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+          {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span><span>-{formatCurrency(promoDiscount)}</span></div>}
           <div className="border-t border-dashed border-zinc-300 my-2" />
-          <div className="flex text-base font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
+          <div className="flex text-sm font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
         </div>
 
         <div className="border-t border-dashed border-zinc-300 my-2" />
 
-        {/* Payment */}
-        <div className="space-y-1 py-2">
+        <div className="space-y-0.5 py-2">
           <div className="flex"><span className="text-zinc-500">Pembayaran</span><span className="font-bold uppercase">{paymentMethod}</span></div>
-          <div className="flex"><span className="text-zinc-500">Dibayar</span><span className="font-medium">{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
+          <div className="flex"><span className="text-zinc-500">Dibayar</span><span>{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
           {paymentMethod === 'CASH' && change > 0 && <div className="flex font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>}
         </div>
 
-        {/* Footer */}
         {settings.receiptFooter && (
           <>
             <div className="border-t border-dashed border-zinc-300 my-2" />
-            <div className="text-center py-3">
-              <p className="text-xs text-zinc-400">{settings.receiptFooter}</p>
+            <div className="text-center py-2">
+              <p className="text-[11px] text-zinc-400">{settings.receiptFooter}</p>
             </div>
           </>
         )}
@@ -1525,7 +1636,21 @@ export default function PosPage() {
               </div>
               Keranjang
               {cart.length > 0 && (
-                <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)}</span>
+                <span className="bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)}</span>
+              )}
+              {selectedCustomer && (
+                <div className="ml-auto flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <User className="h-3 w-3 text-emerald-400" />
+                    <span className="text-[11px] text-emerald-300 font-semibold max-w-[100px] truncate">{selectedCustomer.name}</span>
+                  </div>
+                  {selectedCustomer.points > 0 && (
+                    <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px] rounded-lg px-1.5 py-0">
+                      <Coins className="mr-0.5 h-2.5 w-2.5" />
+                      {selectedCustomer.points}
+                    </Badge>
+                  )}
+                </div>
               )}
             </h2>
           </div>
@@ -1555,22 +1680,23 @@ export default function PosPage() {
                         onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
                       {editingQtyId === item.product.id ? (
                         <input
-                          ref={qtyInputRef}
                           type="number"
-                          min="0"
+                          min="1"
                           max={item.product.stock}
-                          value={editingQtyValue}
-                          onChange={(e) => setEditingQtyValue(e.target.value)}
-                          onBlur={confirmEditQty}
-                          onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
-                          className="text-xs text-zinc-200 w-10 text-center font-bold bg-zinc-700 border border-zinc-600 rounded-md h-8 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          value={item.qty}
+                          onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
+                          onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
+                          onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                          autoFocus
+                          className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-md h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       ) : (
-                        <span
-                          className="text-xs text-zinc-200 w-6 text-center font-bold cursor-pointer hover:text-emerald-400 transition-colors"
-                          onClick={() => startEditQty(item.product.id, item.qty)}
-                          title="Klik untuk edit qty"
-                        >{item.qty}</span>
+                        <button
+                          onClick={() => setEditingQtyId(item.product.id)}
+                          className="text-xs text-zinc-200 w-6 text-center font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
+                        >
+                          {item.qty}
+                        </button>
                       )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
                         onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
@@ -1604,12 +1730,6 @@ export default function PosPage() {
                     Promo: {selectedPromo.name}
                   </span>
                   <span>-{formatCurrency(promoDiscount)}</span>
-                </div>
-              )}
-              {ppnAmount > 0 && (
-                <div className="flex justify-between text-zinc-400 text-xs">
-                  <span>PPN ({settings.ppnRate}%)</span>
-                  <span>+{formatCurrency(ppnAmount)}</span>
                 </div>
               )}
               <Separator className="bg-zinc-800" />
@@ -1689,251 +1809,255 @@ export default function PosPage() {
             value={productSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={handleSearchKeyDown}
-            className="pl-10 h-11 text-sm bg-zinc-900/80 border-zinc-800 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
+            className="pl-10 h-11 text-sm bg-zinc-800/60 backdrop-blur-xl border border-zinc-700/50 ring-1 ring-inset ring-zinc-700/50 text-zinc-100 placeholder:text-zinc-500 rounded-xl"
           />
         </div>
+        {/* Mobile Customer Indicator */}
+        {selectedCustomer && (
+          <div className="flex items-center justify-between mb-3 px-1">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <User className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs text-emerald-300 font-semibold">{selectedCustomer.name}</span>
+              {selectedCustomer.points > 0 && (
+                <span className="text-[10px] text-amber-400 font-medium flex items-center gap-0.5">
+                  <Coins className="h-2.5 w-2.5" />{selectedCustomer.points} poin
+                </span>
+              )}
+            </div>
+            <button onClick={() => { setSelectedCustomer(null); setCustomerSearch(''); setPointsToUse(0) }}
+              className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         {renderCategoryChips()}
         <div className="grid grid-cols-2 gap-2.5 pb-24">{renderProductGrid()}</div>
         {renderPagination()}
 
-        {/* Floating Cart Button */}
-        {cart.length > 0 && (
-          <button
+        {/* Floating Cart Button — Mobile only */}
+        {isMobile && cart.length > 0 && !checkoutOpen && !receiptOpen && (
+          <motion.button
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            whileTap={{ scale: 0.9 }}
             onClick={() => setMobileCartOpen(true)}
-            className="fixed bottom-20 right-4 z-40 flex items-center gap-2.5 h-14 pl-4 pr-5 rounded-2xl bg-emerald-500 text-white font-bold text-sm shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 active:scale-95 transition-all duration-150"
+            className="fixed bottom-20 right-4 z-40 flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 active:scale-95 transition-transform"
           >
-            <ShoppingCart className="h-5 w-5" />
-            <span className="flex flex-col items-start leading-tight">
-              <span className="text-[10px] font-medium text-emerald-100">{cart.reduce((s, i) => s + i.qty, 0)} item{ppnAmount > 0 && <span className="text-emerald-200/70 ml-1">+PPN</span>}</span>
-              <span className="text-sm">{formatCurrency(total)}</span>
-            </span>
-          </button>
+            <ShoppingCart className="h-4 w-4" />
+            <div className="text-left">
+              {selectedCustomer && <p className="text-[9px] font-medium opacity-80 max-w-[100px] truncate">{selectedCustomer.name}</p>}
+              <p className="text-[10px] font-medium opacity-90">{cart.reduce((s, i) => s + i.qty, 0)} item</p>
+              <p className="text-xs font-bold">{formatCurrency(total)}</p>
+            </div>
+          </motion.button>
         )}
       </div>
 
-      {/* ── Mobile Cart Sheet ── */}
+      {/* Mobile Cart Sheet */}
       <Sheet open={mobileCartOpen} onOpenChange={(open) => { if (!open) setMobileCartOpen(false) }}>
-        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl h-[85vh] max-h-[85vh] overflow-hidden flex flex-col px-0 gap-0">
+        <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl max-h-[92vh] flex flex-col px-0">
           {/* Drag handle */}
-          <div className="flex justify-center pt-3 pb-1 shrink-0">
+          <div className="flex justify-center pt-3 pb-1">
             <div className="w-10 h-1 rounded-full bg-zinc-700" />
           </div>
-          <SheetHeader className="px-5 pb-3 shrink-0">
+          <SheetHeader className="px-5 pb-2">
             <SheetTitle className="text-zinc-100 text-base font-bold flex items-center gap-2">
               <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
                 <ShoppingCart className="h-4 w-4 text-emerald-400" />
               </div>
               Keranjang
               {cart.length > 0 && (
-                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
+                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
               )}
             </SheetTitle>
           </SheetHeader>
 
-          {/* Customer selector */}
-          <div className="shrink-0 px-5 pb-3">{renderCustomerSelector(true)}</div>
+          <ScrollArea className="flex-1 px-5">
+            <div className="space-y-4 pb-4">
+              {renderCustomerSelector(true)}
 
-          {/* Scrollable items */}
-          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5">
-            {cart.length === 0 ? (
-              <div className="text-center py-10">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
-                  <ShoppingCart className="h-7 w-7 text-zinc-700" />
-                </div>
-                <p className="text-zinc-500 text-sm">Keranjang kosong</p>
-                <p className="text-zinc-600 text-xs mt-1">Pilih produk untuk memulai</p>
-              </div>
-            ) : (
-              <div className="space-y-2 pb-2">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-2.5 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-zinc-200 font-medium truncate">{item.product.name}</p>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors active:scale-95"
-                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                      {editingQtyId === item.product.id ? (
-                        <input
-                          ref={qtyInputRef}
-                          type="number"
-                          min="0"
-                          max={item.product.stock}
-                          value={editingQtyValue}
-                          onChange={(e) => setEditingQtyValue(e.target.value)}
-                          onBlur={confirmEditQty}
-                          onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
-                          className="text-xs text-zinc-200 w-12 text-center font-bold bg-zinc-700 border border-zinc-600 rounded-lg h-8 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
-                      ) : (
-                        <span
-                          className="text-xs w-7 text-center text-zinc-200 font-bold cursor-pointer hover:text-emerald-400 transition-colors"
-                          onClick={() => startEditQty(item.product.id, item.qty)}
-                        >{item.qty}</span>
-                      )}
-                      <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors active:scale-95"
-                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
-                    </div>
-                    <div className="text-right shrink-0 min-w-[70px]">
-                      <p className="text-[13px] text-emerald-400 font-bold">{formatCurrency(item.product.price * item.qty)}</p>
-                    </div>
-                    <button className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-                      onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3 w-3" /></button>
+              {/* Cart Items */}
+              {cart.length === 0 ? (
+                <div className="text-center py-10">
+                  <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3">
+                    <ShoppingCart className="h-7 w-7 text-zinc-700" />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Sticky footer: Total + Bayar */}
-          {cart.length > 0 && (
-            <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              {/* Discount info (compact) */}
-              {(pointsDiscount > 0 || promoDiscount > 0 || ppnAmount > 0) && (
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2 text-[11px]">
-                  {pointsDiscount > 0 && <span className="text-emerald-400">💰 Poin: -{formatCurrency(pointsDiscount)}</span>}
-                  {promoDiscount > 0 && selectedPromo && <span className="text-amber-400">🏷️ {selectedPromo.name}: -{formatCurrency(promoDiscount)}</span>}
-                  {ppnAmount > 0 && <span className="text-sky-300 font-medium">🧾 PPN: +{formatCurrency(ppnAmount)}</span>}
+                  <p className="text-zinc-500 text-sm">Keranjang kosong</p>
+                  <p className="text-zinc-600 text-xs mt-1">Pilih produk untuk memulai</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {cart.map((item) => (
+                    <div key={item.product.id} className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-zinc-200 font-medium truncate">{item.product.name}</p>
+                        <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)} × {item.qty}</p>
+                      </div>
+                      <div className="flex items-center gap-0.5">
+                        <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
+                          onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
+                        {editingQtyId === item.product.id ? (
+                          <input
+                            type="number"
+                            min="1"
+                            max={item.product.stock}
+                            value={item.qty}
+                            onChange={(e) => handleQtyInputChange(item.product.id, e.target.value)}
+                            onBlur={(e) => handleQtyInputBlur(item.product.id, e.target.value)}
+                            onKeyDown={(e) => handleQtyInputKeyDown(e, item.product.id, (e.target as HTMLInputElement).value)}
+                            autoFocus
+                            className="w-10 text-center text-xs font-bold text-zinc-200 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => setEditingQtyId(item.product.id)}
+                            className="text-xs w-7 text-center text-zinc-200 font-bold hover:text-emerald-400 transition-colors focus:outline-none cursor-pointer"
+                          >
+                            {item.qty}
+                          </button>
+                        )}
+                        <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors"
+                          onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
+                      </div>
+                      <p className="text-xs text-emerald-400 font-bold min-w-[72px] text-right">{formatCurrency(item.product.price * item.qty)}</p>
+                      <button className="h-8 w-8 flex items-center justify-center rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></button>
+                    </div>
+                  ))}
                 </div>
               )}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] text-zinc-500 leading-tight">Total</p>
-                  <p className="text-xl font-black text-zinc-100 leading-tight">{formatCurrency(total)}</p>
+
+              {/* Mobile Summary */}
+              {cart.length > 0 && (
+                <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-4 space-y-3">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span className="text-zinc-200">{formatCurrency(subtotal)}</span></div>
+                    {settings.loyaltyEnabled && selectedCustomer && maxPointsToUse > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-400 text-[11px] flex items-center gap-1"><Coins className="h-3 w-3" /> Pakai Poin</span>
+                        <Input type="number" min="0" max={maxPointsToUse} value={pointsToUse || ''} onChange={(e) => handlePointsChange(e.target.value)}
+                          placeholder="0" className="w-20 h-8 text-right text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg" />
+                      </div>
+                    )}
+                    {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400 text-[11px]"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
+                    {promoDiscount > 0 && selectedPromo && (
+                      <div className="flex justify-between text-amber-400 text-[11px]">
+                        <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
+                        <span>-{formatCurrency(promoDiscount)}</span>
+                      </div>
+                    )}
+                    <Separator className="bg-zinc-800" />
+                    <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] text-zinc-500 font-medium tracking-wide uppercase mb-2 block">Metode Pembayaran</Label>
+                    {renderPaymentButtons(true)}
+                  </div>
+
+                  {paymentMethod === 'CASH' && (
+                    <div className="space-y-2">
+                      <Label className="text-[11px] text-zinc-400 font-medium">Jumlah Bayar</Label>
+                      <Input type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="0"
+                        className="h-11 text-sm bg-zinc-800/50 border-zinc-700/60 text-zinc-100 placeholder:text-zinc-600 rounded-xl text-right font-semibold" />
+                      {Number(paidAmount) >= total && total > 0 && (
+                        <div className="flex justify-between text-xs text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 rounded-xl px-3 py-2">
+                          <span>Kembalian</span><span className="font-bold">{formatCurrency(change)}</span>
+                        </div>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {getQuickNominals.map((nom) => (
+                          <button key={nom} onClick={() => setPaidAmount(String(nom))}
+                            className={cn(
+                              'px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-medium border transition-all',
+                              Number(paidAmount) === nom
+                                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-sm'
+                                : 'bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600'
+                            )}>
+                            {nom >= 1000 ? `${nom / 1000}K` : nom}
+                          </button>
+                        ))}
+                        {total > 0 && (
+                          <button onClick={() => setPaidAmount(String(Math.ceil(total / 1000) * 1000))}
+                            className="px-3 py-2 min-h-[36px] rounded-xl text-[11px] font-medium border bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:border-zinc-600 transition-all">
+                            Uang Pas
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <Button onClick={openCheckoutDialog}
-                  className="h-12 px-8 font-bold text-sm rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98] shrink-0">
-                  Bayar <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
-              </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          {/* Sticky checkout footer */}
+          {cart.length > 0 && (
+            <div className="border-t border-zinc-800 bg-zinc-950 px-5 pt-3 pb-5 -mx-6">
+              <Button onClick={openCheckoutDialog} disabled={cart.length === 0}
+                className={`w-full h-12 font-bold text-sm rounded-2xl transition-all ${
+                  cart.length > 0
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
+                    : 'bg-zinc-800 text-zinc-500'
+                }`}>
+                <Check className="mr-2 h-4 w-4" /> Proses Pembayaran
+              </Button>
             </div>
           )}
         </SheetContent>
       </Sheet>
 
-      {/* ── Mobile Checkout Sheet (Payment Flow) ── */}
+      {/* Checkout Confirmation — Sheet on mobile, Dialog on desktop */}
       {isMobile ? (
         <Sheet open={checkoutOpen} onOpenChange={(open) => { if (!open) setCheckoutOpen(false) }}>
-          <SheetContent side="bottom" className="bg-zinc-950 border-zinc-800 rounded-t-3xl h-[92vh] max-h-[92vh] overflow-hidden flex flex-col px-0 gap-0">
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-10 h-1 rounded-full bg-zinc-700" />
-            </div>
-            <SheetHeader className="px-5 pb-3 shrink-0">
-              <SheetTitle className="text-zinc-100 text-base font-bold flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                  <Banknote className="h-4 w-4 text-emerald-400" />
-                </div>
-                Pembayaran
-                <span className="ml-auto text-[11px] font-medium text-zinc-500 bg-zinc-800 px-2.5 py-0.5 rounded-full">{cart.reduce((s, i) => s + i.qty, 0)} item</span>
-              </SheetTitle>
+          <SheetContent side="bottom" className="bg-zinc-900 border-zinc-800 rounded-t-2xl max-h-[85vh] px-4">
+            <SheetHeader className="pb-2">
+              <SheetTitle className="text-zinc-100 text-sm font-bold">Konfirmasi Pembayaran</SheetTitle>
             </SheetHeader>
-
-            {/* Scrollable content */}
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 space-y-4 pb-2">
-              {/* Order summary */}
-              <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-3.5">
-                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wide mb-2">Ringkasan Pesanan</p>
-                <div className="space-y-1.5 text-xs">
+            <ScrollArea className="flex-1 -mx-4 px-4">
+              <div className="space-y-3 py-1">
+                <div className="space-y-1 text-xs">
                   {cart.map((item) => (
-                    <div key={item.product.id} className="flex justify-between text-zinc-300">
-                      <span className="truncate mr-2">{item.product.name} <span className="text-zinc-500">×{item.qty}</span></span>
-                      <span className="font-medium shrink-0">{formatCurrency(item.product.price * item.qty)}</span>
+                    <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
+                      <span>{item.product.name} × {item.qty}</span>
+                      <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
                     </div>
                   ))}
-                  <Separator className="bg-zinc-800 !my-2" />
-                  <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span className="text-zinc-200">{formatCurrency(subtotal)}</span></div>
-                  {settings.loyaltyEnabled && selectedCustomer && maxPointsToUse > 0 && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-zinc-400 flex items-center gap-1 shrink-0"><Coins className="h-3 w-3" /> Pakai Poin</span>
-                      <Input type="number" min="0" max={maxPointsToUse} value={pointsToUse || ''} onChange={(e) => handlePointsChange(e.target.value)}
-                        placeholder="0" className="w-24 h-8 text-right text-xs bg-zinc-800 border-zinc-700 text-zinc-100 rounded-lg" />
-                    </div>
-                  )}
+                  <Separator className="bg-zinc-800 my-1.5" />
+                  <div className="flex justify-between text-zinc-400"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
                   {pointsDiscount > 0 && <div className="flex justify-between text-emerald-400"><span>Diskon Poin</span><span>-{formatCurrency(pointsDiscount)}</span></div>}
                   {promoDiscount > 0 && selectedPromo && (
-                    <div className="flex justify-between text-amber-400">
-                      <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> {selectedPromo.name}</span>
+                    <div className="flex justify-between text-amber-400 text-xs">
+                      <span className="flex items-center gap-1"><Tag className="h-3 w-3" /> Promo: {selectedPromo.name}</span>
                       <span>-{formatCurrency(promoDiscount)}</span>
                     </div>
                   )}
-                  {ppnAmount > 0 && <div className="flex justify-between text-sky-300 font-medium"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
-                  <Separator className="bg-zinc-800 !my-2" />
-                  <div className="flex justify-between text-base font-black text-zinc-100"><span>Total</span><span>{formatCurrency(total)}</span></div>
+                  <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
                 </div>
-                {selectedCustomer && (
-                  <div className="mt-2 pt-2 border-t border-zinc-800/60 text-[11px] text-zinc-500">
-                    👤 {selectedCustomer.name}
-                  </div>
-                )}
-              </div>
 
-              {/* Payment method */}
-              <div>
-                <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wide mb-2">Metode Pembayaran</p>
-                {renderPaymentButtons(false)}
-              </div>
+                <Separator className="bg-zinc-800" />
 
-              {/* Cash payment section */}
-              {paymentMethod === 'CASH' && (
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-[11px] text-zinc-500 font-medium mb-1.5">Jumlah Bayar</p>
-                    <Input type="number" min="0" value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} placeholder="Masukkan jumlah"
-                      className="h-12 text-base bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 rounded-xl text-right font-bold" />
-                  </div>
-                  {Number(paidAmount) >= total && total > 0 && (
-                    <div className="flex justify-between items-center text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
-                      <span className="text-emerald-400 font-medium">Kembalian</span>
-                      <span className="text-emerald-400 font-black text-lg">{formatCurrency(change)}</span>
-                    </div>
+                <div className="text-xs space-y-1">
+                  <div className="flex justify-between text-zinc-400"><span>Metode</span><span className="text-zinc-200 font-medium uppercase">{paymentMethod}</span></div>
+                  {paymentMethod === 'CASH' && (
+                    <>
+                      <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(Number(paidAmount))}</span></div>
+                      <div className="flex justify-between text-emerald-400 font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>
+                    </>
                   )}
-                  <div>
-                    <p className="text-[11px] text-zinc-500 font-medium mb-2">Nominal Cepat</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {getQuickNominals.map((nom) => (
-                        <button key={nom} onClick={() => setPaidAmount(String(nom))}
-                          className={cn(
-                            'py-3 rounded-xl text-sm font-bold border transition-all active:scale-95',
-                            Number(paidAmount) === nom
-                              ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-sm'
-                              : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-700 active:bg-zinc-800'
-                          )}>
-                          {nom >= 1000 ? `${(nom / 1000)}K` : nom}
-                        </button>
-                      ))}
-                      {total > 0 && (
-                        <button onClick={() => setPaidAmount(String(Math.ceil(total / 1000) * 1000))}
-                          className="py-3 rounded-xl text-sm font-bold border bg-zinc-900 border-zinc-800 text-amber-400 hover:border-amber-500/30 transition-all active:scale-95">
-                          Uang Pas
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT') && (
+                    <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(total)}</span></div>
+                  )}
                 </div>
-              )}
 
-              {/* Non-cash info */}
-              {paymentMethod !== 'CASH' && (
-                <div className="bg-zinc-900 border border-zinc-800/60 rounded-2xl p-4 text-center">
-                  <p className="text-xs text-zinc-400">Pembayaran <span className="font-bold text-zinc-200 uppercase">{paymentMethod}</span></p>
-                  <p className="text-2xl font-black text-zinc-100 mt-1">{formatCurrency(total)}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Sticky confirm footer */}
-            <SheetFooter className="shrink-0 flex-row gap-2 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-5 border-t border-zinc-800">
-              <Button variant="ghost" onClick={() => setCheckoutOpen(false)}
-                className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 text-sm font-medium rounded-2xl h-12">
-                Kembali
-              </Button>
-              <Button onClick={handleCheckout}
-                disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
-                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold h-12 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]">
-                {checkingOut && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {checkingOut ? 'Memproses...' : `Konfirmasi ${formatCurrency(total)}`}
+                <p className="text-[11px] text-zinc-500">Customer: {selectedCustomer ? selectedCustomer.name : 'Walk-in'}</p>
+              </div>
+            </ScrollArea>
+            <SheetFooter className="flex-row gap-2 pt-1 pb-2 -mx-4 px-4">
+              <Button variant="ghost" onClick={() => setCheckoutOpen(false)} className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl h-11">Batal</Button>
+              <Button onClick={handleCheckout} disabled={checkingOut || (paymentMethod === 'CASH' && Number(paidAmount) < total)}
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs rounded-xl font-bold h-11">
+                {checkingOut && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Konfirmasi
               </Button>
             </SheetFooter>
           </SheetContent>
@@ -1961,7 +2085,6 @@ export default function PosPage() {
                     <span>-{formatCurrency(promoDiscount)}</span>
                   </div>
                 )}
-                {ppnAmount > 0 && <div className="flex justify-between text-sky-300 text-xs font-medium"><span>PPN ({settings.ppnRate}%)</span><span>+{formatCurrency(ppnAmount)}</span></div>}
                 <div className="flex justify-between text-sm font-black text-zinc-100 pt-0.5"><span>Total</span><span>{formatCurrency(total)}</span></div>
               </div>
 
@@ -2025,11 +2148,9 @@ export default function PosPage() {
                     </div>
                   )}
 
-                  {/* Receipt content — thermal preview */}
-                  <div className="bg-white border border-zinc-200 rounded-lg shadow-inner mx-auto max-w-[300px] p-4">
-                    <div className="font-mono text-xs" style={{ fontWeight: 600 }}>
-                      {renderReceiptContent()}
-                    </div>
+                  {/* Receipt content */}
+                  <div className="font-mono text-xs">
+                    {renderReceiptContent()}
                   </div>
                 </div>
               </ScrollArea>
@@ -2077,6 +2198,81 @@ export default function PosPage() {
               {addingCustomer && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />} Simpan
             </Button>
           </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
+
+      {/* Variant Picker Dialog */}
+      <ResponsiveDialog open={variantPickerOpen} onOpenChange={(open) => { setVariantPickerOpen(open); if (!open) { setVariantPickerProduct(null); setVariantPickerVariants([]) }}}>
+        <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-md">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+              <Layers className="h-4 w-4 text-violet-400" />
+              Pilih Varian — {variantPickerProduct?.name}
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-xs text-zinc-500">
+              Pilih varian untuk menambahkan ke keranjang
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="py-2">
+            {variantPickerLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 text-zinc-500 animate-spin" />
+              </div>
+            ) : variantPickerVariants.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
+                <p className="text-xs text-zinc-500">Belum ada varian tersedia</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {variantPickerVariants.map((variant) => {
+                  const cartItem = cart.find((i) => i.variantId === variant.id)
+                  const outOfStock = variant.stock <= 0
+                  return (
+                    <button
+                      key={variant.id}
+                      disabled={outOfStock}
+                      onClick={() => {
+                        if (variantPickerProduct) {
+                          addToCartWithVariant(variantPickerProduct, variant)
+                          toast.success(`${variantPickerProduct.name} - ${variant.name} ditambahkan`)
+                        }
+                      }}
+                      className={cn(
+                        'w-full flex items-center justify-between p-3 rounded-xl border transition-all',
+                        outOfStock
+                          ? 'opacity-40 cursor-not-allowed bg-zinc-900/30 border-zinc-800/40'
+                          : cartItem
+                          ? 'bg-violet-500/10 border-violet-500/30 ring-1 ring-inset ring-violet-500/30'
+                          : 'bg-zinc-800/40 border-zinc-700/60 hover:border-zinc-600 hover:bg-zinc-800/60 active:scale-[0.98]'
+                      )}
+                    >
+                      <div className="text-left">
+                        <p className="text-xs font-medium text-zinc-200">{variant.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-zinc-500">{variant.sku || ''}</span>
+                          <span className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                            variant.stock <= variant.lowStockAlert && variant.stock > 0
+                              ? 'bg-amber-500/10 text-amber-400'
+                              : 'bg-zinc-800/80 text-zinc-500'
+                          )}>
+                            Stock: {variant.stock}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-emerald-400">{formatCurrency(variant.price)}</p>
+                        {cartItem && (
+                          <p className="text-[10px] text-violet-400 font-medium">x{cartItem.qty}</p>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
     </div>

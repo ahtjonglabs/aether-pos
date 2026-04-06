@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -20,15 +20,16 @@ model Outlet {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users           User[]
-  products        Product[]
-  customers       Customer[]
-  categories      Category[]
-  transactions    Transaction[]
-  auditLogs       AuditLog[]
-  setting         OutletSetting?
-  promos          Promo[]
-  crewPermissions CrewPermission[]
+  users             User[]
+  products          Product[]
+  productVariants   ProductVariant[]
+  customers         Customer[]
+  categories        Category[]
+  transactions      Transaction[]
+  auditLogs         AuditLog[]
+  setting           OutletSetting?
+  promos            Promo[]
+  crewPermissions   CrewPermission[]
 }
 
 // ==================== USER ====================
@@ -84,11 +85,33 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  outlet           Outlet         @relation(fields: [outletId], references: [id])
-  category        Category?      @relation(fields: [categoryId], references: [id])
+  hasVariants      Boolean         @default(false)
+  outlet           Outlet           @relation(fields: [outletId], references: [id])
+  category        Category?        @relation(fields: [categoryId], references: [id])
   transactionItems TransactionItem[]
+  variants         ProductVariant[]
 
   @@unique([name, outletId])
+}
+
+// ==================== PRODUCT VARIANT ====================
+model ProductVariant {
+  id            String   @id @default(cuid())
+  name          String                     // e.g., "S", "M", "L", "XL" or "Merah", "Biru"
+  sku           String?
+  price         Float                      // Selling price for this variant
+  hpp           Float    @default(0)       // Cost price for this variant
+  stock         Int      @default(0)       // Stock for this variant
+  lowStockAlert Int      @default(10)
+  productId     String
+  outletId      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  outlet  Outlet  @relation(fields: [outletId], references: [id])
+
+  @@unique([name, productId])  // Variant name must be unique per product
 }
 
 // ==================== CUSTOMER ====================
@@ -116,7 +139,6 @@ model Transaction {
   subtotal      Float
   discount      Float    @default(0)
   pointsUsed    Int      @default(0)
-  taxAmount     Float    @default(0)    // PPN / tax amount
   total         Float
   paymentMethod String               // CASH, QRIS, DEBIT
   paidAmount    Float    @default(0)
@@ -137,15 +159,17 @@ model Transaction {
 // ==================== TRANSACTION ITEM ====================
 model TransactionItem {
   id             String      @id @default(cuid())
-  productId      String?
+  productId      String
   productName    String
+  variantId      String?
+  variantName    String?
   price          Float
   qty            Int
   subtotal       Float
   hpp            Float
   transactionId  String
 
-  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product     Product     @relation(fields: [productId], references: [id])
   transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 }
 
@@ -197,10 +221,6 @@ model OutletSetting {
   receiptPhone        String @default("")
   receiptFooter       String @default("Terima kasih atas kunjungan Anda!")
   receiptLogo         String @default("")
-
-  // PPN / Tax
-  ppnEnabled      Boolean @default(false)  // Enable PPN tax
-  ppnRate         Float   @default(11)     // PPN percentage (default 11% for Indonesia)
 
   // Theme
   themePrimaryColor String @default("emerald") // tailwind color name: emerald, blue, violet, rose, amber
