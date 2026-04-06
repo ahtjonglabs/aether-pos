@@ -12,6 +12,15 @@ import type { EntityTable } from 'dexie'
 // Types
 // ============================================================
 
+export interface CachedProductVariant {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  hpp: number
+  stock: number
+}
+
 export interface CachedProduct {
   id: string
   name: string
@@ -27,6 +36,7 @@ export interface CachedProduct {
   categoryId: string | null
   hasVariants: boolean
   _variantCount: number
+  variants: CachedProductVariant[]
   updatedAt: string
 }
 

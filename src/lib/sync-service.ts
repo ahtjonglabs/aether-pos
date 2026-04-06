@@ -68,6 +68,14 @@ export async function syncProductsFromServer(): Promise<SyncResultBase & { count
           categoryId: (p.categoryId as string) || null,
           hasVariants: !!(p.hasVariants) as boolean,
           _variantCount: Number(p._variantCount) || 0,
+          variants: Array.isArray(p.variants) ? p.variants.map((v: Record<string, unknown>) => ({
+            id: v.id as string,
+            name: v.name as string,
+            sku: (v.sku as string) || null,
+            price: Number(v.price) || 0,
+            hpp: Number(v.hpp) || 0,
+            stock: Number(v.stock) || 0,
+          })) : [],
           updatedAt: p.updatedAt || new Date().toISOString(),
         })
       )
