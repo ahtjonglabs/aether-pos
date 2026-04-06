@@ -66,6 +66,8 @@ export async function syncProductsFromServer(): Promise<SyncResultBase & { count
           lowStockAlert: Number(p.lowStockAlert) || 10,
           image: (p.image as string) || null,
           categoryId: (p.categoryId as string) || null,
+          hasVariants: !!(p.hasVariants) as boolean,
+          _variantCount: Number(p._variantCount) || 0,
           updatedAt: p.updatedAt || new Date().toISOString(),
         })
       )

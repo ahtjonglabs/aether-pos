@@ -200,6 +200,8 @@ export async function POST(request: NextRequest) {
       const stock = sanitizeNumber(findColumn(row, ['QTY / STOK', 'QTY', 'qty', 'Stok', 'stok', 'Stock', 'stock', 'Quantity', 'Jumlah']))
       const unitRaw = String(findColumn(row, ['SATUAN', 'Satuan', 'satuan', 'Unit', 'unit', 'Sat']) || 'pcs').trim().toLowerCase()
       const categoryRaw = String(findColumn(row, ['KATEGORI', 'Kategori', 'kategori', 'Category', 'category', 'Kat']) || '').trim()
+      const hasVariantsRaw = String(findColumn(row, ['PUNYA VARIAN', 'Punya Varian', 'Has Variants', 'hasVariants', 'Variants', 'Varian']) || '').trim().toLowerCase()
+      const hasVariants = hasVariantsRaw === 'ya' || hasVariantsRaw === 'yes' || hasVariantsRaw === 'true'
 
       // Validate required fields
       if (!name) {
@@ -268,6 +270,7 @@ export async function POST(request: NextRequest) {
           stock,
           unit,
           categoryId,
+          hasVariants,
           outletId,
         },
       })
@@ -285,6 +288,7 @@ export async function POST(request: NextRequest) {
           created,
           skipped,
           errors: errors.length,
+          fileName: file.name,
         }),
         outletId,
         userId,

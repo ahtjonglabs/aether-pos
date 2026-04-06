@@ -7,6 +7,14 @@ import { safeJson, safeJsonCreated, safeJsonError } from '@/lib/safe-response'
 
 type SortOption = 'newest' | 'best-selling' | 'low-stock' | 'most-stock'
 
+interface VariantPayload {
+  name: string
+  sku?: string
+  hpp?: number
+  price: number
+  stock?: number
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
@@ -55,6 +63,7 @@ export async function GET(request: NextRequest) {
           orderBy: { createdAt: 'desc' },
           include: {
             category: { select: { id: true, name: true, color: true } },
+            _count: { select: { variants: true } },
           },
         }),
         db.product.count({ where }),
@@ -67,6 +76,8 @@ export async function GET(request: NextRequest) {
       products = allProducts.slice(skip, skip + limit).map((p) => ({
         ...p,
         _totalSold: soldMap.get(p.id) ?? 0,
+        hasVariants: !!p.hasVariants,
+        _variantCount: p._count.variants,
       }))
     } else {
       let orderBy: Record<string, string> = { createdAt: 'desc' }
@@ -85,12 +96,17 @@ export async function GET(request: NextRequest) {
           take: limit,
           include: {
             category: { select: { id: true, name: true, color: true } },
+            _count: { select: { variants: true } },
           },
         }),
         db.product.count({ where }),
       ])
 
-      products = result
+      products = result.map((p) => ({
+        ...p,
+        hasVariants: !!p.hasVariants,
+        _variantCount: p._count.variants,
+      }))
       total = count
     }
 
@@ -133,7 +149,7 @@ export async function POST(request: NextRequest) {
     const outletId = user.outletId
 
     const body = await request.json()
-    const { name, sku, hpp, price, stock, lowStockAlert, image, categoryId, unit } = body
+    const { name, sku, hpp, price, stock, lowStockAlert, image, categoryId, unit, hasVariants, variants } = body
 
     if (!name || price === undefined || price === null) {
       return safeJsonError('Product name and price are required', 400)
@@ -172,6 +188,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate variants if hasVariants is true
+    const parsedVariants: VariantPayload[] = Array.isArray(variants) ? variants : []
+    if (hasVariants && parsedVariants.length === 0) {
+      return safeJsonError('Setidaknya satu varian diperlukan saat hasVariants bernilai true', 400)
+    }
+
+    // Check for duplicate variant names
+    if (parsedVariants.length > 0) {
+      const variantNames = parsedVariants.map((v) => v.name?.trim().toLowerCase()).filter(Boolean)
+      const uniqueNames = new Set(variantNames)
+      if (uniqueNames.size !== variantNames.length) {
+        return safeJsonError('Nama varian tidak boleh duplikat', 400)
+      }
+    }
+
     const product = await db.$transaction(async (tx) => {
       const newProduct = await tx.product.create({
         data: {
@@ -185,8 +216,24 @@ export async function POST(request: NextRequest) {
           categoryId: categoryId || null,
           unit: unit || 'pcs',
           outletId,
+          hasVariants: !!hasVariants,
         },
       })
+
+      // Create variants if provided
+      if (parsedVariants.length > 0) {
+        await tx.productVariant.createMany({
+          data: parsedVariants.map((v) => ({
+            productId: newProduct.id,
+            name: v.name,
+            sku: v.sku || null,
+            hpp: v.hpp || 0,
+            price: v.price,
+            stock: v.stock || 0,
+            outletId,
+          })),
+        })
+      }
 
       await tx.auditLog.create({
         data: {
@@ -197,6 +244,8 @@ export async function POST(request: NextRequest) {
             name: newProduct.name,
             price: newProduct.price,
             stock: newProduct.stock,
+            hasVariants: !!hasVariants,
+            variantCount: parsedVariants.length,
           }),
           outletId,
           userId,
@@ -206,7 +255,19 @@ export async function POST(request: NextRequest) {
       return newProduct
     })
 
-    return safeJsonCreated(product)
+    // Fetch the created product with variants count
+    const productWithCount = await db.product.findUnique({
+      where: { id: product.id },
+      include: {
+        _count: { select: { variants: true } },
+      },
+    })
+
+    return safeJsonCreated({
+      ...product,
+      hasVariants: !!product.hasVariants,
+      _variantCount: productWithCount?._count?.variants ?? 0,
+    })
   } catch (error) {
     console.error('Products POST error:', error)
     return safeJsonError('Failed to create product')

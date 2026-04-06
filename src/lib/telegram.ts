@@ -114,9 +114,10 @@ function formatTime(date: Date): string {
 
 export interface TransactionNotifyData {
   invoiceNumber: string
-  items: Array<{ productName: string; qty: number; price: number; subtotal: number }>
+  items: Array<{ productName: string; variantName?: string; qty: number; price: number; subtotal: number }>
   subtotal: number
   discount: number
+  taxAmount?: number
   total: number
   paymentMethod: string
   paidAmount: number
@@ -134,7 +135,7 @@ export function formatTransactionMessage(data: TransactionNotifyData): string {
   const itemLines = data.items
     .map(
       (item) =>
-        `  • ${item.productName} × ${item.qty} = ${formatRp(item.subtotal)}`
+        `  • ${item.variantName ? `${item.productName} (${item.variantName})` : item.productName} × ${item.qty} = ${formatRp(item.subtotal)}`
     )
     .join('\n')
 
@@ -149,6 +150,9 @@ export function formatTransactionMessage(data: TransactionNotifyData): string {
     `💰 Subtotal: ${formatRp(data.subtotal)}`,
     data.discount > 0
       ? `🏷️ Diskon: -${formatRp(data.discount)}`
+      : null,
+    data.taxAmount && data.taxAmount > 0
+      ? `🧾 PPN: ${formatRp(data.taxAmount)}`
       : null,
     `✅ <b>Total: ${formatRp(data.total)}</b>`,
     `💳 ${data.paymentMethod} ${data.paidAmount > 0 ? `• Bayar: ${formatRp(data.paidAmount)} • Kembali: ${formatRp(data.change)}` : ''}`,
@@ -331,7 +335,6 @@ export function formatDailySummaryMessage(data: RevenueData & {
       : `✅ Semua stok aman`,
   ].join('\n')
 }
-
 // ============================================================
 // Stock Alert Formatter
 // ============================================================

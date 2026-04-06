@@ -6,8 +6,18 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { ResponsiveDialog, ResponsiveDialogContent, ResponsiveDialogHeader, ResponsiveDialogTitle, ResponsiveDialogDescription, ResponsiveDialogFooter } from '@/components/ui/responsive-dialog'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Layers, Trash2, Plus } from 'lucide-react'
+
+interface ProductVariant {
+  id?: string
+  name: string
+  sku: string
+  hpp: string
+  price: string
+  stock: string
+}
 
 interface Product {
   id: string
@@ -20,6 +30,8 @@ interface Product {
   image: string | null
   categoryId: string | null
   unit: string
+  hasVariants?: boolean
+  variants?: ProductVariant[]
 }
 
 interface Category {
@@ -43,6 +55,8 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
 
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState<Category[]>([])
+  const [hasVariants, setHasVariants] = useState(false)
+  const [variants, setVariants] = useState<ProductVariant[]>([])
   const UNITS = ['pcs', 'ml', 'lt', 'gr', 'kg', 'box', 'pack', 'botol', 'gelas', 'mangkuk', 'porsi', 'bungkus', 'sachet', 'dus', 'rim', 'lembar', 'meter', 'cm', 'ons']
 
   const [form, setForm] = useState({
@@ -80,6 +94,21 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         categoryId: product.categoryId || '',
         unit: product.unit || 'pcs',
       })
+      setHasVariants(!!product.hasVariants)
+      if (product.variants && product.variants.length > 0) {
+        setVariants(product.variants.map((v) => ({
+          id: v.id,
+          name: v.name || '',
+          sku: v.sku || '',
+          hpp: String(v.hpp || 0),
+          price: String(v.price || ''),
+          stock: String(v.stock || 0),
+        })))
+      } else if (product.hasVariants) {
+        setVariants([{ name: '', sku: '', hpp: '', price: '', stock: '' }])
+      } else {
+        setVariants([])
+      }
     } else {
       setForm({
         name: '',
@@ -92,28 +121,91 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
         categoryId: '',
         unit: 'pcs',
       })
+      setHasVariants(false)
+      setVariants([])
     }
   }, [product, open])
 
+  useEffect(() => {
+    if (open && product && product.hasVariants && (!product.variants || product.variants.length === 0)) {
+      fetch(`/api/products/${product.id}/variants`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.variants && data.variants.length > 0) {
+            setVariants(data.variants.map((v: any) => ({
+              id: v.id,
+              name: v.name || '',
+              sku: v.sku || '',
+              hpp: String(v.hpp || 0),
+              price: String(v.price || ''),
+              stock: String(v.stock || 0),
+            })))
+          }
+        })
+        .catch(() => {})
+    }
+  }, [open, product])
+
+  const updateVariant = (index: number, key: keyof ProductVariant, value: string) => {
+    setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, [key]: value } : v)))
+  }
+
+  const addVariant = () => {
+    setVariants((prev) => [...prev, { name: '', sku: '', hpp: '', price: '', stock: '' }])
+  }
+
+  const removeVariant = (index: number) => {
+    setVariants((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.name || !form.price) {
-      toast.error('Product name and price are required')
+    if (!form.name) {
+      toast.error('Product name is required')
+      return
+    }
+    if (hasVariants) {
+      if (variants.length === 0) {
+        toast.error('At least 1 variant is required')
+        return
+      }
+      for (let i = 0; i < variants.length; i++) {
+        if (!variants[i].name) {
+          toast.error(`Variant ${i + 1}: name is required`)
+          return
+        }
+        if (!variants[i].price || Number(variants[i].price) <= 0) {
+          toast.error(`Variant ${i + 1}: price is required`)
+          return
+        }
+      }
+    } else if (!form.price) {
+      toast.error('Product price is required')
       return
     }
 
     setSaving(true)
     try {
-      const body = {
+      const body: Record<string, any> = {
         name: form.name,
         sku: form.sku || null,
         hpp: isOwner ? Number(form.hpp) || 0 : 0,
-        price: Number(form.price),
-        stock: Number(form.stock) || 0,
+        price: hasVariants ? 0 : Number(form.price),
+        stock: hasVariants ? 0 : Number(form.stock) || 0,
         lowStockAlert: Number(form.lowStockAlert) || 10,
         image: form.image || null,
         categoryId: form.categoryId || null,
         unit: form.unit || 'pcs',
+        hasVariants,
+        variants: hasVariants
+          ? variants.map((v) => ({
+              name: v.name,
+              sku: v.sku || null,
+              hpp: Number(v.hpp) || 0,
+              price: Number(v.price),
+              stock: Number(v.stock) || 0,
+            }))
+          : [],
       }
 
       const url = isEdit ? `/api/products/${product.id}` : '/api/products'
@@ -205,7 +297,9 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
           )}
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-zinc-300">Harga Jual *</Label>
+            <Label className="text-xs text-zinc-300">
+              Harga Jual {hasVariants ? '' : '*'}
+            </Label>
             <Input
               type="number"
               min="0"
@@ -213,9 +307,11 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
               value={form.price}
               onChange={(e) => updateField('price', e.target.value)}
               placeholder="0"
-              required
-              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              disabled={hasVariants}
+              required={!hasVariants}
+              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
+            {hasVariants && <p className="text-[10px] text-zinc-500">Managed per variant</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -242,8 +338,10 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
                 value={form.stock}
                 onChange={(e) => updateField('stock', e.target.value)}
                 placeholder="0"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                disabled={hasVariants}
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               />
+              {hasVariants && <p className="text-[10px] text-zinc-500">Per variant</p>}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-zinc-300">Low Stock Alert</Label>
@@ -267,6 +365,130 @@ export default function ProductFormDialog({ open, onOpenChange, product, onSaved
               className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
             />
           </div>
+
+          {/* Variants Section */}
+          <div className="space-y-2 pt-1 border-t border-zinc-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Layers className="h-3.5 w-3.5 text-emerald-400" />
+                <Label className="text-xs text-zinc-300 font-medium">Has Variants</Label>
+              </div>
+              <Switch
+                checked={hasVariants}
+                onCheckedChange={(checked) => {
+                  setHasVariants(checked)
+                  if (checked && variants.length === 0) {
+                    setVariants([{ name: '', sku: '', hpp: '', price: '', stock: '' }])
+                  } else if (!checked) {
+                    setVariants([])
+                  }
+                }}
+              />
+            </div>
+            {hasVariants && (
+              <p className="text-[10px] text-zinc-500 -mt-1">When enabled, price and stock are managed per variant</p>
+            )}
+          </div>
+
+          {hasVariants && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-zinc-300 font-medium flex items-center gap-1.5">
+                  <Layers className="h-3 w-3 text-emerald-400" />
+                  Variants
+                </Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={addVariant}
+                  className="h-6 text-[11px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 px-2"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Variant
+                </Button>
+              </div>
+
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                {variants.map((variant, index) => (
+                  <div key={index} className="bg-zinc-800/60 border border-zinc-700/60 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-zinc-500 font-medium">Variant #{index + 1}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeVariant(index)}
+                        disabled={variants.length <= 1}
+                        className="h-5 w-5 p-0 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Input
+                        value={variant.name}
+                        onChange={(e) => updateVariant(index, 'name', e.target.value)}
+                        placeholder="Variant name *"
+                        className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-8 text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Input
+                        value={variant.sku}
+                        onChange={(e) => updateVariant(index, 'sku', e.target.value)}
+                        placeholder="SKU (optional)"
+                        className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-8 text-xs"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      {isOwner && (
+                        <div className="space-y-1.5">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="any"
+                            value={variant.hpp}
+                            onChange={(e) => updateVariant(index, 'hpp', e.target.value)}
+                            placeholder="HPP"
+                            className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-8 text-xs"
+                          />
+                        </div>
+                      )}
+                      <div className="space-y-1.5">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={variant.price}
+                          onChange={(e) => updateVariant(index, 'price', e.target.value)}
+                          placeholder="Price *"
+                          className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={variant.stock}
+                          onChange={(e) => updateVariant(index, 'stock', e.target.value)}
+                          placeholder="Stock"
+                          className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {variants.length === 0 && (
+                <p className="text-[11px] text-zinc-500 text-center py-2">No variants added. Click &quot;Add Variant&quot; to start.</p>
+              )}
+            </div>
+          )}
 
           <ResponsiveDialogFooter>
             <Button

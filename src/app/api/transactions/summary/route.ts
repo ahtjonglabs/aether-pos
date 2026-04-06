@@ -81,6 +81,7 @@ export async function GET(request: NextRequest) {
         total: true,
         subtotal: true,
         discount: true,
+        taxAmount: true,
         paymentMethod: true,
         createdAt: true,
         items: {
@@ -151,7 +152,7 @@ export async function GET(request: NextRequest) {
         revenue: p.revenue,
       }))
 
-    // Hourly breakdown (transaction count per hour, timezone-aware)
+    // Hourly breakdown (transaction count per hour)
     const hourlyMap = new Map<number, number>()
     for (let h = 0; h < 24; h++) {
       hourlyMap.set(h, 0)

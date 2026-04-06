@@ -55,6 +55,7 @@ import {
   AlertCircle,
   Store,
   Tag,
+  Layers,
 } from 'lucide-react'
 import {
   Select,
@@ -72,6 +73,15 @@ import { usePageStore } from '@/hooks/use-page-store'
 
 // ==================== TYPES ====================
 
+interface ProductVariant {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  hpp: number
+  stock: number
+}
+
 interface Product {
   id: string
   name: string
@@ -81,6 +91,9 @@ interface Product {
   barcode: string | null
   categoryId: string | null
   image: string | null
+  hasVariants: boolean
+  _variantCount: number
+  variants: ProductVariant[]
 }
 
 interface Category {
@@ -98,7 +111,15 @@ interface Customer {
 
 interface CartItem {
   product: Product
+  variant: ProductVariant | null
   qty: number
+}
+
+interface VariantPickerState {
+  product: Product
+  open: boolean
+  variants: ProductVariant[]
+  loading: boolean
 }
 
 interface CheckoutResult {
@@ -349,6 +370,14 @@ export default function PosPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [pointsToUse, setPointsToUse] = useState(0)
 
+  // Variant picker
+  const [variantPicker, setVariantPicker] = useState<VariantPickerState>({
+    product: null as unknown as Product,
+    open: false,
+    variants: [],
+    loading: false,
+  })
+
   // Promo
   const [selectedPromo, setSelectedPromo] = useState<{ id: string; name: string; type: string; discount: number; description: string } | null>(null)
   const [promoDiscount, setPromoDiscount] = useState(0)
@@ -390,17 +419,17 @@ export default function PosPage() {
     const calculatePromo = async () => {
       setPromoLoading(true)
       try {
-        const cartSubtotal = cart.reduce((sum, item) => sum + item.product.price * item.qty, 0)
+        const cartSubtotal = cart.reduce((sum, item) => sum + getItemPrice(item) * item.qty, 0)
         const res = await fetch('/api/promos/calculate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             items: cart.map(item => ({
               productId: item.product.id,
-              productName: item.product.name,
-              price: item.product.price,
+              productName: getItemDisplayName(item),
+              price: getItemPrice(item),
               qty: item.qty,
-              subtotal: item.product.price * item.qty,
+              subtotal: getItemPrice(item) * item.qty,
             })),
             subtotal: cartSubtotal,
           }),
@@ -640,8 +669,11 @@ export default function PosPage() {
     if (e.key === 'Enter' && productSearch.trim()) {
       if (products.length === 1 && !productsLoading) {
         const product = products[0]
-        if (product.stock > 0) {
-          addToCart(product)
+        if ((product as Product).hasVariants) {
+          openVariantPicker(product as Product)
+          setProductSearch('')
+        } else if (product.stock > 0) {
+          addToCart(product as Product)
           setProductSearch('')
           toast.success(`${product.name} ditambahkan`)
         }
@@ -665,34 +697,64 @@ export default function PosPage() {
 
   // ==================== CART LOGIC ====================
 
-  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + item.product.price * item.qty, 0), [cart])
+  // Helper: get effective price for a cart item (variant price if present, otherwise product price)
+  const getItemPrice = (item: CartItem) => item.variant ? item.variant.price : item.product.price
+  // Helper: get effective stock for a cart item
+  const getItemStock = (item: CartItem) => item.variant ? item.variant.stock : item.product.stock
+  // Helper: generate cart key for unique identification
+  const getCartKey = (productId: string, variantId: string | null) => variantId ? `${productId}_${variantId}` : productId
+  // Helper: get item display name
+  const getItemDisplayName = (item: CartItem) => item.variant ? `${item.product.name} - ${item.variant.name}` : item.product.name
+
+  const subtotal = useMemo(() => cart.reduce((sum, item) => sum + getItemPrice(item) * item.qty, 0), [cart])
   const maxPointsToUse = selectedCustomer ? selectedCustomer.points : 0
   const pointsDiscount = pointsToUse * settings.loyaltyPointValue
   const ppnAmount = settings.ppnEnabled ? Math.round(subtotal * settings.ppnRate / 100) : 0
   const total = Math.max(0, subtotal - pointsDiscount - promoDiscount + ppnAmount)
   const change = paymentMethod === 'CASH' ? Math.max(0, Number(paidAmount) - total) : 0
 
-  const addToCart = (product: Product) => {
-    if (product.stock <= 0) return
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id)
-      if (existing) {
-        if (existing.qty >= product.stock) { toast.warning('Stok tidak cukup'); return prev }
-        return prev.map((item) => item.product.id === product.id ? { ...item, qty: item.qty + 1 } : item)
-      }
-      return [...prev, { product, qty: 1 }]
-    })
+  const addToCart = (product: Product, qty: number = 1, variant?: ProductVariant) => {
+    if (variant) {
+      if (variant.stock <= 0) return
+      if (qty <= 0) return
+      const key = getCartKey(product.id, variant.id)
+      setCart((prev) => {
+        const existing = prev.find((item) => getCartKey(item.product.id, item.variant?.id || null) === key)
+        if (existing) {
+          const newQty = existing.qty + qty
+          if (newQty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
+          return prev.map((item) => getCartKey(item.product.id, item.variant?.id || null) === key ? { ...item, qty: newQty } : item)
+        }
+        if (qty > variant.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return [...prev, { product, variant, qty }]
+      })
+    } else {
+      if (product.stock <= 0) return
+      if (qty <= 0) return
+      setCart((prev) => {
+        const existing = prev.find((item) => !item.variant && item.product.id === product.id)
+        if (existing) {
+          const newQty = existing.qty + qty
+          if (newQty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
+          return prev.map((item) => item.product.id === product.id && !item.variant ? { ...item, qty: newQty } : item)
+        }
+        if (qty > product.stock) { toast.warning('Stok tidak cukup'); return prev }
+        return [...prev, { product, variant: null, qty }]
+      })
+    }
   }
 
-  const updateQty = (productId: string, newQty: number) => {
-    if (newQty <= 0) { removeFromCart(productId); return }
-    const item = cart.find((i) => i.product.id === productId)
-    if (item && newQty > item.product.stock) { toast.warning('Stok tidak cukup'); return }
-    setCart((prev) => prev.map((i) => (i.product.id === productId ? { ...i, qty: newQty } : i)))
+  const updateQty = (productId: string, newQty: number, variantId?: string) => {
+    if (newQty <= 0) { removeFromCart(productId, variantId); return }
+    const key = getCartKey(productId, variantId || null)
+    const item = cart.find((i) => getCartKey(i.product.id, i.variant?.id || null) === key)
+    if (item && newQty > getItemStock(item)) { toast.warning('Stok tidak cukup'); return }
+    setCart((prev) => prev.map((i) => (getCartKey(i.product.id, i.variant?.id || null) === key ? { ...i, qty: newQty } : i)))
   }
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((i) => i.product.id !== productId))
+  const removeFromCart = (productId: string, variantId?: string) => {
+    const key = getCartKey(productId, variantId || null)
+    setCart((prev) => prev.filter((i) => getCartKey(i.product.id, i.variant?.id || null) !== key))
   }
 
   const clearCart = () => {
@@ -708,6 +770,32 @@ export default function PosPage() {
 
   const handlePointsChange = (value: string) => {
     setPointsToUse(Math.min(Number(value) || 0, maxPointsToUse))
+  }
+
+  // ==================== VARIANT PICKER ====================
+
+  const openVariantPicker = async (product: Product) => {
+    setVariantPicker({ product, open: true, variants: [], loading: true })
+    try {
+      const res = await fetch(`/api/products/${product.id}/variants`)
+      if (res.ok) {
+        const data = await res.json()
+        setVariantPicker((prev) => ({ ...prev, variants: data || [], loading: false }))
+      } else {
+        setVariantPicker((prev) => ({ ...prev, variants: [], loading: false }))
+        toast.error('Gagal memuat varian')
+      }
+    } catch {
+      setVariantPicker((prev) => ({ ...prev, variants: [], loading: false }))
+      toast.error('Gagal memuat varian')
+    }
+  }
+
+  const handleVariantSelect = (variant: ProductVariant) => {
+    if (variant.stock <= 0) return
+    addToCart(variantPicker.product, 1, variant)
+    setVariantPicker({ product: null as unknown as Product, open: false, variants: [], loading: false })
+    toast.success(`${variantPicker.product.name} - ${variant.name} ditambahkan`)
   }
 
   // ==================== QUICK NOMINAL ====================
@@ -787,9 +875,11 @@ export default function PosPage() {
         items: cart.map((item) => ({
           productId: item.product.id,
           productName: item.product.name,
-          price: item.product.price,
+          price: getItemPrice(item),
           qty: item.qty,
-          subtotal: item.product.price * item.qty,
+          subtotal: getItemPrice(item) * item.qty,
+          variantId: item.variant?.id || null,
+          variantName: item.variant?.name || null,
         })),
         subtotal,
         discount: pointsDiscount + promoDiscount,
@@ -1067,67 +1157,160 @@ export default function PosPage() {
     })
 
     return sortedProducts.map((product) => {
-      const cartItem = cart.find((i) => i.product.id === product.id)
-      const outOfStock = product.stock <= 0
+      // For variant products, check if any variant is in cart
+      const cartItemsForProduct = cart.filter((i) => i.product.id === product.id)
+      const hasCartItems = cartItemsForProduct.length > 0
+      const isVariantProduct = product.hasVariants && product._variantCount > 0
+
+      // For non-variant products, find the single cart item (without variant)
+      const cartItem = !isVariantProduct ? cart.find((i) => i.product.id === product.id && !i.variant) : null
+      const outOfStock = isVariantProduct ? false : product.stock <= 0
       const catColor = product.categoryId && categories.find(c => c.id === product.categoryId)?.color
       const accentColor = catColor ? (CATEGORY_COLORS[catColor] || themeColors) : themeColors
       const lowStock = product.stock > 0 && product.stock <= 5
 
+      // Price display for variant products: show range
+      const displayPrice = isVariantProduct
+        ? (product.variants && product.variants.length > 0
+          ? (() => {
+              const prices = product.variants.map(v => v.price)
+              const min = Math.min(...prices)
+              const max = Math.max(...prices)
+              return min === max ? formatCurrency(min) : `${formatCurrency(min)} - ${formatCurrency(max)}`
+            })()
+          : formatCurrency(product.price))
+        : formatCurrency(product.price)
+
       return (
-        <button
+        <div
           key={product.id}
-          onClick={() => !outOfStock && addToCart(product)}
-          disabled={outOfStock}
           className={cn(
-            'relative group p-3.5 md:p-3 min-h-[80px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200 active:scale-[0.98]',
+            'relative group min-h-[68px] md:min-h-0 rounded-2xl md:rounded-xl border text-left transition-all duration-200',
             outOfStock
-              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30'
-              : cartItem
-              ? `${accentColor.border} ${accentColor.bg} hover:shadow-lg hover:shadow-emerald-500/5 ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
-              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm'
+              ? 'opacity-40 cursor-not-allowed border-zinc-800/40 bg-zinc-900/30 p-2.5 md:p-3'
+              : hasCartItems
+              ? `${accentColor.border} ${accentColor.bg} ring-1 ring-inset ${accentColor.border.replace('border-', 'ring-')}`
+              : 'border-zinc-800/50 bg-zinc-900/60 hover:border-zinc-700/60 hover:bg-zinc-800/50 hover:shadow-lg hover:shadow-black/20 backdrop-blur-sm cursor-pointer active:scale-[0.98]'
           )}
         >
-          {cartItem && (
-            editingQtyId === cartItem.product.id ? (
-              <input
-                ref={qtyInputRef}
-                type="number"
-                min="0"
-                max={cartItem.product.stock}
-                value={editingQtyValue}
-                onChange={(e) => setEditingQtyValue(e.target.value)}
-                onBlur={confirmEditQty}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
-                onClick={(e) => e.stopPropagation()}
-                className="absolute -top-2 -right-2 w-10 h-6 rounded-full bg-emerald-500 text-white text-[11px] font-bold text-center border-2 border-white shadow-lg z-10 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            ) : (
-              <div
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg shadow-emerald-500/30 z-10 cursor-pointer hover:scale-110 active:scale-95 transition-transform"
-                onClick={(e) => { e.stopPropagation(); startEditQty(cartItem.product.id, cartItem.qty) }}
-              >
-                {cartItem.qty}
-              </div>
-            )
+          {/* Product info — clickable area */}
+          {!outOfStock && !hasCartItems && (
+            <button
+              className="absolute inset-0 z-0 rounded-2xl md:rounded-xl"
+              onClick={() => isVariantProduct ? openVariantPicker(product) : addToCart(product)}
+            />
           )}
-          <p className="text-xs font-medium text-zinc-200 truncate mb-1.5 pr-6">{product.name}</p>
-          <p className={`text-sm font-bold ${accentColor.text}`}>{formatCurrency(product.price)}</p>
-          <div className="flex items-center justify-between mt-1.5">
-            {outOfStock ? (
-              <span className="text-[10px] text-red-400 font-medium">Habis</span>
-            ) : (
-              <span className={cn(
-                'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
-                lowStock
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'bg-zinc-800/80 text-zinc-500'
-              )}>
-                <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
-                {product.stock}
-              </span>
+          <div className={cn(
+            'relative z-[1]',
+            hasCartItems ? 'p-2 md:p-2.5' : 'p-2.5 md:p-3'
+          )}>
+            <div className="flex items-start justify-between gap-1 mb-1 md:mb-1.5">
+              <p className="text-[11px] md:text-xs font-medium text-zinc-200 truncate">{product.name}</p>
+              {isVariantProduct && (
+                <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-md font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                  <Layers className="h-2.5 w-2.5" />
+                  {product._variantCount}
+                </span>
+              )}
+            </div>
+            <p className={cn('text-xs md:text-sm font-bold', isVariantProduct ? 'text-violet-400' : accentColor.text)}>{displayPrice}</p>
+            {!hasCartItems && (
+              <div className="flex items-center justify-between mt-1.5">
+                {outOfStock ? (
+                  <span className="text-[10px] text-red-400 font-medium">Habis</span>
+                ) : isVariantProduct ? (
+                  <span className="text-[10px] text-zinc-500 font-medium">Pilih varian</span>
+                ) : (
+                  <span className={cn(
+                    'inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                    lowStock
+                      ? 'bg-amber-500/10 text-amber-400'
+                      : 'bg-zinc-800/80 text-zinc-500'
+                  )}>
+                    <span className={cn('w-1 h-1 rounded-full', lowStock ? 'bg-amber-400' : 'bg-zinc-600')} />
+                    {product.stock}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* In-cart summary for variant products */}
+            {isVariantProduct && hasCartItems && (
+              <div className="mt-2 space-y-1">
+                {cartItemsForProduct.map((ci) => (
+                  <div key={getCartKey(ci.product.id, ci.variant?.id || null)} className="flex items-center justify-between gap-1">
+                    <span className="text-[10px] text-zinc-400 truncate">{ci.variant?.name || ''}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); updateQty(product.id, ci.qty - 1, ci.variant?.id) }}
+                        className="w-5 h-5 rounded bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-400 hover:bg-red-500/20 hover:text-red-400 transition-all"
+                      >
+                        {ci.qty === 1 ? <Trash2 className="h-2 w-2" /> : <Minus className="h-2 w-2" />}
+                      </button>
+                      <span className="text-[10px] font-bold text-zinc-200 w-4 text-center">{ci.qty}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); updateQty(product.id, ci.qty + 1, ci.variant?.id) }}
+                        disabled={ci.qty >= getItemStock(ci)}
+                        className="w-5 h-5 rounded bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-30"
+                      >
+                        <Plus className="h-2 w-2" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  onClick={(e) => { e.stopPropagation(); openVariantPicker(product) }}
+                  className="w-full text-center text-[9px] text-violet-400 hover:text-violet-300 font-medium mt-1 py-0.5 rounded-md hover:bg-violet-500/10 transition-colors"
+                >
+                  + Tambah Varian
+                </button>
+              </div>
+            )}
+
+            {/* In-cart QTY stepper for non-variant products */}
+            {cartItem && (
+              <div className="flex items-center justify-between mt-2 gap-1.5">
+                <button
+                  onClick={(e) => { e.stopPropagation(); updateQty(product.id, cartItem.qty - 1) }}
+                  className="w-7 h-7 rounded-lg bg-zinc-800/80 border border-zinc-700/50 flex items-center justify-center text-zinc-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30 transition-all active:scale-95 shrink-0"
+                >
+                  {cartItem.qty === 1 ? <Trash2 className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                </button>
+                <div className="flex-1 text-center">
+                  {editingQtyId === product.id ? (
+                    <input
+                      type="number"
+                      min="1"
+                      max={product.stock}
+                      value={editingQtyValue}
+                      onChange={(e) => setEditingQtyValue(e.target.value)}
+                      onBlur={() => { confirmEditQty() }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') confirmEditQty(); if (e.key === 'Escape') cancelEditQty() }}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full text-center text-sm font-bold text-zinc-100 bg-zinc-800 border border-emerald-500/40 rounded-lg h-8 outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startEditQty(product.id, cartItem.qty) }}
+                      className="w-full text-center focus:outline-none cursor-pointer group"
+                    >
+                      <span className="text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">{cartItem.qty}</span>
+                      <span className="text-[9px] text-zinc-500 block leading-none">/ {product.stock}</span>
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); addToCart(product) }}
+                  disabled={cartItem.qty >= product.stock}
+                  className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 hover:bg-emerald-500/30 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
             )}
           </div>
-        </button>
+        </div>
       )
     })
   }
@@ -1272,13 +1455,14 @@ export default function PosPage() {
         {/* Items */}
         <div className="space-y-2 py-2">
           {cart.map((item) => (
-            <div key={item.product.id} className="space-y-0.5">
+            <div key={getCartKey(item.product.id, item.variant?.id || null)} className="space-y-0.5">
               <p className="font-semibold text-xs">{item.product.name}</p>
+              {item.variant && <p className="text-[10px] text-zinc-600">{item.variant.name}</p>}
               <div className="flex items-center">
-                <span className="flex-1 text-[11px] text-zinc-600">{formatCurrency(item.product.price)}/pcs</span>
+                <span className="flex-1 text-[11px] text-zinc-600">{formatCurrency(getItemPrice(item))}/pcs</span>
                 <span className="w-12 text-center text-[11px] font-bold">{item.qty}</span>
-                <span className="w-16 text-right text-[11px] text-zinc-600">{formatCurrency(item.product.price)}</span>
-                <span className="w-20 text-right text-xs font-bold">{formatCurrency(item.product.price * item.qty)}</span>
+                <span className="w-16 text-right text-[11px] text-zinc-600">{formatCurrency(getItemPrice(item))}</span>
+                <span className="w-20 text-right text-xs font-bold">{formatCurrency(getItemPrice(item) * item.qty)}</span>
               </div>
             </div>
           ))}
@@ -1543,22 +1727,27 @@ export default function PosPage() {
               </div>
             ) : (
               <div className="space-y-1.5">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-800/50 border border-zinc-800/50">
+                {cart.map((item) => {
+                  const itemKey = getCartKey(item.product.id, item.variant?.id || null)
+                  return (
+                  <div key={itemKey} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-zinc-800/50 border border-zinc-800/50">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-zinc-200 truncate">{item.product.name}</p>
-                      <p className="text-[11px] text-zinc-500">{formatCurrency(item.product.price)} × {item.qty}</p>
-                      <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(item.product.price * item.qty)}</p>
+                      {item.variant && (
+                        <p className="text-[10px] text-violet-400 font-medium truncate">{item.variant.name}</p>
+                      )}
+                      <p className="text-[11px] text-zinc-500">{formatCurrency(getItemPrice(item))} × {item.qty}</p>
+                      <p className="text-xs text-emerald-400 font-bold mt-0.5">{formatCurrency(getItemPrice(item) * item.qty)}</p>
                     </div>
                     <div className="flex items-center gap-0.5">
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></Button>
-                      {editingQtyId === item.product.id ? (
+                        onClick={() => updateQty(item.product.id, item.qty - 1, item.variant?.id)}><Minus className="h-3.5 w-3.5" /></Button>
+                      {editingQtyId === itemKey ? (
                         <input
                           ref={qtyInputRef}
                           type="number"
                           min="0"
-                          max={item.product.stock}
+                          max={getItemStock(item)}
                           value={editingQtyValue}
                           onChange={(e) => setEditingQtyValue(e.target.value)}
                           onBlur={confirmEditQty}
@@ -1568,17 +1757,18 @@ export default function PosPage() {
                       ) : (
                         <span
                           className="text-xs text-zinc-200 w-6 text-center font-bold cursor-pointer hover:text-emerald-400 transition-colors"
-                          onClick={() => startEditQty(item.product.id, item.qty)}
+                          onClick={() => startEditQty(itemKey, item.qty)}
                           title="Klik untuk edit qty"
                         >{item.qty}</span>
                       )}
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 rounded-md"
-                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></Button>
+                        onClick={() => updateQty(item.product.id, item.qty + 1, item.variant?.id)}><Plus className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-md ml-0.5"
-                        onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        onClick={() => removeFromCart(item.product.id, item.variant?.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </ScrollArea>
@@ -1745,21 +1935,26 @@ export default function PosPage() {
               </div>
             ) : (
               <div className="space-y-2 pb-2">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-2.5 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
+                {cart.map((item) => {
+                  const itemKey = getCartKey(item.product.id, item.variant?.id || null)
+                  return (
+                  <div key={itemKey} className="flex items-center gap-2.5 p-3 rounded-2xl bg-zinc-900 border border-zinc-800/60">
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] text-zinc-200 font-medium truncate">{item.product.name}</p>
-                      <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(item.product.price)}</p>
+                      {item.variant && (
+                        <p className="text-[10px] text-violet-400 font-medium truncate">{item.variant.name}</p>
+                      )}
+                      <p className="text-[11px] text-zinc-500 mt-0.5">{formatCurrency(getItemPrice(item))}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
                       <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors active:scale-95"
-                        onClick={() => updateQty(item.product.id, item.qty - 1)}><Minus className="h-3.5 w-3.5" /></button>
-                      {editingQtyId === item.product.id ? (
+                        onClick={() => updateQty(item.product.id, item.qty - 1, item.variant?.id)}><Minus className="h-3.5 w-3.5" /></button>
+                      {editingQtyId === itemKey ? (
                         <input
                           ref={qtyInputRef}
                           type="number"
                           min="0"
-                          max={item.product.stock}
+                          max={getItemStock(item)}
                           value={editingQtyValue}
                           onChange={(e) => setEditingQtyValue(e.target.value)}
                           onBlur={confirmEditQty}
@@ -1769,19 +1964,20 @@ export default function PosPage() {
                       ) : (
                         <span
                           className="text-xs w-7 text-center text-zinc-200 font-bold cursor-pointer hover:text-emerald-400 transition-colors"
-                          onClick={() => startEditQty(item.product.id, item.qty)}
+                          onClick={() => startEditQty(itemKey, item.qty)}
                         >{item.qty}</span>
                       )}
                       <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-zinc-800 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-700 transition-colors active:scale-95"
-                        onClick={() => updateQty(item.product.id, item.qty + 1)}><Plus className="h-3.5 w-3.5" /></button>
+                        onClick={() => updateQty(item.product.id, item.qty + 1, item.variant?.id)}><Plus className="h-3.5 w-3.5" /></button>
                     </div>
                     <div className="text-right shrink-0 min-w-[70px]">
-                      <p className="text-[13px] text-emerald-400 font-bold">{formatCurrency(item.product.price * item.qty)}</p>
+                      <p className="text-[13px] text-emerald-400 font-bold">{formatCurrency(getItemPrice(item) * item.qty)}</p>
                     </div>
                     <button className="h-7 w-7 flex items-center justify-center rounded-lg text-zinc-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-                      onClick={() => removeFromCart(item.product.id)}><Trash2 className="h-3 w-3" /></button>
+                      onClick={() => removeFromCart(item.product.id, item.variant?.id)}><Trash2 className="h-3 w-3" /></button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -1837,9 +2033,9 @@ export default function PosPage() {
                 <p className="text-[11px] text-zinc-500 font-medium uppercase tracking-wide mb-2">Ringkasan Pesanan</p>
                 <div className="space-y-1.5 text-xs">
                   {cart.map((item) => (
-                    <div key={item.product.id} className="flex justify-between text-zinc-300">
-                      <span className="truncate mr-2">{item.product.name} <span className="text-zinc-500">×{item.qty}</span></span>
-                      <span className="font-medium shrink-0">{formatCurrency(item.product.price * item.qty)}</span>
+                    <div key={getCartKey(item.product.id, item.variant?.id || null)} className="flex justify-between text-zinc-300">
+                      <span className="truncate mr-2">{item.variant ? `${item.product.name} (${item.variant.name})` : item.product.name} <span className="text-zinc-500">×{item.qty}</span></span>
+                      <span className="font-medium shrink-0">{formatCurrency(getItemPrice(item) * item.qty)}</span>
                     </div>
                   ))}
                   <Separator className="bg-zinc-800 !my-2" />
@@ -1947,9 +2143,9 @@ export default function PosPage() {
             <div className="space-y-3 py-1">
               <div className="space-y-1 text-xs">
                 {cart.map((item) => (
-                  <div key={item.product.id} className="flex justify-between text-zinc-300 py-0.5">
-                    <span>{item.product.name} × {item.qty}</span>
-                    <span className="font-medium">{formatCurrency(item.product.price * item.qty)}</span>
+                  <div key={getCartKey(item.product.id, item.variant?.id || null)} className="flex justify-between text-zinc-300 py-0.5">
+                    <span>{item.variant ? `${item.product.name} (${item.variant.name})` : item.product.name} × {item.qty}</span>
+                    <span className="font-medium">{formatCurrency(getItemPrice(item) * item.qty)}</span>
                   </div>
                 ))}
                 <Separator className="bg-zinc-800 my-1.5" />
@@ -2045,6 +2241,89 @@ export default function PosPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Variant Picker Dialog */}
+      <ResponsiveDialog open={variantPicker.open} onOpenChange={(open) => {
+        if (!open) setVariantPicker({ product: null as unknown as Product, open: false, variants: [], loading: false })
+      }}>
+        <ResponsiveDialogContent desktopClassName="max-w-sm rounded-2xl">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                <Layers className="h-3.5 w-3.5 text-violet-400" />
+              </div>
+              Pilih Varian
+            </ResponsiveDialogTitle>
+            <ResponsiveDialogDescription className="text-xs text-zinc-500">
+              {variantPicker.product?.name || 'Produk'}
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
+          <div className="py-2">
+            {variantPicker.loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 text-zinc-500 animate-spin" />
+              </div>
+            ) : variantPicker.variants.length === 0 ? (
+              <div className="text-center py-8">
+                <Package className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
+                <p className="text-xs text-zinc-500">Tidak ada varian tersedia</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                {variantPicker.variants.map((variant) => {
+                  const isOutOfStock = variant.stock <= 0
+                  const cartKey = getCartKey(variantPicker.product.id, variant.id)
+                  const existingItem = cart.find((i) => getCartKey(i.product.id, i.variant?.id || null) === cartKey)
+                  return (
+                    <button
+                      key={variant.id}
+                      onClick={() => handleVariantSelect(variant)}
+                      disabled={isOutOfStock}
+                      className={cn(
+                        'w-full text-left flex items-center justify-between gap-3 p-3 rounded-xl border transition-all',
+                        isOutOfStock
+                          ? 'opacity-40 cursor-not-allowed bg-zinc-900/30 border-zinc-800/40'
+                          : 'bg-zinc-800/50 border-zinc-700/50 hover:border-violet-500/40 hover:bg-violet-500/5 active:scale-[0.99] cursor-pointer'
+                      )}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className={cn('text-xs font-medium', isOutOfStock ? 'text-zinc-600' : 'text-zinc-200')}>{variant.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {variant.sku && (
+                            <span className="text-[10px] text-zinc-600 font-mono">{variant.sku}</span>
+                          )}
+                          <span className={cn(
+                            'text-[10px] px-1.5 py-0.5 rounded-md font-medium',
+                            isOutOfStock
+                              ? 'bg-red-500/10 text-red-400'
+                              : variant.stock <= 5
+                                ? 'bg-amber-500/10 text-amber-400'
+                                : 'bg-zinc-800 text-zinc-500'
+                          )}>
+                            Stok: {variant.stock}
+                          </span>
+                          {existingItem && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-emerald-500/10 text-emerald-400">
+                              ×{existingItem.qty} di keranjang
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className={cn('text-sm font-bold shrink-0', isOutOfStock ? 'text-zinc-600' : 'text-violet-400')}>
+                        {formatCurrency(variant.price)}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+          <ResponsiveDialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setVariantPicker({ product: null as unknown as Product, open: false, variants: [], loading: false })}
+              className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 text-xs rounded-xl">Tutup</Button>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
 
       {/* Add Customer Dialog */}
       <ResponsiveDialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen}>

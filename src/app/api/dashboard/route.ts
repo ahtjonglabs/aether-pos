@@ -56,6 +56,20 @@ export async function GET(request: NextRequest) {
     })
     const lowStockList = lowStockProducts.filter((p) => p.stock <= p.lowStockAlert)
 
+    // ── Low stock variants ──
+    const lowStockVariants = await db.productVariant.findMany({
+      where: { outletId },
+      orderBy: { stock: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        stock: true,
+        productId: true,
+        product: { select: { name: true } },
+      },
+    })
+    const lowStockVariantList = lowStockVariants.filter((v) => v.stock <= 0)
+
     // ── Top 5 customers ──
     const topCustomers = await db.customer.findMany({
       where: { outletId },
@@ -159,6 +173,14 @@ export async function GET(request: NextRequest) {
       totalProducts,
       lowStockProducts: lowStockList.length,
       lowStockList,
+      lowStockVariants: lowStockVariantList.length,
+      lowStockVariantList: lowStockVariantList.map((v) => ({
+        id: v.id,
+        name: v.name,
+        stock: v.stock,
+        productId: v.productId,
+        productName: v.product?.name || 'Unknown',
+      })),
       topCustomers,
       totalProfit: isOwner ? totalProfit : null,
 

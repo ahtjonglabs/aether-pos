@@ -35,9 +35,9 @@ export async function GET(request: NextRequest) {
       receiptPhone: setting.receiptPhone,
       receiptFooter: setting.receiptFooter,
       receiptLogo: setting.receiptLogo,
-      themePrimaryColor: setting.themePrimaryColor,
       ppnEnabled: setting.ppnEnabled,
       ppnRate: setting.ppnRate,
+      themePrimaryColor: setting.themePrimaryColor,
       telegramChatId: setting.telegramChatId,
       telegramBotToken: setting.telegramBotToken ? '••••••' : null,
       notifyOnTransaction: setting.notifyOnTransaction,
@@ -85,17 +85,19 @@ export async function PUT(request: NextRequest) {
     }
     const loyaltyPointsPerAmount = loyaltyPointsPerAmountRaw
     const loyaltyPointValue = loyaltyPointValueRaw
-    const ppnEnabled = typeof body.ppnEnabled === 'boolean' ? body.ppnEnabled : undefined
-    const ppnRateRaw = body.ppnRate != null ? Number(body.ppnRate) : undefined
-    if (ppnRateRaw !== undefined && (isNaN(ppnRateRaw) || ppnRateRaw < 0 || ppnRateRaw > 100)) {
-      return safeJsonError('Tarif PPN harus berupa angka antara 0-100', 400)
-    }
-    const ppnRate = ppnRateRaw
     const notifyOnTransaction = typeof body.notifyOnTransaction === 'boolean' ? body.notifyOnTransaction : undefined
     const notifyOnCustomer = typeof body.notifyOnCustomer === 'boolean' ? body.notifyOnCustomer : undefined
     const notifyDailyReport = typeof body.notifyDailyReport === 'boolean' ? body.notifyDailyReport : undefined
     const notifyWeeklyReport = typeof body.notifyWeeklyReport === 'boolean' ? body.notifyWeeklyReport : undefined
     const notifyMonthlyReport = typeof body.notifyMonthlyReport === 'boolean' ? body.notifyMonthlyReport : undefined
+
+    // PPN / Tax fields
+    const ppnEnabled = typeof body.ppnEnabled === 'boolean' ? body.ppnEnabled : undefined
+    const ppnRateRaw = body.ppnRate != null ? Number(body.ppnRate) : undefined
+    if (ppnRateRaw !== undefined && (isNaN(ppnRateRaw) || ppnRateRaw < 0 || ppnRateRaw > 100)) {
+      return safeJsonError('ppnRate harus berupa angka antara 0 dan 100', 400)
+    }
+    const ppnRate = ppnRateRaw
 
     const settingsData = {
       outletId: user.outletId,
@@ -108,6 +110,8 @@ export async function PUT(request: NextRequest) {
       ...(body.receiptPhone !== undefined && { receiptPhone: String(body.receiptPhone ?? '') }),
       ...(body.receiptFooter !== undefined && { receiptFooter: String(body.receiptFooter ?? '') }),
       ...(body.receiptLogo !== undefined && { receiptLogo: String(body.receiptLogo ?? '') }),
+      ...(ppnEnabled !== undefined && { ppnEnabled }),
+      ...(ppnRate !== undefined && { ppnRate }),
       ...(body.themePrimaryColor !== undefined && { themePrimaryColor: String(body.themePrimaryColor) }),
       ...(body.telegramBotToken !== undefined && { telegramBotToken: body.telegramBotToken ? String(body.telegramBotToken) : null }),
       ...(body.telegramChatId !== undefined && { telegramChatId: body.telegramChatId ? String(body.telegramChatId) : null }),
@@ -116,8 +120,6 @@ export async function PUT(request: NextRequest) {
       ...(notifyDailyReport !== undefined && { notifyDailyReport }),
       ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
       ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
-      ...(ppnEnabled !== undefined && { ppnEnabled }),
-      ...(ppnRate !== undefined && { ppnRate }),
     }
 
     // Upsert settings
@@ -160,7 +162,8 @@ export async function PUT(request: NextRequest) {
     const SETTINGS_KEYS = [
       'paymentMethods', 'loyaltyEnabled', 'loyaltyPointsPerAmount', 'loyaltyPointValue',
       'receiptBusinessName', 'receiptAddress', 'receiptPhone', 'receiptFooter', 'receiptLogo',
-      'themePrimaryColor', 'ppnEnabled', 'ppnRate', 'telegramBotToken', 'telegramChatId',
+      'ppnEnabled', 'ppnRate',
+      'themePrimaryColor', 'telegramBotToken', 'telegramChatId',
       'notifyOnTransaction', 'notifyOnCustomer', 'notifyDailyReport', 'notifyWeeklyReport', 'notifyMonthlyReport',
     ] as const
     const settingsChanged: Record<string, unknown> = {}
@@ -205,9 +208,9 @@ export async function PUT(request: NextRequest) {
       receiptPhone: response.receiptPhone,
       receiptFooter: response.receiptFooter,
       receiptLogo: response.receiptLogo,
-      themePrimaryColor: response.themePrimaryColor,
       ppnEnabled: response.ppnEnabled,
       ppnRate: response.ppnRate,
+      themePrimaryColor: response.themePrimaryColor,
       telegramChatId: response.telegramChatId,
       telegramBotToken: response.telegramBotToken ? '••••••' : null,
       notifyOnTransaction: response.notifyOnTransaction,

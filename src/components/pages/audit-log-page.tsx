@@ -116,8 +116,18 @@ const ACTION_CONFIG: Record<string, {
     leftBorder: 'border-l-violet-500',
     dotColor: 'bg-violet-500',
   },
-  VOID: {
-    label: 'Void',
+  BULK_UPDATE: {
+    label: 'Mass Edit',
+    icon: SlidersHorizontal,
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10',
+    borderColor: 'border-orange-500/20',
+    iconBg: 'bg-orange-500/10',
+    leftBorder: 'border-l-orange-500',
+    dotColor: 'bg-orange-500',
+  },
+  DELETE: {
+    label: 'Dihapus',
     icon: Ban,
     color: 'text-red-400',
     bgColor: 'bg-red-500/10',
@@ -125,6 +135,16 @@ const ACTION_CONFIG: Record<string, {
     iconBg: 'bg-red-500/10',
     leftBorder: 'border-l-red-500',
     dotColor: 'bg-red-500',
+  },
+  VARIANT: {
+    label: 'Varian',
+    icon: Pencil,
+    color: 'text-violet-400',
+    bgColor: 'bg-violet-500/10',
+    borderColor: 'border-violet-500/20',
+    iconBg: 'bg-violet-500/10',
+    leftBorder: 'border-l-violet-500',
+    dotColor: 'bg-violet-500',
   },
 }
 
@@ -154,6 +174,7 @@ const ENTITY_LABELS: Record<string, string> = {
   OUTLET: 'Outlet',
   SETTINGS: 'Pengaturan',
   STOCK: 'Stok',
+  VARIANT: 'Varian',
 }
 
 function getEntityLabel(type: string): string {
@@ -184,6 +205,19 @@ const DETAIL_LABELS: Record<string, string> = {
   outletName: 'Nama Outlet',
   outletAddress: 'Alamat',
   outletPhone: 'Telepon',
+  variantName: 'Nama Varian',
+  variantId: 'ID Varian',
+  hasVariants: 'Punya Varian',
+  bulkUpload: 'Upload Massal',
+  created: 'Dibuat',
+  skipped: 'Dilewati',
+  fileName: 'Nama File',
+  variantCount: 'Jumlah Varian',
+  ppnEnabled: 'PPN Aktif',
+  ppnRate: 'Tarif PPN',
+  batchOperation: 'Operasi Batch',
+  changes: 'Perubahan',
+  quantitySold: 'Jumlah Terjual',
 }
 
 function getDetailLabel(key: string): string {
@@ -204,10 +238,10 @@ function formatDetailValue(key: string, value: unknown): string {
   if (value === null || value === undefined) return '-'
   if (typeof value === 'number') {
     // Currency-like values
-    if (['price', 'total', 'hpp', 'discount', 'subtotal', 'paidAmount', 'change'].includes(key)) {
+    if (['price', 'total', 'hpp', 'discount', 'subtotal', 'paidAmount', 'change', 'taxAmount'].includes(key)) {
       return formatCurrency(value)
     }
-    if (['stock', 'previousStock', 'newStock', 'quantityAdded', 'quantityDecreased', 'qty'].includes(key)) {
+    if (['stock', 'previousStock', 'newStock', 'quantityAdded', 'quantityDecreased', 'qty', 'quantitySold'].includes(key)) {
       return `${value} unit`
     }
     if (key === 'points') {
@@ -245,12 +279,15 @@ function DetailsDisplay({ action, details }: { action: string; details: string |
 
   // Sort detail keys for better display based on action type
   const priorityKeys: Record<string, string[]> = {
-    SALE: ['invoiceNumber', 'productName', 'quantityDecreased', 'newStock'],
+    SALE: ['invoiceNumber', 'productName', 'variantName', 'quantitySold', 'previousStock', 'newStock'],
     RESTOCK: ['reason', 'productName', 'quantityAdded', 'newStock'],
     VOID: ['invoiceNumber', 'total', 'reason', 'voidedBy', 'itemsRestored'],
     ADJUSTMENT: ['productName', 'previousStock', 'newStock', 'reason'],
-    CREATE: ['name', 'productName', 'customerName', 'outletName', 'price', 'stock'],
-    UPDATE: ['name', 'productName', 'outletName', 'outletAddress', 'outletPhone', 'price', 'stock'],
+    CREATE: ['name', 'productName', 'variantName', 'customerName', 'outletName', 'price', 'stock', 'bulkUpload', 'created', 'skipped'],
+    UPDATE: ['name', 'productName', 'variantName', 'outletName', 'outletAddress', 'outletPhone', 'price', 'stock', 'ppnEnabled', 'ppnRate', 'hasVariants', 'variantCount'],
+    BULK_UPDATE: ['productName', 'changes', 'batchOperation'],
+    DELETE: ['productName', 'variantName', 'price', 'stock', 'variantCount'],
+    VARIANT: ['productName', 'variantName', 'name', 'price', 'stock', 'changes'],
   }
 
   const sortedKeys = priorityKeys[action]

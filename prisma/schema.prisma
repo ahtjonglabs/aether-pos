@@ -29,6 +29,7 @@ model Outlet {
   setting         OutletSetting?
   promos          Promo[]
   crewPermissions CrewPermission[]
+  productVariants ProductVariant[]
 }
 
 // ==================== USER ====================
@@ -84,11 +85,34 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  outlet           Outlet         @relation(fields: [outletId], references: [id])
-  category        Category?      @relation(fields: [categoryId], references: [id])
+  hasVariants      Boolean        @default(false) // Has product variants
+  outlet           Outlet           @relation(fields: [outletId], references: [id])
+  category        Category?        @relation(fields: [categoryId], references: [id])
   transactionItems TransactionItem[]
+  variants         ProductVariant[]
 
   @@unique([name, outletId])
+}
+
+// ==================== PRODUCT VARIANT ====================
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  name      String                       // e.g. "Small", "Medium", "Large", "Original", "Matcha"
+  sku       String?                      // Variant-specific SKU
+  barcode   String?
+  hpp       Float    @default(0)          // Cost price for this variant
+  price     Float                        // Selling price for this variant
+  stock     Int      @default(0)          // Independent stock per variant
+  outletId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  outlet           Outlet            @relation(fields: [outletId], references: [id])
+  transactionItems TransactionItem[]
+
+  @@unique([name, productId])
 }
 
 // ==================== CUSTOMER ====================
@@ -138,15 +162,18 @@ model Transaction {
 model TransactionItem {
   id             String      @id @default(cuid())
   productId      String?
+  variantId      String?
   productName    String
+  variantName    String?
   price          Float
   qty            Int
   subtotal       Float
   hpp            Float
   transactionId  String
 
-  product     Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
-  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product     Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  transaction Transaction     @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 }
 
 // ==================== LOYALTY LOG ====================

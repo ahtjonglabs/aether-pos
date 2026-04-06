@@ -10,6 +10,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   DollarSign,
@@ -36,6 +44,7 @@ import {
   Clock,
   Warehouse,
   Target,
+  Layers,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -54,6 +63,8 @@ interface DashboardStats {
   totalProfit: number | null
   topCustomers: { id: string; name: string; whatsapp: string; totalSpend: number; points: number }[]
   lowStockList: { id: string; name: string; stock: number; lowStockAlert: number }[]
+  lowStockVariants: number
+  lowStockVariantList: { id: string; name: string; stock: number; productId: string; productName: string }[]
   todayRevenue: number
   todayBrutto: number
   todayDiscount: number
@@ -742,6 +753,14 @@ export default function DashboardPage() {
                   </motion.span>
                 )}
               </div>
+              {stats && stats.lowStockVariants > 0 && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Layers className="h-3 w-3 text-violet-400" />
+                  <span className="text-[10px] text-violet-400">
+                    {stats.lowStockVariants} varian stok rendah
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -1498,6 +1517,161 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </div>
+
+      {/* ═══════════════════════════════════════════════════
+          9. Low Stock Detail (Products & Variants)
+      ═══════════════════════════════════════════════════ */}
+      <motion.div variants={itemVariants}>
+        <Card className="bg-zinc-900 border border-zinc-800/60">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-zinc-200 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+                Produk Stok Menipis
+              </h2>
+              {stats && stats.lowStockVariants > 0 && (
+                <Badge className="bg-violet-500/10 border-violet-500/20 text-violet-400 text-[10px] gap-1">
+                  <Layers className="h-3 w-3" />
+                  {stats.lowStockVariants} varian
+                </Badge>
+              )}
+            </div>
+            {(!stats?.lowStockList || stats.lowStockList.length === 0) && (!stats?.lowStockVariantList || stats.lowStockVariantList.length === 0) ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Package className="h-8 w-8 text-emerald-500/30 mb-2" />
+                <p className="text-xs text-zinc-500">Semua stok aman</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile: compact card list */}
+                <div className="flex flex-col gap-2 md:hidden max-h-60 overflow-y-auto">
+                  {stats.lowStockList.map((p) => {
+                    const isCritical = p.stock === 0
+                    const isWarning = p.stock > 0 && p.stock <= p.lowStockAlert / 2
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 rounded-xl bg-zinc-800/40 border border-zinc-700/30 p-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-zinc-200 font-medium truncate">{p.name}</p>
+                          <p className="text-[10px] text-zinc-500">Stok: {p.lowStockAlert} alert</p>
+                        </div>
+                        <div className="text-right shrink-0 flex items-center gap-2">
+                          <span className={`text-sm font-bold ${isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-yellow-300'}`}>
+                            {p.stock}
+                          </span>
+                          {isCritical ? (
+                            <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">Habis</Badge>
+                          ) : isWarning ? (
+                            <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">Kritis</Badge>
+                          ) : (
+                            <Badge className="bg-yellow-500/10 border-yellow-500/20 text-yellow-400 text-[10px]">Rendah</Badge>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {/* Variant low stock items */}
+                  {stats.lowStockVariantList && stats.lowStockVariantList.length > 0 && (
+                    <>
+                      <div className="flex items-center gap-1.5 pt-2 pb-1">
+                        <Layers className="h-3 w-3 text-violet-400" />
+                        <span className="text-[11px] font-medium text-violet-400">Varian Stok Rendah</span>
+                      </div>
+                      {stats.lowStockVariantList.map((v) => (
+                        <div key={v.id} className="flex items-center gap-3 rounded-xl bg-violet-500/5 border border-violet-500/15 p-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-zinc-200 font-medium truncate">{v.name}</p>
+                            <p className="text-[10px] text-zinc-500 truncate">{v.productName}</p>
+                          </div>
+                          <div className="text-right shrink-0 flex items-center gap-2">
+                            <span className={`text-sm font-bold ${v.stock === 0 ? 'text-red-400' : 'text-violet-400'}`}>
+                              {v.stock}
+                            </span>
+                            <Badge className={`text-[10px] ${v.stock === 0 ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-violet-500/10 border-violet-500/20 text-violet-400'}`}>
+                              {v.stock === 0 ? 'Habis' : 'Rendah'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+                {/* Desktop: full table */}
+                <div className="hidden md:block overflow-x-auto max-h-60 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-zinc-800/60 hover:bg-transparent sticky top-0 bg-zinc-900 z-10">
+                        <TableHead className="text-zinc-500 text-[11px] w-8 py-2.5">#</TableHead>
+                        <TableHead className="text-zinc-500 text-[11px] py-2.5">Produk</TableHead>
+                        <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">Stok</TableHead>
+                        <TableHead className="text-zinc-500 text-[11px] text-right py-2.5">Alert</TableHead>
+                        <TableHead className="text-zinc-500 text-[11px] text-center py-2.5">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stats.lowStockList.map((p, idx) => {
+                        const isCritical = p.stock === 0
+                        const isWarning = p.stock > 0 && p.stock <= p.lowStockAlert / 2
+                        return (
+                          <TableRow key={p.id} className="border-zinc-800/40 hover:bg-zinc-800/30">
+                            <TableCell className="text-[11px] text-zinc-500 font-mono py-2.5">{idx + 1}</TableCell>
+                            <TableCell className="text-xs text-zinc-200 font-medium py-2.5">{p.name}</TableCell>
+                            <TableCell className={`text-xs text-right font-bold py-2.5 ${isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-yellow-300'}`}>
+                              {p.stock}
+                            </TableCell>
+                            <TableCell className="text-xs text-zinc-500 text-right py-2.5">{p.lowStockAlert}</TableCell>
+                            <TableCell className="text-center py-2.5">
+                              {isCritical ? (
+                                <Badge className="bg-red-500/10 border-red-500/20 text-red-400 text-[10px]">Habis</Badge>
+                              ) : isWarning ? (
+                                <Badge className="bg-amber-500/10 border-amber-500/20 text-amber-400 text-[10px]">Kritis</Badge>
+                              ) : (
+                                <Badge className="bg-yellow-500/10 border-yellow-500/20 text-yellow-400 text-[10px]">Rendah</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                      {/* Variant low stock rows */}
+                      {stats.lowStockVariantList && stats.lowStockVariantList.length > 0 && (
+                        <>
+                          <TableRow className="border-zinc-800/60 hover:bg-transparent">
+                            <TableCell colSpan={5} className="py-2 px-0">
+                              <div className="flex items-center gap-1.5 px-3">
+                                <Layers className="h-3 w-3 text-violet-400" />
+                                <span className="text-[11px] font-medium text-violet-400">Varian Stok Rendah</span>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {stats.lowStockVariantList.map((v) => (
+                            <TableRow key={v.id} className="border-violet-500/10 hover:bg-violet-500/5">
+                              <TableCell className="text-[11px] text-violet-400/50 font-mono py-2.5">
+                                <Layers className="h-3 w-3 text-violet-400/50" />
+                              </TableCell>
+                              <TableCell className="py-2.5">
+                                <p className="text-xs text-zinc-200 font-medium">{v.name}</p>
+                                <p className="text-[10px] text-zinc-500">{v.productName}</p>
+                              </TableCell>
+                              <TableCell className={`text-xs text-right font-bold py-2.5 ${v.stock === 0 ? 'text-red-400' : 'text-violet-400'}`}>
+                                {v.stock}
+                              </TableCell>
+                              <TableCell className="text-xs text-zinc-500 text-right py-2.5">-</TableCell>
+                              <TableCell className="text-center py-2.5">
+                                <Badge className={`text-[10px] ${v.stock === 0 ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-violet-500/10 border-violet-500/20 text-violet-400'}`}>
+                                  {v.stock === 0 ? 'Habis' : 'Rendah'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
     </motion.div>
   )
 }
