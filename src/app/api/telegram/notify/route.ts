@@ -80,20 +80,17 @@ export async function POST(request: NextRequest) {
     const results: Array<{ outletId: string; outletName: string; ok: boolean; error?: string }> = []
 
     for (const setting of configuredSettings) {
-      const chatId = setting.telegramBotToken
-        ? undefined // will use custom bot token
-        : setting.telegramChatId!
-
+      const chatId = setting.telegramChatId!
       const botToken = setting.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN
 
-      if (!botToken || !setting.telegramChatId) {
+      if (!botToken || !chatId) {
         results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, error: 'No bot token or chat ID' })
         errorCount++
         continue
       }
 
       try {
-        const sendResult = await sendStockAlert(setting.outletId, setting.outlet.name, setting.telegramChatId, botToken)
+        const sendResult = await sendStockAlert(setting.outletId, setting.outlet.name, chatId, botToken)
         if (sendResult.ok) {
           sentCount++
           results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: true })

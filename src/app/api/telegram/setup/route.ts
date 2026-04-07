@@ -78,6 +78,8 @@ export async function POST(request: NextRequest) {
         // This fixes the bug where test works but notifications don't
         // (because values were only in request body, not in DB)
         // ============================================================
+        let autoSaved = false
+        let saveError: string | null = null
         try {
           await db.outletSetting.upsert({
             where: { outletId: user.outletId },
@@ -91,16 +93,39 @@ export async function POST(request: NextRequest) {
               telegramBotToken: botToken,
             },
           })
-          console.log(`[telegram/setup] Auto-saved botToken & chatId for outlet ${user.outletId} (chatId: ${chatId})`)
+          autoSaved = true
+          console.log(`[telegram/setup] ✅ Auto-saved botToken & chatId for outlet ${user.outletId} (chatId: ${chatId})`)
         } catch (saveErr) {
-          console.error('[telegram/setup] Failed to auto-save Telegram config:', saveErr)
-          // Don't fail the test — the test was successful, save is best-effort
+          saveError = saveErr instanceof Error ? saveErr.message : 'Unknown save error'
+          console.error('[telegram/setup] ❌ Failed to auto-save Telegram config:', saveErr)
+        }
+
+        // Verify saved data by reading back from DB
+        if (autoSaved) {
+          try {
+            const verify = await db.outletSetting.findUnique({
+              where: { outletId: user.outletId },
+              select: { telegramChatId: true, telegramBotToken: true },
+            })
+            if (!verify?.telegramBotToken || !verify?.telegramChatId) {
+              autoSaved = false
+              saveError = `Verify failed: DB has chatId=${!!verify?.telegramChatId}, botToken=${!!verify?.telegramBotToken}`
+              console.error(`[telegram/setup] ❌ Auto-save verify failed: ${saveError}`)
+            } else {
+              console.log(`[telegram/setup] ✅ Verify OK: chatId=${verify.telegramChatId}, botToken=***${verify.telegramBotToken.slice(-4)}`)
+            }
+          } catch (verifyErr) {
+            console.error('[telegram/setup] Verify query failed:', verifyErr)
+          }
         }
       }
 
       return safeJson({
         success: true,
-        message: chatId ? 'Koneksi berhasil! Pesan tes terkirim & tersimpan.' : 'Bot Token valid!',
+        message: chatId
+          ? (autoSaved ? 'Koneksi berhasil! Pesan tes terkirim & tersimpan otomatis.' : `⚠️ Pesan tes terkirim, tapi gagal menyimpan: ${saveError}`)
+          : 'Bot Token valid!',
+        autoSaved,
         botInfo: {
           id: botInfo.id,
           name: botInfo.first_name,

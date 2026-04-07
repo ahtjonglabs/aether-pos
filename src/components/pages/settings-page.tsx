@@ -1339,17 +1339,20 @@ function ThemeReceiptTab() {
                 className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="receipt-address" className="text-xs text-zinc-300">Alamat</Label>
-              <Textarea
-                id="receipt-address"
-                value={receiptAddress}
-                onChange={(e) => handleChange('receiptAddress', e.target.value)}
-                placeholder="Masukkan alamat usaha"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm"
-              />
+            <div className="grid gap-3 grid-cols-1">
+              <div className="space-y-1.5">
+                <Label htmlFor="receipt-address" className="text-xs text-zinc-300">Alamat</Label>
+                <Textarea
+                  id="receipt-address"
+                  value={receiptAddress}
+                  onChange={(e) => handleChange('receiptAddress', e.target.value)}
+                  placeholder="Masukkan alamat usaha"
+                  rows={2}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm resize-none"
+                />
+              </div>
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="grid gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="receipt-phone" className="text-xs text-zinc-300">Telepon</Label>
                 <Input
@@ -1947,39 +1950,48 @@ const PLAN_PRICING: Record<AccountType, { price: string; period: string; descrip
   enterprise: { price: 'Rp 449.000', period: '/bulan', description: 'Untuk bisnis skala besar & multi-outlet' },
 }
 
-/** Progress bar component for usage tracking */
-function UsageBar({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: React.ReactNode }) {
+/** Modern circular ring component for usage tracking */
+function UsageRing({ label, used, limit, icon }: { label: string; used: number; limit: number; icon: React.ReactNode }) {
   const unlimited = isUnlimited(limit)
-  const pct = unlimited ? 0 : limit > 0 ? Math.min((used / limit) * 100, 100) : 0
+  const pct = unlimited ? 100 : limit > 0 ? Math.min((used / limit) * 100, 100) : 0
   const isNearLimit = !unlimited && pct >= 80 && pct < 100
   const isAtLimit = !unlimited && pct >= 100
 
-  const barColor = isAtLimit
-    ? 'bg-red-500'
+  const ringColor = isAtLimit
+    ? '#ef4444'
     : isNearLimit
-      ? 'bg-amber-500'
-      : 'bg-emerald-500'
+      ? '#f59e0b'
+      : '#10b981'
+
+  const radius = 18
+  const circumference = 2 * Math.PI * radius
+  const strokeDashoffset = circumference - (pct / 100) * circumference
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <span className="text-zinc-500">{icon}</span>
-          <span className="text-xs text-zinc-400">{label}</span>
-        </div>
-        <span className={`text-xs font-medium ${isAtLimit ? 'text-red-400' : isNearLimit ? 'text-amber-400' : 'text-zinc-200'}`}>
-          {used}
-          {!unlimited && <span className="text-zinc-500 font-normal"> / {limit}</span>}
-        </span>
-      </div>
-      {!unlimited && (
-        <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-            style={{ width: `${pct}%` }}
+    <div className="flex items-center gap-3">
+      <div className="relative shrink-0" style={{ width: 48, height: 48 }}>
+        <svg width="48" height="48" viewBox="0 0 48 48" className="-rotate-90">
+          <circle cx="24" cy="24" r={radius} fill="none" stroke="currentColor" strokeWidth="3" className="text-zinc-800" />
+          <circle
+            cx="24" cy="24" r={radius} fill="none"
+            stroke={ringColor}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-700 ease-out"
           />
+        </svg>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <span className={isAtLimit ? 'text-red-400' : isNearLimit ? 'text-amber-400' : 'text-zinc-200'}>{icon}</span>
         </div>
-      )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-zinc-300 font-medium">{label}</p>
+        <p className={`text-[11px] ${isAtLimit ? 'text-red-400' : isNearLimit ? 'text-amber-400' : 'text-zinc-500'}`}>
+          {unlimited ? 'Unlimited' : `${used} / ${limit}`}
+        </p>
+      </div>
     </div>
   )
 }
@@ -2106,40 +2118,40 @@ function PlanTab() {
             </div>
           )}
 
-          {/* Usage Stats with Progress Bars */}
+          {/* Usage Stats with Circular Rings */}
           {features && usage && (
             <div className="space-y-3">
               <p className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">Penggunaan Saat Ini</p>
-              <div className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-800/20 p-3">
-                <UsageBar
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <UsageRing
                   label="Produk"
                   used={usage.products}
                   limit={features.maxProducts}
-                  icon={<Tag className="h-3 w-3" />}
+                  icon={<Tag className="h-4 w-4" />}
                 />
-                <UsageBar
+                <UsageRing
                   label="Kategori"
                   used={usage.categories}
                   limit={features.maxCategories}
-                  icon={<Palette className="h-3 w-3" />}
+                  icon={<Palette className="h-4 w-4" />}
                 />
-                <UsageBar
+                <UsageRing
                   label="Crew"
                   used={usage.crew}
                   limit={features.maxCrew}
-                  icon={<KeyRound className="h-3 w-3" />}
+                  icon={<KeyRound className="h-4 w-4" />}
                 />
-                <UsageBar
+                <UsageRing
                   label="Pelanggan"
                   used={usage.customers}
                   limit={features.maxCustomers}
-                  icon={<Star className="h-3 w-3" />}
+                  icon={<Star className="h-4 w-4" />}
                 />
-                <UsageBar
+                <UsageRing
                   label="Transaksi"
                   used={usage.transactions}
                   limit={features.maxTransactionsPerMonth}
-                  icon={<Receipt className="h-3 w-3" />}
+                  icon={<Receipt className="h-4 w-4" />}
                 />
               </div>
             </div>
@@ -2807,7 +2819,7 @@ function MultiOutletTab() {
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {outlets.map((outlet) => (
               <div key={outlet.id}
                 className={`rounded-lg border p-3 space-y-1.5 transition-colors ${

@@ -1091,16 +1091,43 @@ export default function ProductsPage() {
                       />
                     </TableHead>
                   )}
-                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">Nama</TableHead>
+                  <TableHead
+                    className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider cursor-pointer select-none hover:text-zinc-300 transition-colors"
+                    onClick={() => setSort(prev => prev === 'newest' ? 'newest' : 'newest')}
+                  >
+                    <span className="inline-flex items-center gap-1">Nama</span>
+                  </TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">Kategori</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">SKU</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider">Satuan</TableHead>
                   {isOwner && (
                     <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right">HPP</TableHead>
                   )}
-                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right">Harga</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right">Stok</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right w-[130px]">Aksi</TableHead>
+                  <TableHead
+                    className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right cursor-pointer select-none hover:text-zinc-300 transition-colors"
+                    onClick={() => setSort(prev => prev === 'most-stock' ? 'newest' : 'most-stock')}
+                  >
+                    <span className="inline-flex items-center gap-1">Harga</span>
+                  </TableHead>
+                  <TableHead
+                    className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right cursor-pointer select-none hover:text-zinc-300 transition-colors"
+                    onClick={() => setSort(prev => prev === 'low-stock' ? 'most-stock' : 'low-stock')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Stok
+                      {sort === 'low-stock' && <span className="text-emerald-400">↑</span>}
+                      {sort === 'most-stock' && <span className="text-amber-400">↓</span>}
+                    </span>
+                  </TableHead>
+                  <TableHead
+                    className="text-zinc-500 text-[11px] font-semibold uppercase tracking-wider text-right w-[130px] cursor-pointer select-none hover:text-zinc-300 transition-colors"
+                    onClick={() => setSort(prev => prev === 'best-selling' ? 'newest' : 'best-selling')}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      Aksi
+                      {sort === 'best-selling' && <span className="text-emerald-400">🔥</span>}
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
