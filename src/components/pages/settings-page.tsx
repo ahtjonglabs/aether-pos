@@ -111,6 +111,7 @@ interface SettingsData {
   notifyDailyReport: boolean
   notifyWeeklyReport: boolean
   notifyMonthlyReport: boolean
+  notifyOnInsight: boolean
   outlet?: { id: string; name: string; address: string | null; phone: string | null }
 }
 
@@ -1564,6 +1565,7 @@ function TelegramTab() {
       telegramChatId: chatId || null,
       notifyOnTransaction: settings?.notifyOnTransaction ?? true,
       notifyOnCustomer: settings?.notifyOnCustomer ?? true,
+      notifyOnInsight: settings?.notifyOnInsight ?? true,
       notifyDailyReport: settings?.notifyDailyReport ?? true,
       notifyWeeklyReport: settings?.notifyWeeklyReport ?? false,
       notifyMonthlyReport: settings?.notifyMonthlyReport ?? true,
@@ -1574,7 +1576,7 @@ function TelegramTab() {
     }
   }
 
-  const handleToggle = (key: keyof Pick<SettingsData, 'notifyOnTransaction' | 'notifyOnCustomer' | 'notifyDailyReport' | 'notifyWeeklyReport' | 'notifyMonthlyReport'>, value: boolean) => {
+  const handleToggle = (key: keyof Pick<SettingsData, 'notifyOnTransaction' | 'notifyOnCustomer' | 'notifyOnInsight' | 'notifyDailyReport' | 'notifyWeeklyReport' | 'notifyMonthlyReport'>, value: boolean) => {
     if (settings) {
       setSettings({ ...settings, [key]: value })
       setDirty(true)
@@ -1620,6 +1622,7 @@ function TelegramTab() {
   const notificationToggles = [
     { key: 'notifyOnTransaction' as const, label: 'Transaksi Baru', desc: 'Setiap ada transaksi masuk' },
     { key: 'notifyOnCustomer' as const, label: 'Customer Baru', desc: 'Saat ada pelanggan terdaftar' },
+    { key: 'notifyOnInsight' as const, label: 'Insight Bisnis', desc: 'Peringatan kritis & rekomendasi AI' },
     { key: 'notifyDailyReport' as const, label: 'Laporan Harian', desc: 'Ringkasan pendapatan harian' },
     { key: 'notifyWeeklyReport' as const, label: 'Laporan Mingguan', desc: 'Ringkasan pendapatan mingguan' },
     { key: 'notifyMonthlyReport' as const, label: 'Laporan Bulanan', desc: 'Ringkasan pendapatan bulanan' },

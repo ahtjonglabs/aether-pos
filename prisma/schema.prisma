@@ -241,6 +241,7 @@ model OutletSetting {
   notifyDailyReport  Boolean @default(true) // Daily revenue summary
   notifyWeeklyReport Boolean @default(false) // Weekly report
   notifyMonthlyReport Boolean @default(true) // Monthly report
+  notifyOnInsight     Boolean @default(true) // Business insight notifications (critical/high priority)
 
   outlet    Outlet   @relation(fields: [outletId], references: [id])
   createdAt DateTime @default(now())

@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { getAuthUser, unauthorized } from '@/lib/get-auth'
 import { generateInvoiceNumber, resolvePlanType } from '@/lib/api-helpers'
 import { notifyNewTransaction } from '@/lib/notify'
+import { notifyInsight } from '@/lib/notify'
+import { runInsightEngine } from '@/lib/insight-engine'
 import { getPlanFeatures, isUnlimited } from '@/lib/plan-config'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
@@ -375,6 +377,10 @@ export async function POST(request: NextRequest) {
       console.error('Post-checkout notification error (non-fatal):', notifyError)
     }
 
+    // Fire-and-forget: Trigger insight notification after checkout
+    // Only runs every ~5 transactions to avoid spam (uses rate limiter in notifyInsight)
+    triggerInsightAfterCheckout(outletId).catch(() => {})
+
     return safeJson({
       success: true,
       invoiceNumber: result.invoiceNumber,
@@ -383,5 +389,128 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Checkout failed'
     console.error('Checkout POST error:', error)
     return safeJsonError(message, 400)
+  }
+}
+
+// ============================================================
+// Insight Trigger After Checkout
+// ============================================================
+
+// In-memory counter to throttle insight checks after checkout
+const insightCheckCounters = new Map<string, { count: number; resetAt: number }>()
+const INSIGHT_CHECK_INTERVAL = 5 // Check every 5 transactions per outlet
+
+async function triggerInsightAfterCheckout(outletId: string): Promise<void> {
+  // Throttle: only run insight every N transactions
+  const now = Date.now()
+  const counter = insightCheckCounters.get(outletId)
+
+  if (counter && now < counter.resetAt) {
+    counter.count++
+    if (counter.count < INSIGHT_CHECK_INTERVAL) {
+      return // Not yet time to check
+    }
+  } else {
+    insightCheckCounters.set(outletId, { count: 1, resetAt: now + 30 * 60 * 1000 }) // 30 min window
+    return // First in window, skip
+  }
+
+  // Reset counter
+  insightCheckCounters.set(outletId, { count: 0, resetAt: now + 30 * 60 * 1000 })
+
+  // Fetch quick data for insight engine
+  const today = new Date()
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const yesterday = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
+
+  try {
+    const [todayTxns, yesterdayTxns, products] = await Promise.all([
+      db.transaction.findMany({
+        where: { outletId, createdAt: { gte: todayStart } },
+        select: { subtotal: true, total: true, discount: true, items: { select: { productName: true, qty: true, price: true } } },
+      }),
+      db.transaction.findMany({
+        where: { outletId, createdAt: { gte: yesterday, lt: todayStart } },
+        select: { total: true, items: { select: { productName: true, qty: true } } },
+      }),
+      db.product.findMany({
+        where: { outletId },
+        select: { id: true, name: true, stock: true, lowStockAlert: true, price: true },
+      }),
+    ])
+
+    const todayNetto = todayTxns.reduce((s, t) => s + t.total, 0)
+    const yesterdayNetto = yesterdayTxns.reduce((s, t) => s + t.total, 0)
+
+    const outOfStockCount = products.filter(p => p.stock <= 0).length
+    const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= p.lowStockAlert).length
+
+    // Top selling (by qty today)
+    const productQtyMap = new Map<string, { qty: number; revenue: number; stock: number; lowStockAlert: number }>()
+    for (const txn of todayTxns) {
+      for (const item of txn.items) {
+        const existing = productQtyMap.get(item.productName) || { qty: 0, revenue: 0, stock: 0, lowStockAlert: 5 }
+        existing.qty += item.qty
+        existing.revenue += item.price * item.qty
+        productQtyMap.set(item.productName, existing)
+      }
+    }
+    // Merge stock info
+    for (const [name, data] of productQtyMap) {
+      const p = products.find(pr => pr.name === name)
+      if (p) {
+        data.stock = p.stock
+        data.lowStockAlert = p.lowStockAlert
+      }
+    }
+    const topSelling = [...productQtyMap.entries()]
+      .sort((a, b) => b[1].qty - a[1].qty)
+      .slice(0, 5)
+      .map(([name, data]) => ({ name, ...data }))
+
+    const avgPrice = products.length > 0 ? products.reduce((s, p) => s + p.price, 0) / products.length : 0
+
+    const engineResult = runInsightEngine({
+      todayRevenue: todayNetto,
+      yesterdayRevenue: yesterdayNetto,
+      todayTransactions: todayTxns.length,
+      yesterdayTransactions: yesterdayTxns.length,
+      todayAOV: todayTxns.length > 0 ? todayNetto / todayTxns.length : 0,
+      yesterdayAOV: yesterdayTxns.length > 0 ? yesterdayNetto / yesterdayTxns.length : 0,
+      totalProducts: products.length,
+      lowStockCount,
+      outOfStockCount,
+      topSelling,
+      totalCustomers: 0,
+      repeatCustomersThisWeek: 0,
+      newCustomersThisWeek: 0,
+      avgProductPrice: avgPrice,
+      todayProfit: null,
+      todayBrutto: todayTxns.reduce((s, t) => s + t.subtotal, 0),
+      todayDiscount: todayTxns.reduce((s, t) => s + t.discount, 0),
+      todayTax: 0,
+    })
+
+    // Filter out non-actionable insights
+    const actionableInsights = engineResult.insights.filter(i => i.id !== 'all-good')
+
+    if (actionableInsights.length > 0) {
+      await notifyInsight(
+        outletId,
+        actionableInsights.map(i => ({
+          id: i.id,
+          title: i.title,
+          why: i.why,
+          actions: i.actions,
+          priority: i.priority,
+          emoji: i.emoji,
+          outletName: 'Outlet',
+          healthScore: engineResult.healthScore,
+        })),
+        engineResult.healthScore
+      )
+    }
+  } catch {
+    // Silent fail — insight notification is non-critical
   }
 }

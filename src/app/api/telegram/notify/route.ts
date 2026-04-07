@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { sendTelegramMessage, formatStockAlertMessage, type StockAlertItem } from '@/lib/telegram'
+import { notifyDailyReport, notifyWeeklyReport, notifyMonthlyReport, notifyInsight } from '@/lib/notify'
+import { runInsightEngine, type AIInsight } from '@/lib/insight-engine'
 import { safeJson, safeJsonError } from '@/lib/safe-response'
 
 const TELEGRAM_API = 'https://api.telegram.org'
@@ -12,7 +14,7 @@ const TELEGRAM_API = 'https://api.telegram.org'
  * Used by cron jobs (no auth required — uses internal secret).
  *
  * Body:
- *   - type: "stock" | "daily" | "weekly" | "monthly"
+ *   - type: "stock" | "daily" | "weekly" | "monthly" | "insight"
  *   - outletId?: string (optional — if omitted, sends to ALL configured outlets)
  *   - secret: string (internal cron secret)
  */
@@ -34,6 +36,21 @@ export async function POST(request: NextRequest) {
 
     if (!type) {
       return safeJsonError('Missing notification type', 400)
+    }
+
+    // For daily/weekly/monthly reports, use the notify dispatcher directly
+    if (type === 'daily' || type === 'weekly' || type === 'monthly') {
+      return handleReportNotify(type, outletId)
+    }
+
+    // For insight, use the insight engine
+    if (type === 'insight') {
+      return handleInsightNotify(outletId)
+    }
+
+    // Stock alert — original implementation
+    if (type !== 'stock') {
+      return safeJsonError(`Unknown type: ${type}. Supported: stock, daily, weekly, monthly, insight`, 400)
     }
 
     // Find all outlets with Telegram configured
@@ -76,18 +93,13 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        if (type === 'stock') {
-          const sendResult = await sendStockAlert(setting.outletId, setting.outlet.name, setting.telegramChatId, botToken)
-          if (sendResult.ok) {
-            sentCount++
-            results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: true })
-          } else {
-            errorCount++
-            results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, error: sendResult.error })
-          }
+        const sendResult = await sendStockAlert(setting.outletId, setting.outlet.name, setting.telegramChatId, botToken)
+        if (sendResult.ok) {
+          sentCount++
+          results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: true })
         } else {
-          results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, error: `Unknown type: ${type}` })
           errorCount++
+          results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, error: sendResult.error })
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
@@ -107,6 +119,241 @@ export async function POST(request: NextRequest) {
     console.error('[telegram/notify] Error:', error)
     return safeJsonError('Internal server error')
   }
+}
+
+// ============================================================
+// Report Notification Handler (daily/weekly/monthly)
+// ============================================================
+
+async function handleReportNotify(type: 'daily' | 'weekly' | 'monthly', outletId?: string) {
+  // Find target outlets
+  const whereClause: Record<string, unknown> = {
+    telegramChatId: { not: null as unknown },
+  }
+  if (outletId) {
+    whereClause.outletId = outletId
+  }
+
+  const configuredSettings = await db.outletSetting.findMany({
+    where: whereClause,
+    select: { outletId: true, outlet: { select: { name: true } } },
+  })
+
+  if (configuredSettings.length === 0) {
+    return safeJson({ success: true, sent: 0, message: 'No outlets configured' })
+  }
+
+  let sentCount = 0
+  let errorCount = 0
+  const results: Array<{ outletId: string; outletName: string; ok: boolean; error?: string }> = []
+
+  for (const setting of configuredSettings) {
+    try {
+      let result: { sent: boolean; error?: string }
+      if (type === 'daily') {
+        result = await notifyDailyReport(setting.outletId)
+      } else if (type === 'weekly') {
+        result = await notifyWeeklyReport(setting.outletId)
+      } else {
+        result = await notifyMonthlyReport(setting.outletId)
+      }
+
+      if (result.sent) {
+        sentCount++
+        results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: true })
+      } else {
+        errorCount++
+        results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, error: result.error })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      errorCount++
+      results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, error: msg })
+    }
+  }
+
+  return safeJson({ success: errorCount === 0, sent: sentCount, errors: errorCount, results })
+}
+
+// ============================================================
+// Insight Notification Handler
+// ============================================================
+
+async function handleInsightNotify(outletId?: string) {
+  // Find target outlets with insight notifications enabled
+  const whereClause: Record<string, unknown> = {
+    telegramChatId: { not: null as unknown },
+    notifyOnInsight: true,
+  }
+  if (outletId) {
+    whereClause.outletId = outletId
+  }
+
+  const configuredSettings = await db.outletSetting.findMany({
+    where: whereClause,
+    select: { outletId: true, outlet: { select: { name: true } } },
+  })
+
+  if (configuredSettings.length === 0) {
+    return safeJson({ success: true, sent: 0, message: 'No outlets with insight notifications configured' })
+  }
+
+  let sentCount = 0
+  const results: Array<{ outletId: string; outletName: string; ok: boolean; sentCount: number; skipped: string[] }> = []
+
+  for (const setting of configuredSettings) {
+    try {
+      // Run insight engine for this outlet
+      const insights = await generateInsightsForOutlet(setting.outletId)
+
+      if (insights.length === 0) {
+        results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, sentCount: 0, skipped: [] })
+        continue
+      }
+
+      // Send via notify dispatcher (with spam prevention)
+      const result = await notifyInsight(
+        setting.outletId,
+        insights.map(i => ({
+          id: i.id,
+          title: i.title,
+          why: i.why,
+          actions: i.actions,
+          priority: i.priority,
+          emoji: i.emoji,
+          outletName: setting.outlet.name,
+          healthScore: 75, // will be calculated by engine in future
+        }))
+      )
+
+      if (result.sent) {
+        sentCount += result.sentCount
+        results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: true, sentCount: result.sentCount, skipped: result.skipped })
+      } else {
+        results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, sentCount: 0, skipped: result.skipped })
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      console.error(`[telegram/notify] Insight error for outlet ${setting.outletId}:`, msg)
+      results.push({ outletId: setting.outletId, outletName: setting.outlet.name, ok: false, sentCount: 0, skipped: [] })
+    }
+  }
+
+  return safeJson({ success: sentCount > 0, sent: sentCount, results })
+}
+
+// ============================================================
+// Generate Insights from Outlet Data
+// ============================================================
+
+async function generateInsightsForOutlet(outletId: string): Promise<AIInsight[]> {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  // Fetch today's and yesterday's data
+  const [todayTxns, yesterdayTxns, products, customers] = await Promise.all([
+    db.transaction.findMany({
+      where: { outletId, createdAt: { gte: today } },
+      select: { subtotal: true, total: true, discount: true, items: { select: { productName: true, qty: true, price: true } } },
+    }),
+    db.transaction.findMany({
+      where: { outletId, createdAt: { gte: yesterday, lt: today } },
+      select: { subtotal: true, total: true, discount: true, items: { select: { productName: true, qty: true, price: true } } },
+    }),
+    db.product.findMany({
+      where: { outletId },
+      select: { id: true, name: true, stock: true, lowStockAlert: true, price: true },
+    }),
+    db.customer.findMany({
+      where: { outletId },
+      select: { id: true, createdAt: true },
+    }),
+  ])
+
+  // Calculate aggregates
+  const calcAgg = (txns: typeof todayTxns) => {
+    let brutto = 0, netto = 0, discount = 0
+    const productMap = new Map<string, { qty: number; revenue: number }>()
+    for (const txn of txns) {
+      brutto += txn.subtotal
+      netto += txn.total
+      discount += txn.discount
+      for (const item of txn.items) {
+        const existing = productMap.get(item.productName) || { qty: 0, revenue: 0 }
+        existing.qty += item.qty
+        existing.revenue += item.price * item.qty
+        productMap.set(item.productName, existing)
+      }
+    }
+    return { brutto, netto, discount, productMap, count: txns.length }
+  }
+
+  const todayAgg = calcAgg(todayTxns)
+  const yesterdayAgg = calcAgg(yesterdayTxns)
+
+  // Top selling products (by qty)
+  const topSelling = [...todayAgg.productMap.entries()]
+    .sort((a, b) => b[1].qty - a[1].qty)
+    .slice(0, 5)
+    .map(([name, data]) => {
+      const product = products.find(p => p.name === name)
+      return {
+        name,
+        qty: data.qty,
+        revenue: data.revenue,
+        stock: product?.stock || 0,
+        lowStockAlert: product?.lowStockAlert || 5,
+      }
+    })
+
+  // Out of stock / low stock
+  const outOfStockCount = products.filter(p => p.stock <= 0).length
+  const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= p.lowStockAlert).length
+
+  // Customer metrics
+  const totalCustomers = customers.length
+  const weekAgo = new Date(now)
+  weekAgo.setDate(weekAgo.getDate() - 7)
+  const repeatCustomersThisWeek = new Set(
+    customers.filter(c => {
+      // Count customers who have transactions this week (approximate)
+      return c.createdAt < weekAgo
+    }).map(c => c.id)
+  ).size
+
+  const newCustomersThisWeek = customers.filter(c => c.createdAt >= weekAgo).length
+
+  // Avg product price
+  const avgProductPrice = products.length > 0
+    ? products.reduce((sum, p) => sum + p.price, 0) / products.length
+    : 0
+
+  // Run insight engine
+  const result = runInsightEngine({
+    todayRevenue: todayAgg.netto,
+    yesterdayRevenue: yesterdayAgg.netto,
+    todayTransactions: todayAgg.count,
+    yesterdayTransactions: yesterdayAgg.count,
+    todayAOV: todayAgg.count > 0 ? todayAgg.netto / todayAgg.count : 0,
+    yesterdayAOV: yesterdayAgg.count > 0 ? yesterdayAgg.netto / yesterdayAgg.count : 0,
+    totalProducts: products.length,
+    lowStockCount,
+    outOfStockCount,
+    topSelling,
+    totalCustomers,
+    repeatCustomersThisWeek,
+    newCustomersThisWeek,
+    avgProductPrice,
+    todayProfit: null,
+    todayBrutto: todayAgg.brutto,
+    todayDiscount: todayAgg.discount,
+    todayTax: 0,
+  })
+
+  // Only return actionable insights (not 'all-good')
+  return result.insights.filter(i => i.id !== 'all-good')
 }
 
 // ============================================================
@@ -177,18 +424,11 @@ async function sendStockAlert(
     }
   }
 
-  // Build product ID map from the products query
-  const productMap = new Map<string, number>()
-  for (const p of products) {
-    productMap.set(p.id, p.stock)
-  }
-
   // Calculate days until empty for each alert item
   for (const item of alertItems) {
-    // Find matching product by name to get ID
     const matchingProduct = products.find((p) => p.name === item.name)
     if (!matchingProduct || item.stock <= 0) {
-      item.daysUntilEmpty = 0 // already empty
+      item.daysUntilEmpty = 0
       continue
     }
 
@@ -198,7 +438,7 @@ async function sendStockAlert(
     if (dailyVelocity > 0) {
       item.daysUntilEmpty = Math.floor(item.stock / dailyVelocity)
     } else {
-      item.daysUntilEmpty = null // no recent sales data
+      item.daysUntilEmpty = null
     }
   }
 
@@ -214,7 +454,6 @@ async function sendStockAlert(
     items: alertItems,
   })
 
-  // Use custom bot token if outlet has one, otherwise use global token
   const token = botToken || process.env.TELEGRAM_BOT_TOKEN
   if (!token) {
     return { ok: false, error: 'No bot token available' }

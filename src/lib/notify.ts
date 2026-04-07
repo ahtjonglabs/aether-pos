@@ -2,11 +2,17 @@
  * notify.ts — Notification Dispatcher
  *
  * Fire-and-forget notification system.
- * Checks outlet settings (telegramChatId, notify toggles)
+ * Checks outlet settings (telegramChatId, notify toggles, botToken)
  * before sending. Never blocks the main request.
  *
+ * Spam Prevention (Insights):
+ *   - In-memory rate limiter per outlet
+ *   - Cooldown per insight ID: won't re-send same insight within cooldown period
+ *   - Max insights per hour: 3 per outlet
+ *   - Only critical/high priority insights sent via Telegram
+ *
  * Usage:
- *   import { notifyNewTransaction } from '@/lib/notify'
+ *   import { notifyNewTransaction, notifyInsight } from '@/lib/notify'
  *   await notifyNewTransaction(outletId, { ... })
  */
 
@@ -19,8 +25,10 @@ import {
   formatWeeklyReportMessage,
   formatMonthlyReportMessage,
   formatDailySummaryMessage,
+  formatInsightBatchMessage,
   type TransactionNotifyData,
   type RevenueData,
+  type InsightNotifyData,
 } from '@/lib/telegram'
 
 // ============================================================
@@ -29,11 +37,13 @@ import {
 
 interface TelegramConfig {
   chatId: string | null
+  botToken: string | null
   notifyOnTransaction: boolean
   notifyOnCustomer: boolean
   notifyDailyReport: boolean
   notifyWeeklyReport: boolean
   notifyMonthlyReport: boolean
+  notifyOnInsight: boolean
   outletName: string
 }
 
@@ -43,11 +53,13 @@ async function getTelegramConfig(outletId: string): Promise<TelegramConfig | nul
       where: { outletId },
       select: {
         telegramChatId: true,
+        telegramBotToken: true,
         notifyOnTransaction: true,
         notifyOnCustomer: true,
         notifyDailyReport: true,
         notifyWeeklyReport: true,
         notifyMonthlyReport: true,
+        notifyOnInsight: true,
         outlet: { select: { name: true } },
       },
     })
@@ -56,16 +68,87 @@ async function getTelegramConfig(outletId: string): Promise<TelegramConfig | nul
 
     return {
       chatId: setting.telegramChatId,
+      botToken: setting.telegramBotToken || null,
       notifyOnTransaction: setting.notifyOnTransaction,
       notifyOnCustomer: setting.notifyOnCustomer,
       notifyDailyReport: setting.notifyDailyReport,
       notifyWeeklyReport: setting.notifyWeeklyReport,
       notifyMonthlyReport: setting.notifyMonthlyReport,
+      notifyOnInsight: setting.notifyOnInsight,
       outletName: setting.outlet?.name || 'Outlet',
     }
   } catch {
     return null
   }
+}
+
+// ============================================================
+// Insight Spam Prevention (In-Memory Rate Limiter)
+// ============================================================
+
+interface InsightRateLimit {
+  lastSentPerId: Map<string, number>   // insightId -> timestamp
+  sentCountThisHour: number
+  hourStart: number
+}
+
+const insightRateLimits = new Map<string, InsightRateLimit>()
+
+// Cooldown: same insight ID won't be re-sent within this many ms (default: 2 hours)
+const INSIGHT_COOLDOWN_MS = 2 * 60 * 60 * 1000
+// Max insights per outlet per hour
+const MAX_INSIGHTS_PER_HOUR = 3
+// Minimum priority to send via Telegram ('low' and 'all-good' are suppressed)
+const MIN_INSIGHT_PRIORITY = new Set(['critical', 'high'])
+
+function getInsightRateLimit(outletId: string): InsightRateLimit {
+  let limit = insightRateLimits.get(outletId)
+  const now = Date.now()
+
+  if (!limit || (now - limit.hourStart) > 60 * 60 * 1000) {
+    limit = {
+      lastSentPerId: new Map(),
+      sentCountThisHour: 0,
+      hourStart: now,
+    }
+    insightRateLimits.set(outletId, limit)
+  }
+
+  return limit
+}
+
+/**
+ * Check if an insight should be sent (spam prevention).
+ * Returns true if the insight passes all rate limit checks.
+ */
+function shouldSendInsight(outletId: string, insight: InsightNotifyData): boolean {
+  // 1. Skip low priority / all-good insights
+  if (!MIN_INSIGHT_PRIORITY.has(insight.priority)) {
+    return false
+  }
+
+  // 2. Check cooldown per insight ID
+  const limit = getInsightRateLimit(outletId)
+  const lastSent = limit.lastSentPerId.get(insight.id)
+  if (lastSent && (Date.now() - lastSent) < INSIGHT_COOLDOWN_MS) {
+    return false
+  }
+
+  // 3. Check max per hour
+  if (limit.sentCountThisHour >= MAX_INSIGHTS_PER_HOUR) {
+    return false
+  }
+
+  return true
+}
+
+function markInsightSent(outletId: string, insightIds: string[]): void {
+  const limit = getInsightRateLimit(outletId)
+  const now = Date.now()
+  for (const id of insightIds) {
+    limit.lastSentPerId.set(id, now)
+  }
+  limit.sentCountThisHour += insightIds.length
 }
 
 // ============================================================
@@ -89,7 +172,9 @@ export async function notifyNewTransaction(
       outletName: config.outletName,
     })
 
-    sendTelegramMessage(config.chatId, message).then((result) => {
+    sendTelegramMessage(config.chatId, message, {
+      botToken: config.botToken || undefined,
+    }).then((result) => {
       if (result.ok) {
         console.log(`[notify] Transaction sent to Telegram chat ${config.chatId}`)
       }
@@ -112,7 +197,9 @@ export async function notifyNewCustomer(
       outletName: config.outletName,
     })
 
-    sendTelegramMessage(config.chatId, message).catch(() => {})
+    sendTelegramMessage(config.chatId, message, {
+      botToken: config.botToken || undefined,
+    }).catch(() => {})
   })
 }
 
@@ -191,7 +278,9 @@ export async function notifyDailyReport(
     date: today,
   })
 
-  const result = await sendTelegramMessage(config.chatId, message)
+  const result = await sendTelegramMessage(config.chatId, message, {
+    botToken: config.botToken || undefined,
+  })
   return { sent: result.ok, error: result.error }
 }
 
@@ -284,7 +373,9 @@ export async function notifyWeeklyReport(
     },
   })
 
-  const result = await sendTelegramMessage(config.chatId, message)
+  const result = await sendTelegramMessage(config.chatId, message, {
+    botToken: config.botToken || undefined,
+  })
   return { sent: result.ok, error: result.error }
 }
 
@@ -371,7 +462,9 @@ export async function notifyMonthlyReport(
     topProducts,
   })
 
-  const result = await sendTelegramMessage(config.chatId, message)
+  const result = await sendTelegramMessage(config.chatId, message, {
+    botToken: config.botToken || undefined,
+  })
   return { sent: result.ok, error: result.error }
 }
 
@@ -429,6 +522,88 @@ export async function notifyDailySummary(
     lowStockCount,
   })
 
-  const result = await sendTelegramMessage(config.chatId, message)
+  const result = await sendTelegramMessage(config.chatId, message, {
+    botToken: config.botToken || undefined,
+  })
   return { sent: result.ok, error: result.error }
+}
+
+// ============================================================
+// Insight Notification with Spam Prevention
+// ============================================================
+
+/**
+ * Send insight notifications to Telegram.
+ *
+ * Features:
+ *   - Priority filtering: only critical/high priority insights sent
+ *   - Cooldown: same insight ID not re-sent within 2 hours
+ *   - Rate limit: max 3 insights per outlet per hour
+ *   - Batch mode: combines multiple insights into one message
+ *
+ * Call this after checkout or via cron (e.g., every 30 minutes).
+ */
+export async function notifyInsight(
+  outletId: string,
+  insights: InsightNotifyData[],
+  healthScore: number = 75
+): Promise<{ sent: boolean; sentCount: number; skipped: string[] }> {
+  const config = await getTelegramConfig(outletId)
+  if (!config?.chatId || !config.notifyOnInsight) {
+    return { sent: false, sentCount: 0, skipped: insights.map(i => i.id) }
+  }
+
+  // Filter: only send insights that pass spam checks
+  const eligible: InsightNotifyData[] = []
+  const skipped: string[] = []
+
+  for (const insight of insights) {
+    if (shouldSendInsight(outletId, insight)) {
+      eligible.push({
+        ...insight,
+        outletName: config.outletName,
+      })
+    } else {
+      skipped.push(insight.id)
+    }
+  }
+
+  if (eligible.length === 0) {
+    return { sent: false, sentCount: 0, skipped }
+  }
+
+  // Sort by priority score (critical first)
+  eligible.sort((a, b) => {
+    const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+    return (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3)
+  })
+
+  // Take top eligible insights (respect remaining hourly quota)
+  const limit = getInsightRateLimit(outletId)
+  const remaining = MAX_INSIGHTS_PER_HOUR - limit.sentCountThisHour
+  const toSend = eligible.slice(0, Math.max(0, remaining))
+
+  if (toSend.length === 0) {
+    return { sent: false, sentCount: 0, skipped: [...skipped, ...eligible.map(i => i.id)] }
+  }
+
+  // Format as batch message (reduces spam — one message for multiple insights)
+  const message = formatInsightBatchMessage({
+    insights: toSend,
+    outletName: config.outletName,
+    healthScore,
+  })
+
+  const result = await sendTelegramMessage(config.chatId, message, {
+    botToken: config.botToken || undefined,
+  })
+
+  // Mark sent insights as dispatched
+  markInsightSent(outletId, toSend.map(i => i.id))
+
+  return {
+    sent: result.ok,
+    sentCount: toSend.length,
+    skipped: [...skipped, ...eligible.slice(toSend.length).map(i => i.id)],
+  }
 }

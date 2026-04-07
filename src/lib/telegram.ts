@@ -30,9 +30,12 @@ export async function sendTelegramMessage(
     parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2'
     disableNotification?: boolean
     replyMarkup?: Record<string, unknown>
+    /** Override bot token (e.g. per-outlet custom bot) */
+    botToken?: string
   }
 ): Promise<SendResult> {
-  const token = process.env.TELEGRAM_BOT_TOKEN
+  // Use per-outlet custom token if provided, otherwise fall back to global env
+  const token = options?.botToken || process.env.TELEGRAM_BOT_TOKEN
 
   if (!token) {
     console.warn('[telegram] TELEGRAM_BOT_TOKEN not set — skipping notification')
@@ -407,5 +410,80 @@ export function formatStockAlertMessage(data: {
     lines.push(`🔗 Kelola stok di dashboard Aether POS`)
   }
 
+  return lines.join('\n')
+}
+
+// ============================================================
+// Insight Notification Formatter
+// ============================================================
+
+export interface InsightNotifyData {
+  id: string
+  title: string
+  why: string
+  actions: string[]
+  priority: 'critical' | 'high' | 'medium' | 'low'
+  emoji: string
+  outletName: string
+  healthScore: number
+}
+
+const PRIORITY_LABELS: Record<string, string> = {
+  critical: '🔴 KRITIS',
+  high: '🟠 TINGGI',
+  medium: '🟡 SEDANG',
+  low: '🟢 RENDAH',
+}
+
+/**
+ * Format insight notification for Telegram.
+ * Only sends actionable insights (not 'all-good' or low priority).
+ */
+export function formatInsightMessage(data: InsightNotifyData): string {
+  const priorityLabel = PRIORITY_LABELS[data.priority] || '🟢 INFO'
+  const actionLines = data.actions.slice(0, 3).map((a, i) => `  ${i + 1}. ${a}`).join('\n')
+
+  return [
+    `💡 <b>Insight Bisnis</b>`,
+    `🕐 ${formatDateID(new Date())} • ${formatTime(new Date())}`,
+    `🏪 ${data.outletName}`,
+    ``,
+    `${data.emoji} <b>${data.title}</b>`,
+    `📂 Prioritas: ${priorityLabel}`,
+    `❓ <i>${data.why}</i>`,
+    ``,
+    `🎯 <b>Aksi yang Disarankan:</b>`,
+    actionLines,
+    ``,
+    `📊 Health Score: ${data.healthScore}/100`,
+  ].join('\n')
+}
+
+/**
+ * Format batch insight notification (multiple insights in one message).
+ * Use this to avoid spamming — combine up to 3 insights per message.
+ */
+export function formatInsightBatchMessage(data: {
+  insights: InsightNotifyData[]
+  outletName: string
+  healthScore: number
+}): string {
+  const lines: string[] = [
+    `💡 <b>Insight Bisnis</b>`,
+    `🕐 ${formatDateID(new Date())} • ${formatTime(new Date())}`,
+    `🏪 ${data.outletName}`,
+    `📊 Health Score: ${data.healthScore}/100`,
+    ``,
+  ]
+
+  for (const insight of data.insights.slice(0, 5)) {
+    const priorityLabel = PRIORITY_LABELS[insight.priority] || '🟢 INFO'
+    const actionLine = insight.actions[0] || ''
+    lines.push(`${insight.emoji} <b>${insight.title}</b> [${priorityLabel}]`)
+    lines.push(`  └ ${actionLine}`)
+    lines.push('')
+  }
+
+  lines.push('🔗 Lihat detail di dashboard Aether POS')
   return lines.join('\n')
 }

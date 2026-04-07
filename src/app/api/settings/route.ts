@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
       notifyDailyReport: setting.notifyDailyReport,
       notifyWeeklyReport: setting.notifyWeeklyReport,
       notifyMonthlyReport: setting.notifyMonthlyReport,
+      notifyOnInsight: setting.notifyOnInsight,
       outlet: setting.outlet
         ? {
             id: setting.outlet.id,
@@ -90,6 +91,7 @@ export async function PUT(request: NextRequest) {
     const notifyDailyReport = typeof body.notifyDailyReport === 'boolean' ? body.notifyDailyReport : undefined
     const notifyWeeklyReport = typeof body.notifyWeeklyReport === 'boolean' ? body.notifyWeeklyReport : undefined
     const notifyMonthlyReport = typeof body.notifyMonthlyReport === 'boolean' ? body.notifyMonthlyReport : undefined
+    const notifyOnInsight = typeof body.notifyOnInsight === 'boolean' ? body.notifyOnInsight : undefined
 
     // PPN / Tax fields
     const ppnEnabled = typeof body.ppnEnabled === 'boolean' ? body.ppnEnabled : undefined
@@ -120,6 +122,7 @@ export async function PUT(request: NextRequest) {
       ...(notifyDailyReport !== undefined && { notifyDailyReport }),
       ...(notifyWeeklyReport !== undefined && { notifyWeeklyReport }),
       ...(notifyMonthlyReport !== undefined && { notifyMonthlyReport }),
+      ...(notifyOnInsight !== undefined && { notifyOnInsight }),
     }
 
     // Upsert settings
@@ -164,7 +167,7 @@ export async function PUT(request: NextRequest) {
       'receiptBusinessName', 'receiptAddress', 'receiptPhone', 'receiptFooter', 'receiptLogo',
       'ppnEnabled', 'ppnRate',
       'themePrimaryColor', 'telegramBotToken', 'telegramChatId',
-      'notifyOnTransaction', 'notifyOnCustomer', 'notifyDailyReport', 'notifyWeeklyReport', 'notifyMonthlyReport',
+      'notifyOnTransaction', 'notifyOnCustomer', 'notifyDailyReport', 'notifyWeeklyReport', 'notifyMonthlyReport', 'notifyOnInsight',
     ] as const
     const settingsChanged: Record<string, unknown> = {}
     for (const key of SETTINGS_KEYS) {
@@ -218,6 +221,7 @@ export async function PUT(request: NextRequest) {
       notifyDailyReport: response.notifyDailyReport,
       notifyWeeklyReport: response.notifyWeeklyReport,
       notifyMonthlyReport: response.notifyMonthlyReport,
+      notifyOnInsight: response.notifyOnInsight,
       outlet: response.outlet
         ? {
             id: response.outlet.id,
