@@ -74,6 +74,7 @@ export async function GET(
         id: item.id,
         productId: item.productId,
         productName: item.productName,
+        variantName: item.variantName,
         price: item.price,
         qty: item.qty,
         subtotal: item.subtotal,

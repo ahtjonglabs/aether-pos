@@ -1514,6 +1514,7 @@ export default function TransactionsPage() {
                         {detailItems.map((item) => (
                           <div key={item.id} className="r-space-sm">
                             <p className="r-item-name">{item.productName}</p>
+                            {item.variantName && <p className="r-item-variant">{item.variantName}</p>}
                             <div className="r-row-items r-gap">
                               <span className="r-flex1 r-item-price">@ {formatCurrency(item.price)}</span>
                               <span className="r-w8 r-value">{item.qty}</span>
