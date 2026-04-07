@@ -226,11 +226,11 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
         </TabsContent>
         <TabsContent value="kasir">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <PaymentMethodsTab />
-            <LoyaltyTab />
+            <div className="min-w-0"><PaymentMethodsTab /></div>
+            <div className="min-w-0"><LoyaltyTab /></div>
           </div>
           {isOwner && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+            <div className="space-y-4 mt-4">
               <TaxTab />
               <PromoTab />
             </div>
@@ -322,8 +322,8 @@ function useSettings() {
 function OutletAndReceiptTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <OutletInfoTab />
-      <ThemeReceiptTab />
+      <div className="min-w-0"><OutletInfoTab /></div>
+      <div className="min-w-0"><ThemeReceiptTab /></div>
     </div>
   )
 }
@@ -1287,7 +1287,7 @@ function ThemeReceiptTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Theme Section */}
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">
@@ -1320,7 +1320,7 @@ function ThemeReceiptTab() {
       </Card>
 
       {/* Receipt Section */}
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
         <CardContent className="p-4 space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-zinc-100">Pengaturan Struk</h2>
@@ -1348,7 +1348,7 @@ function ThemeReceiptTab() {
                 className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm"
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="receipt-phone" className="text-xs text-zinc-300">Telepon</Label>
                 <Input
@@ -1378,7 +1378,7 @@ function ThemeReceiptTab() {
                   value={receiptLogo}
                   onChange={(e) => handleChange('receiptLogo', e.target.value)}
                   placeholder="https://example.com/logo.png"
-                  className="flex-1 bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                  className="flex-1 min-w-0 bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
                 />
                 {receiptLogo && (
                   <Button
@@ -1688,12 +1688,15 @@ function TelegramTab() {
         </CardContent>
       </Card>
 
-      {/* Connection Card */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-zinc-100">Koneksi Telegram</h2>
+      {/* Connection + Notifications side by side on desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Connection Card */}
+        <div className="min-w-0">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Koneksi Telegram</h2>
               <p className="text-xs text-zinc-400 mt-0.5">Hubungkan bot untuk notifikasi otomatis</p>
             </div>
             <Badge
@@ -1815,8 +1818,10 @@ function TelegramTab() {
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Notification Toggles */}
+      <div className="min-w-0">
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">
           <div>
@@ -1855,6 +1860,8 @@ function TelegramTab() {
           </div>
         </CardContent>
       </Card>
+      </div>
+      </div>
     </div>
   )
 }
@@ -2465,11 +2472,14 @@ function AccountTab() {
         </CardContent>
       </Card>
 
-      {/* Change Email */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardContent className="p-4 space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Ganti Email</h2>
+      {/* Email + Password side by side on desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Change Email */}
+        <div className="min-w-0">
+        <Card className="bg-zinc-900 border-zinc-800">
+          <CardContent className="p-4 space-y-4">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Ganti Email</h2>
             <p className="text-xs text-zinc-400 mt-0.5">Ubah email akun Anda</p>
           </div>
 
@@ -2512,8 +2522,10 @@ function AccountTab() {
           </Button>
         </CardContent>
       </Card>
+      </div>
 
       {/* Change Password */}
+      <div className="min-w-0">
       <Card className="bg-zinc-900 border-zinc-800">
         <CardContent className="p-4 space-y-4">
           <div>
@@ -2571,6 +2583,8 @@ function AccountTab() {
           </Button>
         </CardContent>
       </Card>
+      </div>
+    </div>
     </div>
   )
 }

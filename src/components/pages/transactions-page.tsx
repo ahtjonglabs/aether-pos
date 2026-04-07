@@ -69,6 +69,9 @@ import {
   Hash,
   Package,
   ArrowUpRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 
 interface TransactionItem {
@@ -180,6 +183,8 @@ export default function TransactionsPage() {
   const [paymentMethod, setPaymentMethod] = useState('')
   const [voidFilter, setVoidFilter] = useState('')
   const [outletId, setOutletId] = useState('')
+  const [sortField, setSortField] = useState('createdAt')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   // Cashier list
   const [cashiers, setCashiers] = useState<CashierOption[]>([])
@@ -300,6 +305,8 @@ export default function TransactionsPage() {
       if (cashierId) params.set('cashierId', cashierId)
       if (paymentMethod) params.set('paymentMethod', paymentMethod)
       if (voidFilter) params.set('voidStatus', voidFilter)
+      if (sortField) params.set('sortField', sortField)
+      if (sortDir) params.set('sortDir', sortDir)
       const res = await fetch(`/api/transactions?${params}`)
       if (res.ok) {
         const data: TransactionListResponse = await res.json()
@@ -327,7 +334,7 @@ export default function TransactionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, search, dateFrom, dateTo, cashierId, paymentMethod, voidFilter])
+  }, [page, search, dateFrom, dateTo, cashierId, paymentMethod, voidFilter, sortField, sortDir])
 
   useEffect(() => {
     fetchTransactions()
@@ -461,6 +468,36 @@ export default function TransactionsPage() {
       </html>
     `)
     win.document.close()
+  }
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('desc')
+    }
+  }
+
+  const renderSortHeader = (field: string, label: string, headClass: string = '') => {
+    const isActive = sortField === field
+    return (
+      <TableHead
+        className={`text-zinc-500 text-[11px] font-medium cursor-pointer select-none hover:text-zinc-300 transition-colors ${headClass}`}
+        onClick={() => handleSort(field)}
+      >
+        <span className="inline-flex items-center gap-1">
+          {label}
+          {isActive ? (
+            sortDir === 'asc'
+              ? <ArrowUp className="h-3 w-3 text-emerald-400 shrink-0" />
+              : <ArrowDown className="h-3 w-3 text-emerald-400 shrink-0" />
+          ) : (
+            <ArrowUpDown className="h-3 w-3 opacity-20 shrink-0" />
+          )}
+        </span>
+      </TableHead>
+    )
   }
 
   const hasActiveFilters = search || dateFrom || dateTo || cashierId || paymentMethod || voidFilter || outletId
@@ -1169,12 +1206,12 @@ export default function TransactionsPage() {
               <TableHeader>
                 <TableRow className="border-zinc-800 hover:bg-transparent bg-zinc-900/50">
                   <TableHead className="text-zinc-500 text-[11px] font-medium w-10"></TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium">Invoice #</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden lg:table-cell">Outlet</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium">Tanggal</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium hidden md:table-cell">Customer</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-center">Pembayaran</TableHead>
-                  <TableHead className="text-zinc-500 text-[11px] font-medium text-right">Total</TableHead>
+                  {renderSortHeader('invoiceNumber', 'Invoice #')}
+                  {renderSortHeader('outletName', 'Outlet', 'hidden lg:table-cell')}
+                  {renderSortHeader('createdAt', 'Tanggal')}
+                  {renderSortHeader('customerName', 'Customer', 'hidden md:table-cell')}
+                  {renderSortHeader('paymentMethod', 'Pembayaran', 'text-center')}
+                  {renderSortHeader('total', 'Total', 'text-right')}
                   <TableHead className="text-zinc-500 text-[11px] font-medium text-center hidden md:table-cell">Item</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium text-center w-10 hidden lg:table-cell">Sync</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium text-right w-20">Aksi</TableHead>

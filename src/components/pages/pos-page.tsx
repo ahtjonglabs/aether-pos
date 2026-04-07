@@ -191,6 +191,9 @@ export default function PosPage() {
   const checkoutSyncRef = useRef(false)
   const receiptContentRef = useRef<HTMLDivElement>(null)
   const initialSyncDone = useRef(false)
+  const lastInputTimeRef = useRef<number>(0)
+  const inputCharCountRef = useRef<number>(0)
+  const barcodeDetectedRef = useRef(false)
 
   // Offline / Online state (MUST be declared before useEffects that depend on it)
   const [isOnline, setIsOnline] = useState(true)
@@ -677,6 +680,48 @@ export default function PosPage() {
     return () => { if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current) }
   }, [productSearch, productPage, selectedCategoryId, fetchProducts])
 
+  // Auto-add product when barcode scanning is detected and exactly 1 match found
+  useEffect(() => {
+    if (
+      barcodeDetectedRef.current &&
+      products.length === 1 &&
+      !productsLoading &&
+      productSearch.trim().length >= 4
+    ) {
+      const product = products[0] as Product
+
+      // Check for exact barcode/sku match (not just partial search match)
+      const search = productSearch.trim().toLowerCase()
+      const isExactMatch =
+        (product.barcode && product.barcode.toLowerCase() === search) ||
+        (product.sku && product.sku.toLowerCase() === search) ||
+        (product.hasVariants && product.variants && product.variants.some((v: any) =>
+          (v.sku && v.sku.toLowerCase() === search) || (v.barcode && v.barcode.toLowerCase() === search)
+        )) ||
+        product.name.toLowerCase() === search
+
+      if (isExactMatch) {
+        if (product.hasVariants) {
+          const matchingVariant = product.variants?.find((v: any) =>
+            (v.sku && v.sku.toLowerCase() === search) || (v.barcode && v.barcode.toLowerCase() === search)
+          )
+          if (matchingVariant) {
+            addToCart(product, 1, matchingVariant as ProductVariant)
+            toast.success(`${product.name} - ${matchingVariant.name} ditambahkan`)
+          } else {
+            openVariantPicker(product)
+          }
+        } else if (product.stock > 0) {
+          addToCart(product)
+          toast.success(`${product.name} ditambahkan`)
+        }
+        setProductSearch('')
+        barcodeDetectedRef.current = false
+        inputCharCountRef.current = 0
+      }
+    }
+  }, [products, productsLoading, productSearch])
+
   const loadCustomersFromCache = useCallback(async () => {
     try {
       const cached = await localDB.customers.toArray()
@@ -689,19 +734,85 @@ export default function PosPage() {
   // ==================== HANDLERS ====================
 
   const handleSearchChange = (value: string) => {
+    const now = Date.now()
+    const prevLen = productSearch.length
+
+    if (prevLen < value.length) {
+      // Characters were added
+      const charsAdded = value.length - prevLen
+      if (charsAdded === 1) {
+        const timeSinceLastInput = now - lastInputTimeRef.current
+        if (timeSinceLastInput > 0 && timeSinceLastInput < 80) {
+          inputCharCountRef.current++
+          if (inputCharCountRef.current >= 3) {
+            barcodeDetectedRef.current = true
+          }
+        } else {
+          inputCharCountRef.current = 1
+          barcodeDetectedRef.current = false
+        }
+      } else if (charsAdded > 1) {
+        // Multiple chars pasted at once - treat as barcode
+        barcodeDetectedRef.current = true
+        inputCharCountRef.current = charsAdded
+      }
+    } else {
+      // Characters were deleted - reset barcode detection
+      inputCharCountRef.current = 0
+      barcodeDetectedRef.current = false
+    }
+
+    lastInputTimeRef.current = now
     setProductSearch(value)
     setProductPage(1)
   }
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleSearchKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && productSearch.trim()) {
+      const search = productSearch.trim()
+
+      // Try direct barcode/SKU lookup from IndexedDB first (fast, no debounce)
+      try {
+        const allProducts = await localDB.products.toArray()
+        // Check exact barcode match on product level
+        const exactMatch = allProducts.find((p: any) =>
+          p.barcode === search || p.sku === search ||
+          (p.hasVariants && p.variants && p.variants.some((v: any) => v.sku === search))
+        )
+        if (exactMatch) {
+          const product = exactMatch as unknown as Product
+          if (product.hasVariants) {
+            const matchingVariant = product.variants?.find((v: any) => v.sku === search)
+            if (matchingVariant) {
+              addToCart(product, 1, matchingVariant as ProductVariant)
+              setProductSearch('')
+              toast.success(`${product.name} - ${matchingVariant.name} ditambahkan`)
+              return
+            }
+            openVariantPicker(product)
+            setProductSearch('')
+            return
+          }
+          if (product.stock > 0) {
+            addToCart(product)
+            setProductSearch('')
+            toast.success(`${product.name} ditambahkan`)
+            return
+          }
+          toast.error('Stok produk habis')
+          setProductSearch('')
+          return
+        }
+      } catch { /* fallback to UI list */ }
+
+      // Fallback: check currently filtered products (for manual search + Enter)
       if (products.length === 1 && !productsLoading) {
-        const product = products[0]
-        if ((product as Product).hasVariants) {
-          openVariantPicker(product as Product)
+        const product = products[0] as Product
+        if (product.hasVariants) {
+          openVariantPicker(product)
           setProductSearch('')
         } else if (product.stock > 0) {
-          addToCart(product as Product)
+          addToCart(product)
           setProductSearch('')
           toast.success(`${product.name} ditambahkan`)
         }

@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     const cashierId = searchParams.get('cashierId') || ''
     const paymentMethod = searchParams.get('paymentMethod') || ''
     const voidStatus = searchParams.get('voidStatus') || '' // 'void' or 'active'
+    const sortField = searchParams.get('sortField') || 'createdAt'
+    const sortDir = searchParams.get('sortDir') || 'desc'
 
     const where: Record<string, unknown> = { outletId }
     if (search) {
@@ -60,6 +62,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Build dynamic orderBy
+    const validSortFields = ['createdAt', 'total', 'invoiceNumber', 'paymentMethod'] as const
+    const safeSortField = validSortFields.includes(sortField as any) ? sortField : 'createdAt'
+    const safeSortDir = sortDir === 'asc' ? 'asc' : 'desc'
+    const orderBy: Record<string, string> = { [safeSortField]: safeSortDir }
+
+    // For customer sort, need to use relation
+    let customerOrderBy: any = undefined
+    if (sortField === 'customerName') {
+      customerOrderBy = { customer: { name: sortDir === 'asc' ? 'asc' : 'desc' } }
+      delete orderBy.customerName
+    }
+
     // Get outlet name for display
     const outlet = await db.outlet.findUnique({
       where: { id: outletId },
@@ -70,7 +85,7 @@ export async function GET(request: NextRequest) {
     const [transactions, total] = await Promise.all([
       db.transaction.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: customerOrderBy || orderBy,
         skip,
         take: limit,
         select: {
