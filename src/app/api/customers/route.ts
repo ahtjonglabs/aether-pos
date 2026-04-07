@@ -115,13 +115,17 @@ export async function POST(request: NextRequest) {
       return newCustomer
     })
 
-    // Prepare response first
-    const response = safeJsonCreated(customer)
+    // Send Telegram notification — properly awaited to ensure delivery
+    // Wrapped in try/catch so notification failure doesn't fail the customer creation
+    try {
+      console.log(`[customers] Sending Telegram notification for new customer ${name} (outlet: ${outletId})`)
+      await notifyNewCustomer(outletId, { name, whatsapp })
+      console.log(`[customers] ✅ Telegram notification completed for customer ${name}`)
+    } catch (notifyError) {
+      console.error('[customers] Telegram notification error (non-fatal):', notifyError)
+    }
 
-    // Fire-and-forget: Send Telegram notification (don't await — best-effort)
-    void notifyNewCustomer(outletId, { name, whatsapp })
-
-    return response
+    return safeJsonCreated(customer)
   } catch (error) {
     console.error('Customers POST error:', error)
     return safeJsonError('Failed to create customer', 500)

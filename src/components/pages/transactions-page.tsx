@@ -440,34 +440,53 @@ export default function TransactionsPage() {
     }
   }
 
+  // Receipt CSS — consistent with POS receipt design
+  const RECEIPT_CSS = `
+    /* Thermal-printer optimized: pure black, no gray dithering, no font smoothing */
+    .r-center{text-align:center}.r-right{text-align:right}
+    .r-row{display:flex;justify-content:space-between;align-items:baseline}
+    .r-row-items{display:flex;align-items:baseline}
+    .r-bold{font-weight:700}.r-semibold{font-weight:600}.r-medium{font-weight:500}
+    .r-space>*+*{margin-top:4px}.r-space-sm>*+*{margin-top:2px}.r-space-md>*+*{margin-top:6px}.r-space-lg>*+*{margin-top:8px}
+    .r-py{padding-top:6px;padding-bottom:6px}.r-my{margin-top:6px;margin-bottom:6px}
+    .r-sep{border:none;border-top:1px dashed #000;margin:6px 0}
+    .r-sep-double{border:none;border-top:2px dashed #000;margin:6px 0}
+    .r-label{color:#000;font-size:9.5px;font-weight:400}.r-value{color:#000;font-weight:600;font-size:10px}
+    .r-value-bold{color:#000;font-weight:700}.r-muted{color:#000;font-size:9px;font-weight:400}
+    .r-success{color:#000;font-weight:600}.r-warning{color:#000;font-weight:600}
+    .r-upper{text-transform:uppercase;letter-spacing:0.5px}
+    .r-lg{font-size:12px}.r-sm{font-size:9px}.r-xs{font-size:8.5px}
+    .r-w8{width:28px;text-align:center;flex-shrink:0}.r-w16{width:60px;text-align:right;flex-shrink:0}
+    .r-w20{width:72px;text-align:right;flex-shrink:0}.r-flex1{flex:1;min-width:0}.r-gap{gap:2px}
+    .r-logo{max-width:40px;max-height:40px;object-fit:contain}
+    .r-item-name{font-weight:600;font-size:10px;color:#000}
+    .r-item-variant{font-size:8.5px;color:#000;font-weight:400}
+    .r-item-price{font-size:9px;color:#000;font-weight:400}
+    .r-total-row{font-size:11px}.r-footer{color:#000;font-size:8.5px;font-weight:400}
+    .r-wrap{font-family:'Courier New',Courier,monospace;width:100%;color:#000;font-size:10px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:auto}
+  `
+
   const handlePrint = () => {
     if (!receiptRef.current) return
     const content = receiptRef.current.innerHTML
     const win = window.open('', '_blank')
     if (!win) return
-    win.document.write(`
-      <html>
-        <head>
-          <title>Receipt - ${detailTransaction?.invoiceNumber || ''}</title>
-          <style>
-            body { font-family: 'Courier New', monospace; margin: 0; padding: 20px; font-size: 12px; }
-            .receipt { max-width: 300px; margin: 0 auto; }
-            .divider { border-top: 1px dashed #000; margin: 8px 0; }
-            .center { text-align: center; }
-            .right { text-align: right; }
-            table { width: 100%; border-collapse: collapse; }
-            td { padding: 2px 0; }
-            img { max-width: 48px; max-height: 48px; object-fit: contain; }
-            @media print { img { max-width: 48px; max-height: 48px; object-fit: contain; } }
-          </style>
-        </head>
-        <body>
-          <div class="receipt">${content}</div>
-          <script>window.onload = function() { window.print(); window.close(); }</script>
-        </body>
-      </html>
-    `)
+    win.document.write(`<!DOCTYPE html><html><head><title>Receipt - ${detailTransaction?.invoiceNumber || ''}</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { width: 72mm; margin: 0 auto; padding: 10px 8px; }
+        ${RECEIPT_CSS}
+        @media print {
+          body { margin: 0; padding: 6px 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { margin: 0; size: 80mm auto; }
+          /* Force crisp text on thermal — disable sub-pixel rendering */
+          body, .r-wrap { -webkit-font-smoothing: none; -moz-osx-font-smoothing: unset; }
+          .r-sep { border-top: 1px dashed #000; }
+        }
+      </style>
+    </head><body>${content}</body></html>`)
     win.document.close()
+    setTimeout(() => { win.print(); setTimeout(() => win.close(), 500) }, 250)
   }
 
   const handleSort = (field: string) => {
@@ -1460,51 +1479,84 @@ export default function TransactionsPage() {
 
                 {/* Receipt Preview (hidden, for printing) */}
                 <div className="hidden">
-                  <div ref={receiptRef} className="bg-white rounded-md p-4 font-mono text-xs text-zinc-800 max-w-[300px] mx-auto">
-                    <div className="text-center mb-3">
-                      {detailReceiptLogo && (
-                        <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                          <img src={detailReceiptLogo} alt="Logo" style={{ width: '48px', height: '48px', objectFit: 'contain', borderRadius: '8px', display: 'inline-block' }} crossOrigin="anonymous" />
-                        </div>
-                      )}
-                      <p className="font-bold text-sm text-zinc-900">{detailReceiptBusinessName || detailOutlet?.name || 'Aether POS'}</p>
-                      {detailOutlet?.address && <p className="text-zinc-500 text-[10px]">{detailOutlet.address}</p>}
-                      {detailOutlet?.phone && <p className="text-zinc-500 text-[10px]">{detailOutlet.phone}</p>}
+                  <div ref={receiptRef}>
+                    <style dangerouslySetInnerHTML={{ __html: RECEIPT_CSS }} />
+                    <div className="r-wrap">
+                      {/* Header */}
+                      <div className="r-center r-space-lg">
+                        {detailReceiptLogo && (
+                          <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+                            <img src={detailReceiptLogo} alt="Logo" className="r-logo" crossOrigin="anonymous" />
+                          </div>
+                        )}
+                        <p className="r-bold r-lg">{detailReceiptBusinessName || detailOutlet?.name || 'Aether POS'}</p>
+                        {detailOutlet?.address && <p className="r-muted">{detailOutlet.address}</p>}
+                        {detailOutlet?.phone && <p className="r-muted">{detailOutlet.phone}</p>}
+                      </div>
+
+                      <hr className="r-sep" />
+
+                      {/* Transaction Info */}
+                      <div className="r-space-sm">
+                        <div className="r-row"><span className="r-label">No. Invoice</span><span className="r-value-bold">{detailTransaction.invoiceNumber}</span></div>
+                        <div className="r-row"><span className="r-label">Tanggal</span><span className="r-value">{formatDate(detailTransaction.createdAt)}</span></div>
+                        <div className="r-row"><span className="r-label">Kasir</span><span className="r-value">{detailCashierName || '-'}</span></div>
+                        {detailTransaction.customerName && detailTransaction.customerName !== 'Walk-in' && (
+                          <div className="r-row"><span className="r-label">Customer</span><span className="r-value">{detailTransaction.customerName}</span></div>
+                        )}
+                        <div className="r-row"><span className="r-label">Pembayaran</span><span className="r-semibold r-upper r-sm">{detailTransaction.paymentMethod}</span></div>
+                      </div>
+
+                      <hr className="r-sep" />
+
+                      {/* Items */}
+                      <div className="r-space-md">
+                        {detailItems.map((item) => (
+                          <div key={item.id} className="r-space-sm">
+                            <p className="r-item-name">{item.productName}</p>
+                            <div className="r-row-items r-gap">
+                              <span className="r-flex1 r-item-price">@ {formatCurrency(item.price)}</span>
+                              <span className="r-w8 r-value">{item.qty}</span>
+                              <span className="r-w20 r-value-bold">{formatCurrency(item.subtotal)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <hr className="r-sep" />
+
+                      {/* Totals */}
+                      <div className="r-space-sm">
+                        <div className="r-row"><span className="r-label">Subtotal</span><span className="r-value">{formatCurrency(detailTransaction.subtotal ?? 0)}</span></div>
+                        {(detailTransaction.discount ?? 0) > 0 && (
+                          <div className="r-row"><span className="r-warning r-medium">Diskon</span><span className="r-warning r-bold">-{formatCurrency(detailTransaction.discount ?? 0)}</span></div>
+                        )}
+                        {(detailTransaction.taxAmount ?? 0) > 0 && (
+                          <div className="r-row"><span className="r-label">PPN</span><span className="r-value">+{formatCurrency(detailTransaction.taxAmount ?? 0)}</span></div>
+                        )}
+                      </div>
+
+                      <hr className="r-sep-double" />
+
+                      <div className="r-row r-total-row r-bold r-my">
+                        <span>TOTAL</span>
+                        <span>{formatCurrency(detailTransaction.total)}</span>
+                      </div>
+
+                      <hr className="r-sep" />
+
+                      <div className="r-space-sm">
+                        <div className="r-row"><span className="r-label">Dibayar</span><span className="r-value">{formatCurrency(detailTransaction.paidAmount ?? 0)}</span></div>
+                        {(detailTransaction.change ?? 0) > 0 && (
+                          <div className="r-row r-bold"><span>Kembalian</span><span>{formatCurrency(detailTransaction.change ?? 0)}</span></div>
+                        )}
+                      </div>
+
+                      <hr className="r-sep" />
+                      <div className="r-center r-py">
+                        <p className="r-footer">Terima kasih atas kunjungan Anda!</p>
+                      </div>
                     </div>
-                    <div className="border-t border-dashed border-zinc-300 my-2" />
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between"><span>No</span><span className="font-semibold">{detailTransaction.invoiceNumber}</span></div>
-                      <div className="flex justify-between"><span>Tanggal</span><span>{formatDate(detailTransaction.createdAt)}</span></div>
-                      <div className="flex justify-between"><span>Kasir</span><span>{detailCashierName || '-'}</span></div>
-                      {detailTransaction.customerName && detailTransaction.customerName !== 'Walk-in' && (
-                        <div className="flex justify-between"><span>Customer</span><span>{detailTransaction.customerName}</span></div>
-                      )}
-                      <div className="flex justify-between"><span>Pembayaran</span><span>{detailTransaction.paymentMethod}</span></div>
-                    </div>
-                    <div className="border-t border-dashed border-zinc-300 my-2" />
-                    <table className="w-full"><tbody>
-                      {detailItems.map((item) => (
-                        <tr key={item.id}>
-                          <td className="py-0.5 text-left">{item.productName}</td>
-                          <td className="py-0.5 text-right text-zinc-500">{item.qty}</td>
-                          <td className="py-0.5 text-right">{formatCurrency(item.subtotal)}</td>
-                        </tr>
-                      ))}
-                    </tbody></table>
-                    <div className="border-t border-dashed border-zinc-300 my-2" />
-                    <div className="space-y-0.5">
-                      <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(detailTransaction.subtotal ?? 0)}</span></div>
-                      {(detailTransaction.discount ?? 0) > 0 && (
-                        <div className="flex justify-between text-zinc-500"><span>Diskon</span><span>-{formatCurrency(detailTransaction.discount ?? 0)}</span></div>
-                      )}
-                      <div className="flex justify-between font-bold text-sm border-t border-dashed border-zinc-300 pt-1"><span>TOTAL</span><span>{formatCurrency(detailTransaction.total)}</span></div>
-                      <div className="flex justify-between"><span>Dibayar</span><span>{formatCurrency(detailTransaction.paidAmount ?? 0)}</span></div>
-                      {(detailTransaction.change ?? 0) > 0 && (
-                        <div className="flex justify-between"><span>Kembalian</span><span>{formatCurrency(detailTransaction.change ?? 0)}</span></div>
-                      )}
-                    </div>
-                    <div className="border-t border-dashed border-zinc-300 my-2" />
-                    <div className="text-center text-zinc-400 text-[10px]"><p>Terima kasih atas kunjungan Anda!</p></div>
                   </div>
                 </div>
 

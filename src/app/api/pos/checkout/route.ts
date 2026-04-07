@@ -334,8 +334,9 @@ export async function POST(request: NextRequest) {
       return { invoiceNumber }
     }, { timeout: 15000 })
 
-    // H4: Post-transaction lookups for notification — wrapped in try/catch so a
-    //     lookup failure never causes a "checkout failed" response when data was already saved.
+    // H4: Post-transaction notification — properly awaited to ensure delivery.
+    //     Wrapped in try/catch so a notification failure never causes a
+    //     "checkout failed" response when data was already saved.
     let cashierName = userId
     let outletName = 'Outlet'
     try {
@@ -350,12 +351,13 @@ export async function POST(request: NextRequest) {
       outletName = outletData?.name || 'Outlet'
       const customerName = customerData?.name || undefined
 
-      notifyNewTransaction(outletId, {
+      console.log(`[checkout] Sending Telegram notification for ${result.invoiceNumber} (outlet: ${outletId})`)
+
+      // MUST await — fire-and-forget doesn't work reliably in Next.js App Router
+      await notifyNewTransaction(outletId, {
         invoiceNumber: result.invoiceNumber,
         items: checkoutItems.map((item) => ({
-          productId: item.productId,
           productName: item.productName,
-          variantId: item.variantId || undefined,
           variantName: item.variantName || undefined,
           price: item.price,
           qty: item.qty,
@@ -372,9 +374,11 @@ export async function POST(request: NextRequest) {
         cashierName,
         outletName,
       })
+
+      console.log(`[checkout] ✅ Telegram notification completed for ${result.invoiceNumber}`)
     } catch (notifyError) {
       // Notification lookups / sending are best-effort; never fail the checkout
-      console.error('Post-checkout notification error (non-fatal):', notifyError)
+      console.error('[checkout] Post-checkout notification error (non-fatal):', notifyError)
     }
 
     // Fire-and-forget: Trigger insight notification after checkout

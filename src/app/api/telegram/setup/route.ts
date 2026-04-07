@@ -12,6 +12,9 @@ const TELEGRAM_API = 'https://api.telegram.org'
  * Accepts:
  * - { chatId } — link Telegram (legacy flow)
  * - { action: "test", botToken, chatId } — test connection with custom bot token
+ *
+ * IMPORTANT: After a successful test, botToken + chatId are auto-saved to DB
+ * so that notifications work immediately without requiring a separate "Save".
  */
 export async function POST(request: NextRequest) {
   try {
@@ -69,11 +72,35 @@ export async function POST(request: NextRequest) {
         } catch (err) {
           return safeJsonError(`Bot valid tapi gagal mengirim pesan: ${err instanceof Error ? err.message : 'Unknown error'}`, 400)
         }
+
+        // ============================================================
+        // AUTO-SAVE: Persist botToken + chatId to DB after successful test
+        // This fixes the bug where test works but notifications don't
+        // (because values were only in request body, not in DB)
+        // ============================================================
+        try {
+          await db.outletSetting.upsert({
+            where: { outletId: user.outletId },
+            create: {
+              outletId: user.outletId,
+              telegramChatId: chatId,
+              telegramBotToken: botToken,
+            },
+            update: {
+              telegramChatId: chatId,
+              telegramBotToken: botToken,
+            },
+          })
+          console.log(`[telegram/setup] Auto-saved botToken & chatId for outlet ${user.outletId} (chatId: ${chatId})`)
+        } catch (saveErr) {
+          console.error('[telegram/setup] Failed to auto-save Telegram config:', saveErr)
+          // Don't fail the test — the test was successful, save is best-effort
+        }
       }
 
       return safeJson({
         success: true,
-        message: chatId ? 'Koneksi berhasil! Pesan tes terkirim.' : 'Bot Token valid!',
+        message: chatId ? 'Koneksi berhasil! Pesan tes terkirim & tersimpan.' : 'Bot Token valid!',
         botInfo: {
           id: botInfo.id,
           name: botInfo.first_name,

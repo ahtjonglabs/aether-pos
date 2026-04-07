@@ -1157,27 +1157,28 @@ export default function PosPage() {
 
   // Receipt CSS — embedded in content for both preview + print consistency
   const RECEIPT_CSS = `
+    /* Thermal-printer optimized: pure black, no gray dithering, no font smoothing */
     .r-center{text-align:center}.r-right{text-align:right}
     .r-row{display:flex;justify-content:space-between;align-items:baseline}
     .r-row-items{display:flex;align-items:baseline}
     .r-bold{font-weight:700}.r-semibold{font-weight:600}.r-medium{font-weight:500}
     .r-space>*+*{margin-top:4px}.r-space-sm>*+*{margin-top:2px}.r-space-md>*+*{margin-top:6px}.r-space-lg>*+*{margin-top:8px}
     .r-py{padding-top:6px;padding-bottom:6px}.r-my{margin-top:6px;margin-bottom:6px}
-    .r-sep{border:none;border-top:1px dashed #bbb;margin:6px 0}
-    .r-sep-double{border:none;border-top:2px dashed #333;margin:6px 0}
-    .r-label{color:#555;font-size:9.5px}.r-value{color:#111;font-weight:600;font-size:10px}
-    .r-value-bold{color:#000;font-weight:700}.r-muted{color:#666;font-size:9px}
-    .r-success{color:#059669}.r-warning{color:#b45309}
+    .r-sep{border:none;border-top:1px dashed #000;margin:6px 0}
+    .r-sep-double{border:none;border-top:2px dashed #000;margin:6px 0}
+    .r-label{color:#000;font-size:9.5px;font-weight:400}.r-value{color:#000;font-weight:600;font-size:10px}
+    .r-value-bold{color:#000;font-weight:700}.r-muted{color:#000;font-size:9px;font-weight:400}
+    .r-success{color:#000;font-weight:600}.r-warning{color:#000;font-weight:600}
     .r-upper{text-transform:uppercase;letter-spacing:0.5px}
     .r-lg{font-size:12px}.r-sm{font-size:9px}.r-xs{font-size:8.5px}
     .r-w8{width:28px;text-align:center;flex-shrink:0}.r-w16{width:60px;text-align:right;flex-shrink:0}
     .r-w20{width:72px;text-align:right;flex-shrink:0}.r-flex1{flex:1;min-width:0}.r-gap{gap:2px}
     .r-logo{max-width:40px;max-height:40px;object-fit:contain}
     .r-item-name{font-weight:600;font-size:10px;color:#000}
-    .r-item-variant{font-size:8.5px;color:#666}
-    .r-item-price{font-size:9px;color:#555}
-    .r-total-row{font-size:11px}.r-footer{color:#555;font-size:8.5px}
-    .r-wrap{font-family:'Courier New',Courier,monospace;width:100%;color:#000;font-size:10px;line-height:1.45}
+    .r-item-variant{font-size:8.5px;color:#000;font-weight:400}
+    .r-item-price{font-size:9px;color:#000;font-weight:400}
+    .r-total-row{font-size:11px}.r-footer{color:#000;font-size:8.5px;font-weight:400}
+    .r-wrap{font-family:'Courier New',Courier,monospace;width:100%;color:#000;font-size:10px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:auto}
   `
 
   const handleReceiptPrint = () => {
@@ -1193,6 +1194,8 @@ export default function PosPage() {
         @media print {
           body { margin: 0; padding: 6px 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { margin: 0; size: 80mm auto; }
+          /* Force crisp text on thermal — disable sub-pixel rendering */
+          body, .r-wrap { -webkit-font-smoothing: none; -moz-osx-font-smoothing: unset; }
           .r-sep { border-top: 1px dashed #000; }
         }
       </style>

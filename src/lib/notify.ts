@@ -64,7 +64,17 @@ async function getTelegramConfig(outletId: string): Promise<TelegramConfig | nul
       },
     })
 
-    if (!setting || !setting.telegramChatId) return null
+    if (!setting) {
+      console.warn(`[notify-config] No OutletSetting found for outlet ${outletId}`)
+      return null
+    }
+
+    if (!setting.telegramChatId) {
+      console.log(`[notify-config] telegramChatId is null for outlet ${outletId}`)
+      return null
+    }
+
+    console.log(`[notify-config] Found config for outlet ${outletId}: chatId=${setting.telegramChatId}, botToken=${setting.telegramBotToken ? '***set***' : 'NOT SET (will use env)'}, notifyTxn=${setting.notifyOnTransaction}`)
 
     return {
       chatId: setting.telegramChatId,
@@ -77,7 +87,8 @@ async function getTelegramConfig(outletId: string): Promise<TelegramConfig | nul
       notifyOnInsight: setting.notifyOnInsight,
       outletName: setting.outlet?.name || 'Outlet',
     }
-  } catch {
+  } catch (err) {
+    console.error(`[notify-config] DB error for outlet ${outletId}:`, err)
     return null
   }
 }
@@ -158,13 +169,15 @@ function markInsightSent(outletId: string, insightIds: string[]): void {
 /**
  * Notify owner about a new transaction.
  * Call this AFTER the transaction is committed.
+ * Must be properly awaited or scheduled via after().
  */
 export async function notifyNewTransaction(
   outletId: string,
   data: TransactionNotifyData
 ): Promise<void> {
-  // Fire-and-forget — don't await in critical path
-  getTelegramConfig(outletId).then((config) => {
+  try {
+    const config = await getTelegramConfig(outletId)
+
     if (!config?.chatId) {
       console.log(`[notify] Transaction skipped: no chatId for outlet ${outletId}`)
       return
@@ -181,28 +194,31 @@ export async function notifyNewTransaction(
 
     console.log(`[notify] Sending transaction notification to Telegram chat ${config.chatId} (outlet: ${outletId})`)
 
-    sendTelegramMessage(config.chatId, message, {
+    const result = await sendTelegramMessage(config.chatId, message, {
       botToken: config.botToken || undefined,
-    }).then((result) => {
-      if (result.ok) {
-        console.log(`[notify] ✅ Transaction notification sent successfully (chatId: ${config.chatId})`)
-      } else {
-        console.error(`[notify] ❌ Transaction notification failed: ${result.error} (chatId: ${config.chatId})`)
-      }
     })
-  }).catch((err) => {
+
+    if (result.ok) {
+      console.log(`[notify] ✅ Transaction notification sent successfully (chatId: ${config.chatId})`)
+    } else {
+      console.error(`[notify] ❌ Transaction notification failed: ${result.error} (chatId: ${config.chatId})`)
+    }
+  } catch (err) {
     console.error(`[notify] ❌ Failed to get Telegram config for outlet ${outletId}:`, err)
-  })
+  }
 }
 
 /**
  * Notify owner about a new customer registration.
+ * Must be properly awaited or scheduled via after().
  */
 export async function notifyNewCustomer(
   outletId: string,
   data: { name: string; whatsapp: string }
 ): Promise<void> {
-  getTelegramConfig(outletId).then((config) => {
+  try {
+    const config = await getTelegramConfig(outletId)
+
     if (!config?.chatId) {
       console.log(`[notify] Customer skipped: no chatId for outlet ${outletId}`)
       return
@@ -219,18 +235,18 @@ export async function notifyNewCustomer(
 
     console.log(`[notify] Sending customer notification to Telegram chat ${config.chatId} (outlet: ${outletId})`)
 
-    sendTelegramMessage(config.chatId, message, {
+    const result = await sendTelegramMessage(config.chatId, message, {
       botToken: config.botToken || undefined,
-    }).then((result) => {
-      if (result.ok) {
-        console.log(`[notify] ✅ Customer notification sent (chatId: ${config.chatId})`)
-      } else {
-        console.error(`[notify] ❌ Customer notification failed: ${result.error} (chatId: ${config.chatId})`)
-      }
     })
-  }).catch((err) => {
+
+    if (result.ok) {
+      console.log(`[notify] ✅ Customer notification sent (chatId: ${config.chatId})`)
+    } else {
+      console.error(`[notify] ❌ Customer notification failed: ${result.error} (chatId: ${config.chatId})`)
+    }
+  } catch (err) {
     console.error(`[notify] ❌ Failed to get Telegram config for outlet ${outletId}:`, err)
-  })
+  }
 }
 
 /**
