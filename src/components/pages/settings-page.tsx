@@ -322,9 +322,9 @@ function useSettings() {
 
 function OutletAndReceiptTab() {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div className="min-w-0"><OutletInfoTab /></div>
-      <div className="min-w-0"><ThemeReceiptTab /></div>
+    <div className="space-y-4">
+      <OutletInfoTab />
+      <ThemeReceiptTab />
     </div>
   )
 }
@@ -628,15 +628,28 @@ function OutletInfoTab() {
         </div>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="outlet-name" className="text-xs text-zinc-300">Nama Outlet</Label>
-            <Input
-              id="outlet-name"
-              value={outletName}
-              onChange={(e) => handleChange('outletName', e.target.value)}
-              placeholder="Masukkan nama outlet"
-              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-            />
+          {/* Desktop: name + phone side by side, address full width below */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="outlet-name" className="text-xs text-zinc-300">Nama Outlet</Label>
+              <Input
+                id="outlet-name"
+                value={outletName}
+                onChange={(e) => handleChange('outletName', e.target.value)}
+                placeholder="Masukkan nama outlet"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="outlet-phone" className="text-xs text-zinc-300">Telepon</Label>
+              <Input
+                id="outlet-phone"
+                value={outletPhone}
+                onChange={(e) => handleChange('outletPhone', e.target.value)}
+                placeholder="Masukkan nomor telepon"
+                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="outlet-address" className="text-xs text-zinc-300">Alamat</Label>
@@ -645,17 +658,8 @@ function OutletInfoTab() {
               value={outletAddress}
               onChange={(e) => handleChange('outletAddress', e.target.value)}
               placeholder="Masukkan alamat outlet"
-              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="outlet-phone" className="text-xs text-zinc-300">Telepon</Label>
-            <Input
-              id="outlet-phone"
-              value={outletPhone}
-              onChange={(e) => handleChange('outletPhone', e.target.value)}
-              placeholder="Masukkan nomor telepon"
-              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+              rows={2}
+              className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm resize-none"
             />
           </div>
         </div>
@@ -1268,164 +1272,193 @@ function ThemeReceiptTab() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4 space-y-3">
-            <Skeleton className="h-5 w-36 bg-zinc-800" />
-            <Skeleton className="h-9 bg-zinc-800" />
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4 space-y-3">
-            <Skeleton className="h-5 w-36 bg-zinc-800" />
-            <Skeleton className="h-9 bg-zinc-800" />
-            <Skeleton className="h-9 bg-zinc-800" />
-            <Skeleton className="h-9 bg-zinc-800" />
-            <Skeleton className="h-9 bg-zinc-800" />
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="lg:col-span-3 space-y-4">
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-5 w-36 bg-zinc-800" />
+                <Skeleton className="h-9 bg-zinc-800" />
+              </CardContent>
+            </Card>
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-5 w-40 bg-zinc-800" />
+                <Skeleton className="h-9 bg-zinc-800" />
+                <Skeleton className="h-9 bg-zinc-800" />
+                <Skeleton className="h-9 bg-zinc-800" />
+                <Skeleton className="h-9 bg-zinc-800" />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="lg:col-span-2">
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-5 w-36 bg-zinc-800" />
+                <Skeleton className="h-72 w-full bg-zinc-800 rounded-lg" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-4 min-w-0">
-      {/* Theme Section */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardContent className="p-4 space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Tema</h2>
-            <p className="text-xs text-zinc-400 mt-0.5">Kustomisasi tampilan aplikasi</p>
-          </div>
+      {/* Desktop: 2-col layout — form left (3/5), preview right (2/5) */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+        {/* Left column: Theme + Receipt Form */}
+        <div className="lg:col-span-3 space-y-4 min-w-0">
+          {/* Theme Section */}
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardContent className="p-4 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Tema</h2>
+                <p className="text-xs text-zinc-400 mt-0.5">Kustomisasi tampilan aplikasi</p>
+              </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs text-zinc-300">Warna tema utama</Label>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              {THEME_COLORS.map((color) => {
-                const isSelected = themeColor === color.name
-                return (
-                  <button
-                    key={color.name}
-                    onClick={() => handleChange('themeColor', color.name)}
-                    className={`relative w-8 h-8 rounded-full ${color.classes} flex items-center justify-center transition-colors ${
-                      isSelected ? 'ring-2 ring-offset-2 ring-offset-zinc-900 ring-white/50 scale-110' : 'hover:scale-105'
-                    }`}
-                    title={color.label}
-                  >
-                    {isSelected && <Check className="h-4 w-4 text-white" />}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-300">Warna tema utama</Label>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  {THEME_COLORS.map((color) => {
+                    const isSelected = themeColor === color.name
+                    return (
+                      <button
+                        key={color.name}
+                        onClick={() => handleChange('themeColor', color.name)}
+                        className={`relative w-8 h-8 rounded-full ${color.classes} flex items-center justify-center transition-colors ${
+                          isSelected ? 'ring-2 ring-offset-2 ring-offset-zinc-900 ring-white/50 scale-110' : 'hover:scale-105'
+                        }`}
+                        title={color.label}
+                      >
+                        {isSelected && <Check className="h-4 w-4 text-white" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Receipt Section */}
-      <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
-        <CardContent className="p-4 space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Pengaturan Struk</h2>
-            <p className="text-xs text-zinc-400 mt-0.5">Informasi yang ditampilkan pada struk belanja</p>
-          </div>
+          {/* Receipt Section */}
+          <Card className="bg-zinc-900 border-zinc-800 overflow-hidden">
+            <CardContent className="p-4 space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Pengaturan Struk</h2>
+                <p className="text-xs text-zinc-400 mt-0.5">Informasi yang ditampilkan pada struk belanja</p>
+              </div>
 
-          <div className="grid gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="receipt-name" className="text-xs text-zinc-300">Nama Usaha</Label>
-              <Input
-                id="receipt-name"
-                value={receiptBusinessName}
-                onChange={(e) => handleChange('receiptBusinessName', e.target.value)}
-                placeholder="Masukkan nama usaha"
-                className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-              />
-            </div>
-            <div className="grid gap-3 grid-cols-1">
-              <div className="space-y-1.5">
-                <Label htmlFor="receipt-address" className="text-xs text-zinc-300">Alamat</Label>
-                <Textarea
-                  id="receipt-address"
-                  value={receiptAddress}
-                  onChange={(e) => handleChange('receiptAddress', e.target.value)}
-                  placeholder="Masukkan alamat usaha"
-                  rows={2}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm resize-none"
-                />
-              </div>
-            </div>
-            <div className="grid gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="receipt-phone" className="text-xs text-zinc-300">Telepon</Label>
-                <Input
-                  id="receipt-phone"
-                  value={receiptPhone}
-                  onChange={(e) => handleChange('receiptPhone', e.target.value)}
-                  placeholder="08xxxxxxxxxx"
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="receipt-footer" className="text-xs text-zinc-300">Pesan Footer</Label>
-                <Input
-                  id="receipt-footer"
-                  value={receiptFooter}
-                  onChange={(e) => handleChange('receiptFooter', e.target.value)}
-                  placeholder="Terima kasih atas kunjungan Anda!"
-                  className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receipt-logo" className="text-xs text-zinc-300">Logo Outlet (Image URL)</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="receipt-logo"
-                  value={receiptLogo}
-                  onChange={(e) => handleChange('receiptLogo', e.target.value)}
-                  placeholder="https://example.com/logo.png"
-                  className="flex-1 min-w-0 bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
-                />
-                {receiptLogo && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0 h-9 w-9 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                    onClick={() => handleChange('receiptLogo', '')}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-              {receiptLogo && (
-                <div className="mt-1 flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
-                  <img
-                    src={receiptLogo}
-                    alt="Logo Preview"
-                    className="h-14 w-14 rounded-lg object-contain bg-white p-1"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              <div className="grid gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="receipt-name" className="text-xs text-zinc-300">Nama Usaha</Label>
+                  <Input
+                    id="receipt-name"
+                    value={receiptBusinessName}
+                    onChange={(e) => handleChange('receiptBusinessName', e.target.value)}
+                    placeholder="Masukkan nama usaha"
+                    className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
                   />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-emerald-400">Logo berhasil dimuat</p>
-                    <p className="text-[10px] text-zinc-500 truncate mt-0.5">{receiptLogo}</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="receipt-address" className="text-xs text-zinc-300">Alamat</Label>
+                  <Textarea
+                    id="receipt-address"
+                    value={receiptAddress}
+                    onChange={(e) => handleChange('receiptAddress', e.target.value)}
+                    placeholder="Masukkan alamat usaha"
+                    rows={2}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 text-sm resize-none"
+                  />
+                </div>
+                {/* Desktop: phone + footer side by side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="receipt-phone" className="text-xs text-zinc-300">Telepon</Label>
+                    <Input
+                      id="receipt-phone"
+                      value={receiptPhone}
+                      onChange={(e) => handleChange('receiptPhone', e.target.value)}
+                      placeholder="08xxxxxxxxxx"
+                      className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="receipt-footer" className="text-xs text-zinc-300">Pesan Footer</Label>
+                    <Input
+                      id="receipt-footer"
+                      value={receiptFooter}
+                      onChange={(e) => handleChange('receiptFooter', e.target.value)}
+                      placeholder="Terima kasih atas kunjungan Anda!"
+                      className="bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                    />
                   </div>
                 </div>
-              )}
-              <p className="text-[11px] text-zinc-500">Masukkan URL gambar logo. Logo akan ditampilkan pada struk belanja.</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-logo" className="text-xs text-zinc-300">Logo Outlet (Image URL)</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="receipt-logo"
+                      value={receiptLogo}
+                      onChange={(e) => handleChange('receiptLogo', e.target.value)}
+                      placeholder="https://example.com/logo.png"
+                      className="flex-1 min-w-0 bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 h-9 text-sm"
+                    />
+                    {receiptLogo && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 h-9 w-9 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        onClick={() => handleChange('receiptLogo', '')}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                  {receiptLogo && (
+                    <div className="mt-1 flex items-center gap-3 p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/30">
+                      <img
+                        src={receiptLogo}
+                        alt="Logo Preview"
+                        className="h-14 w-14 rounded-lg object-contain bg-white p-1"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-emerald-400">Logo berhasil dimuat</p>
+                        <p className="text-[10px] text-zinc-500 truncate mt-0.5">{receiptLogo}</p>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-zinc-500">Masukkan URL gambar logo. Logo akan ditampilkan pada struk belanja.</p>
+                </div>
+              </div>
 
-      {/* Receipt Preview */}
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardContent className="p-4 space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Pratinjau Struk</h2>
-            <p className="text-xs text-zinc-400 mt-0.5">Tampilan struk yang akan dicetak</p>
-          </div>
+              {/* Save Button — inside form card on desktop */}
+              <div className="flex justify-end pt-2">
+                <Button
+                  onClick={handleSave}
+                  disabled={saving || !dirty}
+                  className="theme-btn-primary h-9 text-xs"
+                >
+                  {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                  Simpan
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-          <div className="flex justify-center">
-            <div className="w-[260px] bg-white rounded-lg p-3 shadow-lg font-mono overflow-hidden">
+        {/* Right column: Receipt Preview — sticky on desktop */}
+        <div className="lg:col-span-2 min-w-0">
+          <Card className="bg-zinc-900 border-zinc-800 lg:sticky lg:top-4">
+            <CardContent className="p-4 space-y-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Pratinjau Struk</h2>
+                <p className="text-xs text-zinc-400 mt-0.5">Tampilan struk yang akan dicetak</p>
+              </div>
+
+              <div className="flex justify-center">
+                <div className="w-[260px] bg-white rounded-lg p-3 shadow-lg font-mono overflow-hidden">
               <style dangerouslySetInnerHTML={{ __html: `
                 .r-center{text-align:center}.r-right{text-align:right}
                 .r-row{display:flex;justify-content:space-between;align-items:baseline}
@@ -1539,22 +1572,12 @@ function ThemeReceiptTab() {
                 <div className="r-center r-py">
                   <p className="r-footer">{receiptFooter || 'Terima kasih atas kunjungan Anda!'}</p>
                 </div>
+                </div>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button
-          onClick={handleSave}
-          disabled={saving || !dirty}
-          className="theme-btn-primary h-9 text-xs"
-        >
-          {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-          Simpan Semua
-        </Button>
+          </CardContent>
+        </Card>
+        </div>
       </div>
     </div>
   )
