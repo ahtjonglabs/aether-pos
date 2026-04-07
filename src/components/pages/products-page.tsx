@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 import { formatCurrency, formatNumber, formatDate } from '@/lib/format'
@@ -54,6 +54,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -329,9 +330,13 @@ export default function ProductsPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadPhase, setUploadPhase] = useState('')
   const [uploadResult, setUploadResult] = useState<{
     created: number
     skipped: number
+    variantsCreated: number
+    variantsSkipped: number
     errors: string[]
   } | null>(null)
   const [uploadDragOver, setUploadDragOver] = useState(false)
@@ -636,6 +641,79 @@ export default function ProductsPage() {
   }
 
   // Bulk delete handler
+  // Simulated progress for bulk upload
+  const uploadProgressRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const handleBulkUpload = useCallback(async () => {
+    if (!uploadFile) return
+    setUploading(true)
+    setUploadProgress(0)
+    setUploadPhase('Mempersiapkan upload...')
+
+    // Simulated progress phases
+    // Phase 1: 0-25% — uploading file (fast)
+    // Phase 2: 25-60% — parsing & validating data (medium)
+    // Phase 3: 60-90% — saving products to database (slower)
+    // Phase 4: 90-100% — finishing up (snap on response)
+    let progress = 0
+
+    uploadProgressRef.current = setInterval(() => {
+      progress += Math.random() * 3 + 0.5
+      if (progress > 90) progress = 90
+      setUploadProgress(Math.round(progress))
+
+      if (progress < 25) {
+        setUploadPhase('Mengupload file...')
+      } else if (progress < 60) {
+        setUploadPhase('Memproses data produk...')
+      } else {
+        setUploadPhase('Menyimpan ke database...')
+      }
+    }, 200)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      const res = await fetch('/api/products/bulk-upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      // Clear interval and snap to 100%
+      if (uploadProgressRef.current) {
+        clearInterval(uploadProgressRef.current)
+        uploadProgressRef.current = null
+      }
+      setUploadProgress(95)
+      setUploadPhase('Menyelesaikan...')
+
+      if (res.ok) {
+        const data = await res.json()
+        setUploadProgress(100)
+        setUploadPhase('Selesai!')
+        // Small delay to show 100% before switching to result
+        await new Promise((r) => setTimeout(r, 400))
+        setUploadResult(data)
+        fetchProducts()
+        const total = data.created + (data.variantsCreated || 0)
+        toast.success(`${total} produk berhasil ditambahkan`)
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Gagal upload file')
+      }
+    } catch {
+      toast.error('Gagal upload file')
+    } finally {
+      if (uploadProgressRef.current) {
+        clearInterval(uploadProgressRef.current)
+        uploadProgressRef.current = null
+      }
+      setUploading(false)
+      setUploadProgress(0)
+      setUploadPhase('')
+    }
+  }, [uploadFile, fetchProducts])
+
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return
     setBulkDeleteSubmitting(true)
@@ -1951,7 +2029,20 @@ export default function ProductsPage() {
       </ResponsiveDialog>
 
       {/* Upload Excel Dialog */}
-      <ResponsiveDialog open={uploadOpen} onOpenChange={setUploadOpen}>
+      <ResponsiveDialog open={uploadOpen} onOpenChange={(open) => {
+        if (!open) {
+          // Reset state on close
+          setUploadFile(null)
+          setUploadResult(null)
+          setUploadProgress(0)
+          setUploadPhase('')
+          if (uploadProgressRef.current) {
+            clearInterval(uploadProgressRef.current)
+            uploadProgressRef.current = null
+          }
+        }
+        setUploadOpen(open)
+      }}>
         <ResponsiveDialogContent className="bg-zinc-900 border-zinc-800" desktopClassName="max-w-md">
           <ResponsiveDialogHeader>
             <ResponsiveDialogTitle className="text-zinc-100 text-sm font-semibold">Upload Produk Excel</ResponsiveDialogTitle>
@@ -1962,88 +2053,158 @@ export default function ProductsPage() {
 
           {!uploadResult ? (
             <div className="space-y-3 py-1">
-              {/* Download template */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  window.open('/api/products/bulk-upload/template', '_blank')
-                }}
-                className="w-full bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-9 text-xs"
-              >
-                <Download className="mr-1.5 h-3.5 w-3.5" />
-                Download Template Excel
-              </Button>
-
-              {/* Drag and drop area */}
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setUploadDragOver(true)
-                }}
-                onDragLeave={() => setUploadDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setUploadDragOver(false)
-                  const file = e.dataTransfer.files[0]
-                  if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
-                    setUploadFile(file)
-                  } else {
-                    toast.error('Format file tidak didukung. Gunakan .xlsx, .xls, atau .csv')
-                  }
-                }}
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                  uploadDragOver
-                    ? 'border-emerald-500 bg-emerald-500/5'
-                    : uploadFile
-                    ? 'border-emerald-500/50 bg-emerald-500/5'
-                    : 'border-zinc-700 hover:border-zinc-600'
-                }`}
-              >
-                {uploadFile ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
-                    <span className="text-xs text-zinc-200">{uploadFile.name}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setUploadFile(null)}
-                      className="h-6 w-6 p-0 text-zinc-500 hover:text-red-400"
-                    >
-                      <X className="h-3 w-3" />
-                    </Button>
+              {uploading ? (
+                /* Progress UI during upload */
+                <div className="space-y-4 py-2">
+                  {/* Animated icon + file name */}
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="relative">
+                      <div className="h-14 w-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                        <FileSpreadsheet className="h-6 w-6 text-emerald-400" />
+                      </div>
+                      {uploadProgress < 100 && (
+                        <Loader2 className="absolute -bottom-0.5 -right-0.5 h-4 w-4 text-emerald-400 animate-spin" />
+                      )}
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-zinc-200 font-medium truncate max-w-[200px]">{uploadFile?.name}</p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                        {(uploadFile?.size ? (uploadFile.size / 1024).toFixed(1) : '0')} KB
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <>
-                    <Upload className="h-8 w-8 mx-auto mb-2 text-zinc-600" />
-                    <p className="text-xs text-zinc-400">Drag & drop file Excel/CSV di sini</p>
-                    <p className="text-[11px] text-zinc-500 mt-1">atau</p>
-                  </>
-                )}
-              </div>
 
-              {!uploadFile && (
-                <label className="block">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) setUploadFile(file)
+                  {/* Progress bar */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-400">{uploadPhase}</span>
+                      <span className="text-zinc-300 font-medium tabular-nums">{uploadProgress}%</span>
+                    </div>
+                    <div className="relative h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300 ease-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Step indicators */}
+                  <div className="flex items-center justify-between gap-1 px-1">
+                    {[
+                      { label: 'Upload', threshold: 25 },
+                      { label: 'Proses', threshold: 60 },
+                      { label: 'Simpan', threshold: 90 },
+                      { label: 'Selesai', threshold: 100 },
+                    ].map((step) => (
+                      <div
+                        key={step.label}
+                        className={`flex items-center gap-1 text-[10px] transition-colors duration-200 ${
+                          uploadProgress >= step.threshold
+                            ? 'text-emerald-400'
+                            : 'text-zinc-600'
+                        }`}
+                      >
+                        {uploadProgress >= step.threshold ? (
+                          <CheckCircle2 className="h-3 w-3" />
+                        ) : (
+                          <div className="h-3 w-3 rounded-full border border-zinc-700" />
+                        )}
+                        <span className="hidden sm:inline">{step.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Cancel hint */}
+                  <p className="text-center text-[11px] text-zinc-600">
+                    Mohon tunggu, jangan tutup halaman ini
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Download template */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      window.open('/api/products/bulk-upload/template', '_blank')
                     }}
-                    className="hidden"
-                  />
-                  <div className="w-full text-center py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 cursor-pointer text-xs">
-                    Pilih File
-                  </div>
-                </label>
-              )}
+                    className="w-full bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 h-9 text-xs"
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />
+                    Download Template Excel
+                  </Button>
 
-              <div className="space-y-1">
-                <p className="text-[11px] text-zinc-500 font-medium">Kolom yang dibutuhkan:</p>
-                <p className="text-[11px] text-zinc-400">Nama (wajib), Harga Jual (wajib), SKU, HPP, Stok, Satuan, Kategori</p>
-              </div>
+                  {/* Drag and drop area */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      setUploadDragOver(true)
+                    }}
+                    onDragLeave={() => setUploadDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      setUploadDragOver(false)
+                      const file = e.dataTransfer.files[0]
+                      if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
+                        setUploadFile(file)
+                      } else {
+                        toast.error('Format file tidak didukung. Gunakan .xlsx, .xls, atau .csv')
+                      }
+                    }}
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                      uploadDragOver
+                        ? 'border-emerald-500 bg-emerald-500/5'
+                        : uploadFile
+                        ? 'border-emerald-500/50 bg-emerald-500/5'
+                        : 'border-zinc-700 hover:border-zinc-600'
+                    }`}
+                  >
+                    {uploadFile ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <FileSpreadsheet className="h-5 w-5 text-emerald-400" />
+                        <span className="text-xs text-zinc-200">{uploadFile.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setUploadFile(null)}
+                          className="h-6 w-6 p-0 text-zinc-500 hover:text-red-400"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="h-8 w-8 mx-auto mb-2 text-zinc-600" />
+                        <p className="text-xs text-zinc-400">Drag & drop file Excel/CSV di sini</p>
+                        <p className="text-[11px] text-zinc-500 mt-1">atau</p>
+                      </>
+                    )}
+                  </div>
+
+                  {!uploadFile && (
+                    <label className="block">
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) setUploadFile(file)
+                        }}
+                        className="hidden"
+                      />
+                      <div className="w-full text-center py-2 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-zinc-700 cursor-pointer text-xs">
+                        Pilih File
+                      </div>
+                    </label>
+                  )}
+
+                  <div className="space-y-1">
+                    <p className="text-[11px] text-zinc-500 font-medium">Kolom yang dibutuhkan:</p>
+                    <p className="text-[11px] text-zinc-400">Nama (wajib), Harga Jual (wajib), SKU, HPP, Stok, Satuan, Kategori</p>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3 py-1">
@@ -2057,11 +2218,27 @@ export default function ProductsPage() {
                       <span className="font-semibold text-emerald-400">{uploadResult.created}</span> produk berhasil ditambahkan
                     </span>
                   </div>
-                  {uploadResult.skipped > 0 && (
+                  {(uploadResult.variantsCreated || 0) > 0 && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <Layers className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-zinc-300">
+                        <span className="font-semibold text-emerald-400">{uploadResult.variantsCreated}</span> varian berhasil ditambahkan
+                      </span>
+                    </div>
+                  )}
+                  {(uploadResult.skipped || 0) > 0 && (
                     <div className="flex items-center gap-2 text-xs">
                       <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
                       <span className="text-zinc-300">
                         <span className="font-semibold text-amber-400">{uploadResult.skipped}</span> produk dilewati (sudah ada)
+                      </span>
+                    </div>
+                  )}
+                  {(uploadResult.variantsSkipped || 0) > 0 && (
+                    <div className="flex items-center gap-2 text-xs">
+                      <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                      <span className="text-zinc-300">
+                        <span className="font-semibold text-amber-400">{uploadResult.variantsSkipped}</span> varian dilewati
                       </span>
                     </div>
                   )}
@@ -2090,43 +2267,21 @@ export default function ProductsPage() {
                   type="button"
                   variant="ghost"
                   onClick={() => setUploadOpen(false)}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs"
+                  disabled={uploading}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700 h-8 text-xs disabled:opacity-50"
                 >
                   Batal
                 </Button>
-                <Button
-                  type="button"
-                  onClick={async () => {
-                    if (!uploadFile) return
-                    setUploading(true)
-                    try {
-                      const formData = new FormData()
-                      formData.append('file', uploadFile)
-                      const res = await fetch('/api/products/bulk-upload', {
-                        method: 'POST',
-                        body: formData,
-                      })
-                      if (res.ok) {
-                        const data = await res.json()
-                        setUploadResult(data)
-                        fetchProducts()
-                        toast.success(`${data.created} produk berhasil ditambahkan`)
-                      } else {
-                        const data = await res.json()
-                        toast.error(data.error || 'Gagal upload file')
-                      }
-                    } catch {
-                      toast.error('Gagal upload file')
-                    } finally {
-                      setUploading(false)
-                    }
-                  }}
-                  disabled={uploading || !uploadFile}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
-                >
-                  {uploading && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-                  Upload
-                </Button>
+                {!uploading ? (
+                  <Button
+                    type="button"
+                    onClick={handleBulkUpload}
+                    disabled={!uploadFile}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+                  >
+                    Upload
+                  </Button>
+                ) : null}
               </>
             ) : (
               <Button
