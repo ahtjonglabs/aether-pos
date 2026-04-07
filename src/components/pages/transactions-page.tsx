@@ -1485,7 +1485,7 @@ export default function TransactionsPage() {
                       {/* Header */}
                       <div className="r-center r-space-lg">
                         {detailReceiptLogo && (
-                          <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
                             <img src={detailReceiptLogo} alt="Logo" className="r-logo" crossOrigin="anonymous" />
                           </div>
                         )}

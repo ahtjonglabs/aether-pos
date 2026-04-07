@@ -1538,7 +1538,7 @@ export default function PosPage() {
         {/* Header — Business Info */}
         <div className="r-center r-space-lg">
           {settings.receiptLogo && (
-            <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
               <img
                 src={settings.receiptLogo}
                 alt="Logo"
