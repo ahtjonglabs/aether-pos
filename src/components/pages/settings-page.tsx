@@ -1487,7 +1487,7 @@ function ThemeReceiptTab() {
                 {/* Header */}
                 <div className="r-center r-space-lg">
                   {receiptLogo && (
-                    <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
                       <img src={receiptLogo} alt="Logo" className="r-logo" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                     </div>
                   )}
