@@ -54,6 +54,7 @@ import {
   Banknote,
   QrCode,
   CreditCard,
+  ArrowRightLeft,
   Store,
   Star,
   Tag,
@@ -123,6 +124,8 @@ interface Promo {
   active: boolean
   buyMinQty: number
   discountType: string
+  categoryId: string | null
+  categoryName?: string | null
 }
 
 interface PromoFormData {
@@ -134,6 +137,7 @@ interface PromoFormData {
   active: boolean
   buyMinQty: string
   discountType: string
+  categoryId: string
 }
 
 const DEFAULT_PROMO_FORM: PromoFormData = {
@@ -145,6 +149,7 @@ const DEFAULT_PROMO_FORM: PromoFormData = {
   active: true,
   buyMinQty: '2',
   discountType: 'PERCENTAGE',
+  categoryId: '__all__',
 }
 
 const THEME_COLORS = [
@@ -196,7 +201,7 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-lg text-xs font-medium whitespace-nowrap data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-400 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/10 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 transition-all duration-150 border border-transparent data-[state=active]:border-emerald-500/20 data-[state=active]:shadow-none"
+              className="theme-tab-trigger flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-lg text-xs font-medium whitespace-nowrap text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/80 transition-all duration-150 border border-transparent"
             >
               {tab.icon}
               {tab.label}
@@ -333,6 +338,7 @@ function PaymentMethodsTab() {
     { key: 'CASH', label: 'Tunai (CASH)', icon: <Banknote className="h-5 w-5" />, desc: 'Pembayaran tunai langsung' },
     { key: 'QRIS', label: 'QRIS', icon: <QrCode className="h-5 w-5" />, desc: 'Scan QR untuk pembayaran' },
     { key: 'DEBIT', label: 'Debit/Credit', icon: <CreditCard className="h-5 w-5" />, desc: 'Kartu debit atau kredit' },
+    { key: 'TRANSFER', label: 'Transfer Bank', icon: <ArrowRightLeft className="h-5 w-5" />, desc: 'Transfer via mobile banking / ATM' },
   ]
 
   const currentPaymentMethods = editedPaymentMethods ?? settings?.paymentMethods ?? 'CASH,QRIS'
@@ -415,7 +421,7 @@ function PaymentMethodsTab() {
                   checked={isActive}
                   onCheckedChange={() => handleToggle(method.key)}
                   onClick={(e) => e.stopPropagation()}
-                  className="data-[state=checked]:bg-emerald-500"
+                  className="theme-switch"
                 />
               </div>
             )
@@ -426,7 +432,7 @@ function PaymentMethodsTab() {
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            className="theme-btn-primary h-9 text-xs"
           >
             {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
             Simpan
@@ -503,7 +509,7 @@ function TaxTab() {
           <Switch
             checked={ppnEnabled}
             onCheckedChange={(v) => handleChange('ppnEnabled', v)}
-            className="data-[state=checked]:bg-emerald-500"
+            className="theme-switch"
           />
         </div>
 
@@ -557,7 +563,7 @@ function TaxTab() {
           <Button
             onClick={handleSave}
             disabled={saving || !dirty}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            className="theme-btn-primary h-9 text-xs"
           >
             {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
             Simpan
@@ -657,7 +663,7 @@ function OutletInfoTab() {
           <Button
             onClick={handleSave}
             disabled={saving || !dirty}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            className="theme-btn-primary h-9 text-xs"
           >
             {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
             Simpan
@@ -793,7 +799,7 @@ function LoyaltyTab() {
           <Button
             onClick={handleSave}
             disabled={saving || !dirty}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            className="theme-btn-primary h-9 text-xs"
           >
             {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
             Simpan
@@ -815,6 +821,7 @@ function PromoTab() {
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
 
   const fetchPromos = useCallback(async () => {
     setLoading(true)
@@ -837,6 +844,19 @@ function PromoTab() {
     fetchPromos()
   }, [fetchPromos])
 
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await fetch('/api/categories')
+        if (res.ok) {
+          const data = await res.json()
+          setCategories(data.categories || [])
+        }
+      } catch { /* silent */ }
+    }
+    fetchCategories()
+  }, [])
+
   const openCreate = () => {
     setEditPromo(null)
     setFormData(DEFAULT_PROMO_FORM)
@@ -854,6 +874,7 @@ function PromoTab() {
       active: promo.active,
       buyMinQty: String(promo.buyMinQty || 2),
       discountType: promo.discountType || 'PERCENTAGE',
+      categoryId: promo.categoryId ? String(promo.categoryId) : '__all__',
     })
     setDialogOpen(true)
   }
@@ -877,6 +898,7 @@ function PromoTab() {
         payload.buyMinQty = Number(formData.buyMinQty) || 2
         payload.discountType = formData.discountType || 'PERCENTAGE'
       }
+      payload.categoryId = formData.categoryId === '__all__' ? null : formData.categoryId
       const url = editPromo ? `/api/settings/promos/${editPromo.id}` : '/api/settings/promos'
       const method = editPromo ? 'PUT' : 'POST'
       const res = await fetch(url, {
@@ -927,7 +949,7 @@ function PromoTab() {
           </div>
           <Button
             onClick={openCreate}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+            className="theme-btn-primary h-8 text-xs"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Tambah Promo
@@ -953,6 +975,7 @@ function PromoTab() {
                 <TableRow className="border-zinc-800 hover:bg-transparent">
                   <TableHead className="text-zinc-500 text-[11px] font-medium h-8">Nama</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium h-8">Tipe</TableHead>
+                  <TableHead className="text-zinc-500 text-[11px] font-medium h-8">Kategori</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium h-8 text-right">Nilai</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium h-8 text-right">Min. Belanja</TableHead>
                   <TableHead className="text-zinc-500 text-[11px] font-medium h-8 text-right">Maks Diskon</TableHead>
@@ -972,11 +995,16 @@ function PromoTab() {
                             ? 'bg-blue-500/10 border-blue-500/20 text-blue-400'
                             : promo.type === 'BUY_X_GET_DISCOUNT'
                               ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                              : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                              : 'theme-accent-bg theme-accent-border theme-accent-text'
                         }`}
                       >
                         {promo.type === 'PERCENTAGE' ? 'Persentase' : promo.type === 'BUY_X_GET_DISCOUNT' ? 'Beli N Diskon' : 'Nominal'}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-zinc-400 py-2">
+                      {promo.categoryId ? (promo.categoryName || 'Kategori spesifik') : (
+                        <span className="text-zinc-500">Semua</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-zinc-200 text-right py-2">
                       {promo.type === 'BUY_X_GET_DISCOUNT'
@@ -993,7 +1021,7 @@ function PromoTab() {
                       <Badge
                         className={`text-[11px] ${
                           promo.active
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                            ? 'theme-accent-bg theme-accent-border theme-accent-text'
                             : 'bg-zinc-800 border-zinc-700 text-zinc-500'
                         }`}
                       >
@@ -1036,6 +1064,24 @@ function PromoTab() {
               </ResponsiveDialogTitle>
             </ResponsiveDialogHeader>
             <div className="space-y-4 py-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-zinc-300">Kategori (opsional)</Label>
+                <Select
+                  value={formData.categoryId}
+                  onValueChange={(v) => setFormData((p) => ({ ...p, categoryId: v }))}
+                >
+                  <SelectTrigger className="bg-zinc-800 border-zinc-700 text-zinc-100 w-full h-9 text-sm">
+                    <SelectValue placeholder="Semua Kategori" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 border-zinc-800">
+                    <SelectItem value="__all__">Semua Kategori</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-zinc-500">Kosongkan untuk berlaku ke semua kategori</p>
+              </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-zinc-300">Nama Promo</Label>
                 <Input
@@ -1133,7 +1179,7 @@ function PromoTab() {
                 <Switch
                   checked={formData.active}
                   onCheckedChange={(v) => setFormData((p) => ({ ...p, active: v }))}
-                  className="data-[state=checked]:bg-emerald-500"
+                  className="theme-switch"
                 />
                 <Label className="text-xs text-zinc-300">Promo aktif</Label>
               </div>
@@ -1149,7 +1195,7 @@ function PromoTab() {
               <Button
                 onClick={handleSave}
                 disabled={saving || !formData.name || !formData.value}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs"
+                className="theme-btn-primary h-8 text-xs"
               >
                 {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                 {editPromo ? 'Perbarui' : 'Tambah'}
@@ -1445,7 +1491,7 @@ function ThemeReceiptTab() {
         <Button
           onClick={handleSave}
           disabled={saving || !dirty}
-          className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+          className="theme-btn-primary h-9 text-xs"
         >
           {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
           Simpan Semua
@@ -1761,7 +1807,7 @@ function TelegramTab() {
             <Button
               onClick={handleSave}
               disabled={saving || !dirty}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+              className="theme-btn-primary h-9 text-xs"
             >
               {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
               Simpan
@@ -1791,7 +1837,7 @@ function TelegramTab() {
                 <Switch
                   checked={!!settings?.[item.key]}
                   onCheckedChange={(v) => handleToggle(item.key, v)}
-                  className="data-[state=checked]:bg-emerald-500"
+                  className="theme-switch"
                 />
               </div>
             ))}
@@ -1801,7 +1847,7 @@ function TelegramTab() {
             <Button
               onClick={handleSave}
               disabled={saving || !dirty}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+              className="theme-btn-primary h-9 text-xs"
             >
               {saving ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
               Simpan Notifikasi
@@ -2043,7 +2089,7 @@ function PlanTab() {
                       <Button
                         onClick={() => handleUpgrade('pro')}
                         size="sm"
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white h-7 text-[11px]"
+                        className="theme-btn-primary h-7 text-[11px]"
                       >
                         Upgrade ke Pro
                         <ArrowUpRight className="ml-1 h-3 w-3" />
@@ -2455,7 +2501,7 @@ function AccountTab() {
           <Button
             onClick={handleChangeEmail}
             disabled={changingEmail || !newEmail || !emailPassword}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            className="theme-btn-primary h-9 text-xs"
           >
             {changingEmail ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -2514,7 +2560,7 @@ function AccountTab() {
           <Button
             onClick={handleChangePassword}
             disabled={changingPwd || !currentPwd || !newPwd || !confirmPwd || newPwd !== confirmPwd || newPwd.length < 6}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white h-9 text-xs"
+            className="theme-btn-primary h-9 text-xs"
           >
             {changingPwd ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -2668,7 +2714,7 @@ function MultiOutletTab() {
             </div>
             {canAddMore && (
               <Button onClick={() => { setFormData({ name: '', address: '', phone: '' }); setDialogOpen(true) }}
-                className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs">
+                className="theme-btn-primary h-8 text-xs">
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Tambah Cabang
               </Button>
@@ -2772,7 +2818,7 @@ function MultiOutletTab() {
               Batal
             </Button>
             <Button onClick={handleCreate} disabled={saving || !formData.name.trim()}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white h-8 text-xs">
+              className="theme-btn-primary h-8 text-xs">
               {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Tambah Outlet
             </Button>

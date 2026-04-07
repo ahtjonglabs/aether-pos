@@ -47,6 +47,7 @@ import {
   Banknote,
   QrCode,
   CreditCard,
+  ArrowRightLeft,
   CalendarDays,
   Download,
   RotateCcw,
@@ -145,12 +146,14 @@ const PAYMENT_COLORS: Record<string, { bg: string; border: string; text: string;
   CASH: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', iconBg: 'bg-emerald-500/10' },
   QRIS: { bg: 'bg-sky-500/10', border: 'border-sky-500/20', text: 'text-sky-400', iconBg: 'bg-sky-500/10' },
   DEBIT: { bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-400', iconBg: 'bg-violet-500/10' },
+  TRANSFER: { bg: 'bg-orange-500/10', border: 'border-orange-500/20', text: 'text-orange-400', iconBg: 'bg-orange-500/10' },
 }
 
 const PAYMENT_BAR_COLORS: Record<string, string> = {
   CASH: 'bg-emerald-500',
   QRIS: 'bg-sky-500',
   DEBIT: 'bg-violet-500',
+  TRANSFER: 'bg-orange-500',
 }
 
 function formatHour(h: number): string {
@@ -469,6 +472,7 @@ export default function TransactionsPage() {
     if (!colors) return <Badge className="text-[10px]">{method}</Badge>
     const icon = method === 'CASH' ? <Banknote className="mr-0.5 h-2.5 w-2.5" />
       : method === 'QRIS' ? <QrCode className="mr-0.5 h-2.5 w-2.5" />
+      : method === 'TRANSFER' ? <ArrowRightLeft className="mr-0.5 h-2.5 w-2.5" />
       : <CreditCard className="mr-0.5 h-2.5 w-2.5" />
     return (
       <Badge className={`${colors.bg} ${colors.border} ${colors.text} text-[10px]`}>
@@ -482,6 +486,7 @@ export default function TransactionsPage() {
     if (!colors) return null
     const icon = method === 'CASH' ? <Banknote className="h-3.5 w-3.5" />
       : method === 'QRIS' ? <QrCode className="h-3.5 w-3.5" />
+      : method === 'TRANSFER' ? <ArrowRightLeft className="h-3.5 w-3.5" />
       : <CreditCard className="h-3.5 w-3.5" />
     return (
       <div className={`w-7 h-7 rounded-lg ${colors.iconBg} flex items-center justify-center ${colors.text}`}>

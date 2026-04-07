@@ -364,7 +364,7 @@ function RevenueLineChart({ trend, forecast, onReady }: {
 
   return (
     <div ref={chartRef} className="w-full overflow-x-auto">
-      <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full min-w-[500px]" preserveAspectRatio="xMidYMid meet">
+      <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full" preserveAspectRatio="xMidYMid meet">
         {/* Area fills */}
         <path d={actualArea} fill="url(#actualGrad)" />
         <path d={forecastArea} fill="url(#forecastGrad)" />
@@ -968,24 +968,10 @@ export default function DashboardPage() {
                           </div>
                         </div>
                       </div>
-                      {/* Chart Explanation */}
-                      <div className="mb-3 px-3 py-2 rounded-lg bg-zinc-800/40 border border-zinc-700/30">
-                        <p className="text-[11px] text-zinc-400 leading-relaxed">
-                          <span className="text-zinc-300 font-medium">📊 Cara baca grafik:</span> Garis hijau menunjukkan{' '}
-                          <span className="text-emerald-400 font-medium">pendapatan aktual harian</span>{' '}
-                          selama 14 hari terakhir. Garis ungu putus-putus adalah{' '}
-                          <span className="text-violet-400 font-medium">prediksi revenue</span>{' '}
-                          7 hari ke depan menggunakan{' '}
-                          <span className="text-zinc-300 font-medium">linear regression</span> dari data tren.
-                          {forecastData.trendDirection === 'up' && (
-                            <span className="text-emerald-400"> Tren <strong>naik</strong> — rata-rata harian {formatCurrency(forecastData.summary.avgDailyRevenue)}.</span>
-                          )}
-                          {forecastData.trendDirection === 'down' && (
-                            <span className="text-red-400"> Tren <strong>turun</strong> — perlu perhatian khusus.</span>
-                          )}
-                          {forecastData.trendDirection === 'stable' && (
-                            <span className="text-zinc-300"> Tren <strong>stabil</strong> — revenue konsisten.</span>
-                          )}
+                      {/* Chart legend — only on mobile (header has it on desktop) */}
+                      <div className="sm:hidden mb-2 px-3 py-2 rounded-lg bg-zinc-800/40 border border-zinc-700/30">
+                        <p className="text-[10px] text-zinc-400">
+                          📊 <span className="text-emerald-400 font-medium">Hijau</span>: aktual • <span className="text-violet-400 font-medium">Ungu</span>: prediksi
                         </p>
                       </div>
                       <RevenueLineChart trend={forecastData.trend} forecast={forecastData.forecast} />
@@ -1173,43 +1159,81 @@ export default function DashboardPage() {
                         )}
                       </div>
                       <div className="relative h-40 sm:h-48">
+                        {/* Y-axis labels */}
                         <div className="absolute left-0 top-0 bottom-6 w-7 flex flex-col justify-between text-[10px] text-zinc-600">
                           <span>{maxTxCount}</span>
                           <span>{Math.round(maxTxCount / 2)}</span>
                           <span>0</span>
                         </div>
-                        <div className="ml-9 h-full flex items-end gap-[2px] sm:gap-[3px]">
-                          {stats?.peakHours?.map((bucket) => {
-                            const heightPct = maxTxCount > 0 ? (bucket.transactionCount / maxTxCount) * 100 : 0
-                            const isPeak = busiestHour?.hour === bucket.hour && bucket.transactionCount > 0
-                            return (
-                              <div key={bucket.hour} className="flex-1 flex flex-col items-center gap-1 group relative">
-                                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-10 shadow-lg">
-                                  <p className="text-zinc-300 font-medium">
-                                    {String(bucket.hour).padStart(2, '0')}:00 — {bucket.transactionCount} trx
-                                  </p>
-                                  <p className="text-emerald-400">{formatCurrency(bucket.revenue)}</p>
-                                </div>
-                                <motion.div
-                                  className={`w-full rounded-t transition-colors duration-150 ${
-                                    isPeak
-                                      ? 'bg-gradient-to-t from-violet-600 to-violet-400'
-                                      : bucket.transactionCount > 0
-                                        ? 'bg-emerald-500/50 hover:bg-emerald-400/70'
-                                        : 'bg-zinc-800/80'
-                                  }`}
-                                  initial={{ height: 0 }}
-                                  animate={{ height: `${Math.max(heightPct, 2)}%` }}
-                                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                        <div className="ml-9 h-full relative">
+                          {/* Grid lines */}
+                          {[0, 0.5, 1].map((pct) => (
+                            <div key={pct} className="absolute left-0 right-0 border-t border-zinc-800/50" style={{ top: `${(1 - pct) * 100}%` }} />
+                          ))}
+                          <svg viewBox="0 0 600 160" className="w-full h-full" preserveAspectRatio="none">
+                            <defs>
+                              <linearGradient id="peakGrad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="rgb(52 211 153)" stopOpacity="0.2" />
+                                <stop offset="100%" stopColor="rgb(52 211 153)" stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            {/* Area fill */}
+                            {(() => {
+                              const points = (stats?.peakHours || []).map((b, i) => {
+                                const x = (i / 23) * 600
+                                const y = maxTxCount > 0 ? 155 - (b.transactionCount / maxTxCount) * 140 : 155
+                                return `${x},${y}`
+                              })
+                              if (points.length < 2) return null
+                              return (
+                                <polygon
+                                  points={`${points.join(' ')} 600,155 0,155`}
+                                  fill="url(#peakGrad)"
                                 />
-                                {bucket.hour % 3 === 0 && (
-                                  <span className="text-[9px] text-zinc-600 -mt-0.5">{String(bucket.hour).padStart(2, '0')}</span>
-                                )}
-                              </div>
-                            )
-                          })}
+                              )
+                            })()}
+                            {/* Line */}
+                            <motion.polyline
+                              fill="none"
+                              stroke="rgb(52 211 153)"
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              points={(stats?.peakHours || []).map((b, i) => {
+                                const x = (i / 23) * 600
+                                const y = maxTxCount > 0 ? 155 - (b.transactionCount / maxTxCount) * 140 : 155
+                                return `${x},${y}`
+                              }).join(' ')}
+                              initial={{ pathLength: 0 }}
+                              animate={{ pathLength: 1 }}
+                              transition={{ duration: 1, ease: 'easeOut' }}
+                            />
+                            {/* Dots */}
+                            {(stats?.peakHours || []).map((b, i) => {
+                              const x = (i / 23) * 600
+                              const y = maxTxCount > 0 ? 155 - (b.transactionCount / maxTxCount) * 140 : 155
+                              const isPeak = busiestHour?.hour === b.hour && b.transactionCount > 0
+                              return (
+                                <motion.circle
+                                  key={i}
+                                  cx={x}
+                                  cy={y}
+                                  r={isPeak ? 5 : b.transactionCount > 0 ? 2.5 : 0}
+                                  fill={isPeak ? 'rgb(167 139 250)' : b.transactionCount > 0 ? 'rgb(52 211 153)' : 'transparent'}
+                                  initial={{ opacity: 0, scale: 0 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  transition={{ delay: 0.5 + i * 0.02 }}
+                                />
+                              )
+                            })}
+                          </svg>
+                          {/* X-axis labels */}
+                          <div className="flex justify-between mt-1 px-0">
+                            {[0, 3, 6, 9, 12, 15, 18, 21, 23].map((h) => (
+                              <span key={h} className="text-[9px] text-zinc-600">{String(h).padStart(2, '0')}</span>
+                            ))}
+                          </div>
                         </div>
-                        <div className="ml-9 h-px bg-zinc-800" />
                       </div>
                     </CardContent>
                   </Card>

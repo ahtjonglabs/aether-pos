@@ -318,6 +318,13 @@ export default function ProductsPage() {
   const [bulkCategoryId, setBulkCategoryId] = useState<string>('')
   const [bulkCategorySubmitting, setBulkCategorySubmitting] = useState(false)
 
+  // Bulk delete state
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkDeleteSubmitting, setBulkDeleteSubmitting] = useState(false)
+
+  // Select all mode (cross-page selection)
+  const [selectAllMode, setSelectAllMode] = useState(false)
+
   // Bulk upload Excel state
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -527,6 +534,7 @@ export default function ProductsPage() {
         body: JSON.stringify({
           productIds: Array.from(selectedIds),
           priceAdjustment: { type: bulkPriceType, value },
+          selectAllMode,
         }),
       })
       if (res.ok) {
@@ -537,6 +545,7 @@ export default function ProductsPage() {
         setBulkPriceQuick('')
         setSelectedIds(new Set())
         setBulkMode(false)
+        setSelectAllMode(false)
         fetchProducts()
       } else {
         toast.error('Failed to update prices')
@@ -563,6 +572,7 @@ export default function ProductsPage() {
         body: JSON.stringify({
           productIds: Array.from(selectedIds),
           stockAdjustment: { type: bulkStockType, value },
+          selectAllMode,
         }),
       })
       if (res.ok) {
@@ -572,6 +582,7 @@ export default function ProductsPage() {
         setBulkStockValue('')
         setSelectedIds(new Set())
         setBulkMode(false)
+        setSelectAllMode(false)
         fetchProducts()
       } else {
         toast.error('Failed to update stock')
@@ -593,6 +604,7 @@ export default function ProductsPage() {
         body: JSON.stringify({
           productIds: Array.from(selectedIds),
           categoryId: bulkCategoryId,
+          selectAllMode,
         }),
       })
       if (res.ok) {
@@ -602,6 +614,7 @@ export default function ProductsPage() {
         setBulkCategoryId('')
         setSelectedIds(new Set())
         setBulkMode(false)
+        setSelectAllMode(false)
         fetchProducts()
         fetchCategories()
       } else {
@@ -611,6 +624,47 @@ export default function ProductsPage() {
       toast.error('Gagal mengubah kategori')
     } finally {
       setBulkCategorySubmitting(false)
+    }
+  }
+
+  // Select all products across all pages (for current filter)
+  const handleSelectAll = async () => {
+    setSelectAllMode(true)
+    // Mark all current page items as selected
+    setSelectedIds(new Set(products.map((p) => p.id)))
+    toast.info(`Semua ${stats.total} produk dipilih`)
+  }
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    setBulkDeleteSubmitting(true)
+    try {
+      const res = await fetch('/api/products/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productIds: Array.from(selectedIds),
+          selectAllMode,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        toast.success(`${data.deletedCount} produk berhasil dihapus`)
+        setBulkDeleteOpen(false)
+        setSelectedIds(new Set())
+        setBulkMode(false)
+        setSelectAllMode(false)
+        fetchProducts()
+        fetchCategories()
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Gagal menghapus produk')
+      }
+    } catch {
+      toast.error('Gagal menghapus produk')
+    } finally {
+      setBulkDeleteSubmitting(false)
     }
   }
 
@@ -718,6 +772,7 @@ export default function ProductsPage() {
               onClick={() => {
                 setBulkMode(!bulkMode)
                 setSelectedIds(new Set())
+                setSelectAllMode(false)
               }}
               className={
                 bulkMode
@@ -1139,6 +1194,32 @@ export default function ProductsPage() {
 
       {/* Mobile Card View */}
       <div className="md:hidden">
+        {/* Mobile bulk select-all bar */}
+        {bulkMode && !loading && products.length > 0 && (
+          <div className="flex items-center gap-2 mb-3 px-1">
+            <Checkbox
+              checked={selectAllMode || (selectedIds.size === products.length && products.length > 0)}
+              onCheckedChange={selectAllMode ? () => { setSelectAllMode(false); setSelectedIds(new Set()) } : toggleSelectAll}
+              className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+            />
+            <span className="text-[11px] text-zinc-400">
+              {selectAllMode
+                ? <><span className="text-emerald-400 font-medium">Semua {stats.total}</span> produk dipilih</>
+                : selectedIds.size === products.length
+                  ? <><span className="text-emerald-400 font-medium">Semua di halaman</span> dipilih</>
+                  : <>{selectedIds.size}/{products.length} dipilih</>
+              }
+            </span>
+            {!selectAllMode && stats.total > products.length && (
+              <button
+                onClick={handleSelectAll}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 ml-auto"
+              >
+                Pilih semua ({stats.total})
+              </button>
+            )}
+          </div>
+        )}
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -1361,33 +1442,52 @@ export default function ProductsPage() {
 
       {/* Floating Bulk Edit Bar */}
       {bulkMode && selectedIds.size > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-700 bg-zinc-900/95 backdrop-blur-sm p-3">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 md:z-50 border-t border-zinc-700 bg-zinc-900/95 backdrop-blur-sm p-3">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span className="text-xs text-zinc-300">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-xs text-zinc-300 whitespace-nowrap">
                   <span className="font-semibold text-emerald-400">{selectedIds.size}</span> dipilih
                 </span>
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setSelectedIds(new Set())}
+                onClick={() => { setSelectedIds(new Set()); setSelectAllMode(false) }}
                 className="text-zinc-500 hover:text-zinc-300 h-7 text-[11px] px-2"
               >
                 <X className="mr-1 h-3 w-3" />
                 Batal
               </Button>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+              {!selectAllMode && stats.total > products.length && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleSelectAll}
+                  className="text-zinc-500 hover:text-zinc-300 h-7 text-[11px] px-2 border border-zinc-700"
+                >
+                  <ListChecks className="mr-1 h-3 w-3" />
+                  Pilih Semua ({stats.total})
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+                className="bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 h-7 text-xs"
+              >
+                <Trash2 className="mr-1.5 h-3 w-3" />
+                Hapus
+              </Button>
               <Button
                 size="sm"
                 onClick={() => setBulkPriceOpen(true)}
                 className="bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 h-7 text-xs"
               >
                 <Tag className="mr-1.5 h-3 w-3" />
-                Ubah Harga
+                Harga
               </Button>
               <Button
                 size="sm"
@@ -1395,7 +1495,7 @@ export default function ProductsPage() {
                 className="bg-sky-500/10 border border-sky-500/20 text-sky-400 hover:bg-sky-500/20 h-7 text-xs"
               >
                 <Package className="mr-1.5 h-3 w-3" />
-                Ubah Stok
+                Stok
               </Button>
               <Button
                 size="sm"
@@ -1403,7 +1503,7 @@ export default function ProductsPage() {
                 className="bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20 h-7 text-xs"
               >
                 <Tags className="mr-1.5 h-3 w-3" />
-                Ubah Kategori
+                Kategori
               </Button>
             </div>
           </div>
@@ -1584,6 +1684,34 @@ export default function ProductsPage() {
           </ResponsiveDialogFooter>
         </ResponsiveDialogContent>
       </ResponsiveDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-zinc-100">Hapus {selectAllMode ? `${stats.total}` : selectedIds.size} Produk?</AlertDialogTitle>
+            <AlertDialogDescription className="text-zinc-400 text-sm">
+              {selectAllMode
+                ? `Semua ${stats.total} produk (sesuai filter) akan dihapus secara permanen beserta semua variannya. Tindakan ini tidak bisa dibatalkan.`
+                : `${selectedIds.size} produk yang dipilih akan dihapus secara permanen beserta semua variannya. Tindakan ini tidak bisa dibatalkan.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700">
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteSubmitting}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              {bulkDeleteSubmitting && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+              Ya, Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Bulk Price Dialog */}
       <ResponsiveDialog open={bulkPriceOpen} onOpenChange={setBulkPriceOpen}>
@@ -2026,7 +2154,14 @@ export default function ProductsPage() {
                   {detailProduct.name}
                 </SheetTitle>
                 <SheetDescription className="text-zinc-500 text-[11px]">
-                  {detailProduct.sku || 'No SKU'} • {detailProduct._maxPrice && detailProduct._maxPrice !== detailProduct.price ? `${formatCurrency(detailProduct.price)} ~ ${formatCurrency(detailProduct._maxPrice)}` : formatCurrency(detailProduct.price)}
+                  {(detailData?.product.sku || detailProduct.sku) || 'No SKU'} • {(() => {
+                    const p = detailData?.product || detailProduct
+                    const price = p.price || 0
+                    const maxP = p._maxPrice || 0
+                    return maxP && maxP !== price
+                      ? `${formatCurrency(price)} ~ ${formatCurrency(maxP)}`
+                      : formatCurrency(price)
+                  })()}
                 </SheetDescription>
               </SheetHeader>
 

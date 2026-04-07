@@ -9,6 +9,7 @@ interface CartItem {
   price: number
   qty: number
   subtotal: number
+  categoryId?: string | null
 }
 
 export async function POST(request: NextRequest) {
@@ -36,10 +37,32 @@ export async function POST(request: NextRequest) {
     for (const promo of promos) {
       let discount = 0
 
+      // Check category filter
+      if (promo.categoryId) {
+        const hasCategoryMatch = items.some(item => item.categoryId === promo.categoryId)
+        if (!hasCategoryMatch) continue
+      }
+
+      // Calculate applicable subtotal based on category filter
+      let applicableSubtotal = subtotal
+      if (promo.categoryId) {
+        applicableSubtotal = items
+          .filter(item => item.categoryId === promo.categoryId)
+          .reduce((sum, item) => sum + item.subtotal, 0)
+      }
+
+      // Calculate applicable item count based on category filter
+      let applicableItemCount = totalItems
+      if (promo.categoryId) {
+        applicableItemCount = items
+          .filter(item => item.categoryId === promo.categoryId)
+          .reduce((sum, item) => sum + item.qty, 0)
+      }
+
       if (promo.type === 'PERCENTAGE') {
         // Check min purchase
         if (promo.minPurchase && subtotal < promo.minPurchase) continue
-        discount = subtotal * (promo.value / 100)
+        discount = applicableSubtotal * (promo.value / 100)
         if (promo.maxDiscount && discount > promo.maxDiscount) {
           discount = promo.maxDiscount
         }
@@ -47,23 +70,23 @@ export async function POST(request: NextRequest) {
         // Check min purchase
         if (promo.minPurchase && subtotal < promo.minPurchase) continue
         discount = promo.value
-        if (discount > subtotal) discount = subtotal
+        if (discount > applicableSubtotal) discount = applicableSubtotal
       } else if (promo.type === 'BUY_X_GET_DISCOUNT') {
         // Check minimum item quantity
         const minQty = promo.buyMinQty || 2
-        if (totalItems < minQty) continue
+        if (applicableItemCount < minQty) continue
         // Check min purchase
         if (promo.minPurchase && subtotal < promo.minPurchase) continue
 
         if (promo.discountType === 'PERCENTAGE') {
-          discount = subtotal * (promo.value / 100)
+          discount = applicableSubtotal * (promo.value / 100)
           if (promo.maxDiscount && discount > promo.maxDiscount) {
             discount = promo.maxDiscount
           }
         } else {
           // NOMINAL discount
           discount = promo.value
-          if (discount > subtotal) discount = subtotal
+          if (discount > applicableSubtotal) discount = applicableSubtotal
         }
       }
 

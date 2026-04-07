@@ -16,13 +16,15 @@ export async function POST(request: NextRequest) {
     const userId = user.id
 
     const body = await request.json()
-    const { productIds, priceAdjustment, stockAdjustment, categoryId } = body
+    const { productIds, priceAdjustment, stockAdjustment, categoryId, selectAllMode } = body
 
-    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+    const isSelectAll = !!selectAllMode
+
+    if (!isSelectAll && (!productIds || !Array.isArray(productIds) || productIds.length === 0)) {
       return safeJsonError('productIds is required and must be a non-empty array', 400)
     }
 
-    if (productIds.length > 200) {
+    if (!isSelectAll && productIds.length > 200) {
       return safeJsonError('Maximum 200 products per bulk update', 400)
     }
 
@@ -63,10 +65,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify all products belong to this outlet
-    const existingProducts = await db.product.findMany({
-      where: { id: { in: productIds }, outletId },
-      select: { id: true, name: true, price: true, stock: true, categoryId: true, hasVariants: true },
-    })
+    // If selectAllMode, fetch ALL products in the outlet
+    const existingProducts = isSelectAll
+      ? await db.product.findMany({
+          where: { outletId },
+          select: { id: true, name: true, price: true, stock: true, categoryId: true, hasVariants: true },
+        })
+      : await db.product.findMany({
+          where: { id: { in: productIds }, outletId },
+          select: { id: true, name: true, price: true, stock: true, categoryId: true, hasVariants: true },
+        })
 
     if (existingProducts.length === 0) {
       return safeJsonError('No valid products found', 404)

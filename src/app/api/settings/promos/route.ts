@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
 
     const promos = await db.promo.findMany({
       where,
+      include: { category: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType } = body
+    const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType, categoryId } = body
 
     if (!name || !type || value === undefined) {
       return safeJsonError('Nama, tipe, dan nilai diskon wajib diisi', 400)
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
           outletId: user.outletId,
           buyMinQty: type === 'BUY_X_GET_DISCOUNT' ? (Number(buyMinQty) || 2) : 0,
           discountType: type === 'BUY_X_GET_DISCOUNT' ? (discountType || 'PERCENTAGE') : 'PERCENTAGE',
+          categoryId: categoryId || null,
         },
       })
 

@@ -30,6 +30,7 @@ export async function GET(
         items: {
           select: {
             productName: true,
+            variantName: true,
             qty: true,
             price: true,
             subtotal: true,
@@ -48,7 +49,7 @@ export async function GET(
       total: tx.total,
       paymentMethod: tx.paymentMethod,
       items: tx.items.map((item) => ({
-        productName: item.productName,
+        productName: item.variantName ? `${item.productName} - ${item.variantName}` : item.productName,
         qty: item.qty,
         price: item.price,
         subtotal: item.subtotal,

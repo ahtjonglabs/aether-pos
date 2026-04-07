@@ -44,6 +44,9 @@
 }
 
 :root {
+  --theme-primary: #34d399;
+  --theme-bg: #059669;
+  --theme-css: #10b981;
   --radius: 0.5rem;
   --background: oklch(0.09 0 0);
   --foreground: oklch(0.985 0 0);
@@ -197,10 +200,51 @@ table { border-collapse: separate; border-spacing: 0; }
   to { opacity: 0; transform: scale(0.96) translateY(4px); }
 }
 
-/* ── Dialog emerald accent line (top glow) ── */
-/* NOTE: Do NOT set position:relative here — it overrides the dialog's
-   fixed centering (top-50% left-50% translate). The ::before uses
-   absolute positioning which works with the existing fixed position. */
+/* ── Theme-aware tab trigger active state ── */
+button[data-state="active"].theme-tab-trigger {
+  background: color-mix(in srgb, var(--theme-primary) 15%, transparent);
+  color: var(--theme-primary);
+  border-color: color-mix(in srgb, var(--theme-primary) 20%, transparent);
+}
+
+/* ── Theme-aware primary button ── */
+.theme-btn-primary {
+  background-color: var(--theme-bg);
+  color: white;
+}
+.theme-btn-primary:hover {
+  background-color: var(--theme-css);
+}
+
+/* ── Theme-aware accent elements ── */
+.theme-accent-bg {
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
+}
+.theme-accent-bg-strong {
+  background: color-mix(in srgb, var(--theme-primary) 20%, transparent);
+}
+.theme-accent-border {
+  border-color: color-mix(in srgb, var(--theme-primary) 20%, transparent);
+}
+.theme-accent-border-strong {
+  border-color: color-mix(in srgb, var(--theme-primary) 30%, transparent);
+}
+.theme-accent-text {
+  color: var(--theme-primary);
+}
+.theme-accent-text-dim {
+  color: color-mix(in srgb, var(--theme-primary) 60%, transparent);
+}
+.theme-accent-shadow {
+  box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--theme-primary) 10%, transparent);
+}
+
+/* ── Theme-aware switch ── */
+[data-state="checked"].theme-switch {
+  background-color: var(--theme-bg);
+}
+
+/* ── Theme-aware dialog accent line (top glow) ── */
 [data-slot="dialog-content"]::before,
 [data-slot="alert-dialog-content"]::before {
   content: '';
@@ -210,7 +254,7 @@ table { border-collapse: separate; border-spacing: 0; }
   transform: translateX(-50%);
   width: 50%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, oklch(0.707 0.165 163.223 / 40%), transparent);
+  background: linear-gradient(90deg, transparent, var(--theme-primary), transparent);
   border-radius: 0 0 4px 4px;
   z-index: 1;
   pointer-events: none;

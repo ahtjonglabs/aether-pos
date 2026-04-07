@@ -70,10 +70,14 @@ export async function GET(request: NextRequest) {
         items: {
           select: {
             productName: true,
+            variantName: true,
             price: true,
             qty: true,
             subtotal: true,
             product: {
+              select: { sku: true },
+            },
+            variant: {
               select: { sku: true },
             },
           },
@@ -109,8 +113,8 @@ export async function GET(request: NextRequest) {
           'Jam': t.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
           'Kasir': t.user?.name || '-',
           'Customer': t.customer?.name || 'Walk-in',
-          'Nama Produk': item.productName,
-          'SKU': item.product?.sku || '-',
+          'Nama Produk': item.variantName ? `${item.productName} - ${item.variantName}` : item.productName,
+          'SKU': item.variant?.sku || item.product?.sku || '-',
           'QTY': item.qty,
           'Harga Satuan': formatCurrency(item.price),
           'Subtotal Item': formatCurrency(item.subtotal),

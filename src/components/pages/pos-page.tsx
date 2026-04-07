@@ -42,6 +42,7 @@ import {
   UserPlus,
   Coins,
   CreditCard,
+  ArrowRightLeft,
   ChevronLeft,
   ChevronRight,
   Wifi,
@@ -228,7 +229,7 @@ export default function PosPage() {
   const [outletsLoading, setOutletsLoading] = useState(false)
 
   const availablePaymentMethods = useMemo(() => {
-    return settings.paymentMethods.split(',').map(m => m.trim().toUpperCase()).filter(Boolean) as Array<'CASH' | 'QRIS' | 'DEBIT'>
+    return settings.paymentMethods.split(',').map(m => m.trim().toUpperCase()).filter(Boolean) as Array<'CASH' | 'QRIS' | 'DEBIT' | 'TRANSFER'>
   }, [settings.paymentMethods])
 
   // Fetch settings (online: from API + cache to IndexedDB, offline: from IndexedDB cache)
@@ -386,7 +387,7 @@ export default function PosPage() {
   const [availablePromos, setAvailablePromos] = useState<Array<{ id: string; name: string; type: string; description: string }>>([])
 
   // Payment
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS' | 'DEBIT'>('CASH')
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'QRIS' | 'DEBIT' | 'TRANSFER'>('CASH')
   const [paidAmount, setPaidAmount] = useState('')
 
   // Reset payment method if not in available methods
@@ -431,6 +432,7 @@ export default function PosPage() {
               price: getItemPrice(item),
               qty: item.qty,
               subtotal: getItemPrice(item) * item.qty,
+              categoryId: item.product.categoryId,
             })),
             subtotal: cartSubtotal,
           }),
@@ -1351,10 +1353,10 @@ export default function PosPage() {
     return (
       <div className="flex gap-2">
         {availablePaymentMethods.map(method => {
-          const icons: Record<string, React.ReactNode> = { CASH: <Banknote className="h-3.5 w-3.5" />, QRIS: <QrCode className="h-3.5 w-3.5" />, DEBIT: <CreditCard className="h-3.5 w-3.5" /> }
+          const icons: Record<string, React.ReactNode> = { CASH: <Banknote className="h-3.5 w-3.5" />, QRIS: <QrCode className="h-3.5 w-3.5" />, DEBIT: <CreditCard className="h-3.5 w-3.5" />, TRANSFER: <ArrowRightLeft className="h-3.5 w-3.5" /> }
           const isActive = paymentMethod === method
           return (
-            <button key={method} onClick={() => setPaymentMethod(method as 'CASH' | 'QRIS' | 'DEBIT')}
+            <button key={method} onClick={() => setPaymentMethod(method as 'CASH' | 'QRIS' | 'DEBIT' | 'TRANSFER')}
               className={cn(
                 'flex-1 flex items-center justify-center gap-1.5 rounded-full border text-xs font-medium transition-all duration-150',
                 compact ? 'h-9 py-2' : 'h-10 py-2.5',
@@ -1870,6 +1872,14 @@ export default function PosPage() {
               </div>
             )}
 
+            {paymentMethod === 'TRANSFER' && (
+              <div className="p-4 rounded-xl bg-zinc-800 border border-zinc-700 text-center">
+                <ArrowRightLeft className="h-14 w-14 text-orange-500/50 mx-auto mb-2" />
+                <p className="text-[11px] text-zinc-400">Mohon transfer ke rekening outlet</p>
+                <p className="text-sm font-black text-zinc-200 mt-1">{formatCurrency(total)}</p>
+              </div>
+            )}
+
             <Button onClick={openCheckoutDialog} disabled={cart.length === 0 || checkingOut}
               className={`w-full h-11 font-bold text-sm rounded-xl transition-all ${
                 cart.length > 0
@@ -2185,7 +2195,7 @@ export default function PosPage() {
                     <div className="flex justify-between text-emerald-400 font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>
                   </>
                 )}
-                {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT') && (
+                {(paymentMethod === 'QRIS' || paymentMethod === 'DEBIT' || paymentMethod === 'TRANSFER') && (
                   <div className="flex justify-between text-zinc-400"><span>Dibayar</span><span className="text-zinc-200">{formatCurrency(total)}</span></div>
                 )}
               </div>

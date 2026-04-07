@@ -27,7 +27,7 @@ export async function PUT(
     }
 
     const body = await request.json()
-    const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType } = body
+    const { name, type, value, minPurchase, maxDiscount, active, buyMinQty, discountType, categoryId } = body
 
     // Validate numeric fields
     if (value !== undefined) {
@@ -45,6 +45,7 @@ export async function PUT(
     if (active !== undefined && active !== existing.active) changes.active = { from: existing.active, to: active }
     if (buyMinQty !== undefined && !isNaN(Number(buyMinQty)) && Number(buyMinQty) !== existing.buyMinQty) changes.buyMinQty = { from: existing.buyMinQty, to: Number(buyMinQty) }
     if (discountType !== undefined && discountType !== existing.discountType) changes.discountType = { from: existing.discountType, to: discountType }
+    if (categoryId !== undefined && categoryId !== existing.categoryId) changes.categoryId = { from: existing.categoryId, to: categoryId }
 
     const promo = await db.$transaction(async (tx) => {
       const updated = await tx.promo.update({
@@ -58,6 +59,7 @@ export async function PUT(
           ...(active !== undefined && { active }),
           ...(buyMinQty !== undefined && { buyMinQty: Number(buyMinQty) || 0 }),
           ...(discountType !== undefined && { discountType }),
+          ...(categoryId !== undefined && { categoryId: categoryId || null }),
         },
       })
 

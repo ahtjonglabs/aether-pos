@@ -62,6 +62,7 @@ model Category {
 
   outlet   Outlet     @relation(fields: [outletId], references: [id])
   products Product[]
+  promos   Promo[]
 
   @@unique([name, outletId])
 }
@@ -260,10 +261,12 @@ model Promo {
   buyMinQty   Int      @default(0)
   // For BUY_X_GET_DISCOUNT: "PERCENTAGE" or "NOMINAL" — how the discount is calculated
   discountType String  @default("PERCENTAGE")
+  categoryId  String?               // null = all categories, specific ID = category-only
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  outlet Outlet @relation(fields: [outletId], references: [id])
+  outlet   Outlet   @relation(fields: [outletId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 }
 
 // ==================== CREW PERMISSION ====================
