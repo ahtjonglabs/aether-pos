@@ -949,104 +949,56 @@ export default function DashboardPage() {
                     </Card>
                   </div>
 
-                  {/* Revenue Trend + Forecast Line Chart */}
-                  <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Activity className="h-4 w-4 text-violet-400" />
-                          <h2 className="text-sm font-semibold text-zinc-200">Revenue Trend & Forecast</h2>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-[2px] rounded-full bg-emerald-400" />
-                            <span className="text-[10px] text-zinc-500">Aktual 14 hari</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <div className="w-6 h-[2px] rounded-full bg-violet-400 border-dashed" />
-                            <span className="text-[10px] text-zinc-500">Prediksi 7 hari</span>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Chart legend — only on mobile (header has it on desktop) */}
-                      <div className="sm:hidden mb-2 px-3 py-2 rounded-lg bg-zinc-800/40 border border-zinc-700/30">
-                        <p className="text-[10px] text-zinc-400">
-                          📊 <span className="text-emerald-400 font-medium">Hijau</span>: aktual • <span className="text-violet-400 font-medium">Ungu</span>: prediksi
-                        </p>
-                      </div>
-                      <RevenueLineChart trend={forecastData.trend} forecast={forecastData.forecast} />
-                      {/* Forecast summary line */}
-                      <div className="mt-3 flex items-center justify-between px-1">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="text-[10px] text-zinc-500">Rata-rata/hari</p>
-                            <p className="text-xs font-semibold text-zinc-200">{formatCurrency(forecastData.summary.avgDailyRevenue)}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-zinc-500">Proyeksi minggu depan</p>
-                            <p className="text-xs font-semibold text-violet-400">{formatCurrency(forecastData.summary.projectedWeekly)}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] text-zinc-500">Week vs Week</p>
-                          <p className={`text-xs font-semibold ${
-                            forecastData.summary.weekOverWeek > 0 ? 'text-emerald-400' :
-                            forecastData.summary.weekOverWeek < 0 ? 'text-red-400' : 'text-zinc-200'
-                          }`}>
-                            {forecastData.summary.weekOverWeek > 0 ? '+' : ''}{forecastData.summary.weekOverWeek}%
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Bottom: Stock Predictions + Day Performance */}
+                  {/* Top: Revenue Chart + Day Performance side by side on desktop */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                    {/* Stock Depletion Predictions */}
+                    {/* Revenue Trend + Forecast Line Chart */}
                     <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
                       <CardContent className="p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Warehouse className="h-4 w-4 text-amber-400" />
-                          <h2 className="text-sm font-semibold text-zinc-200">Prediksi Stok</h2>
-                          {forecastData.stockPredictions.length > 0 && (
-                            <Badge className="text-[9px] bg-zinc-800 border-zinc-700/50 text-zinc-400 ml-auto">
-                              {forecastData.stockPredictions.length} produk
-                            </Badge>
-                          )}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Activity className="h-4 w-4 text-violet-400" />
+                            <h2 className="text-sm font-semibold text-zinc-200">Revenue Trend & Forecast</h2>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-6 h-[2px] rounded-full bg-emerald-400" />
+                              <span className="text-[10px] text-zinc-500">Aktual 14 hari</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-6 h-[2px] rounded-full bg-violet-400 border-dashed" />
+                              <span className="text-[10px] text-zinc-500">Prediksi 7 hari</span>
+                            </div>
+                          </div>
                         </div>
-                        {forecastData.stockPredictions.length === 0 ? (
-                          <div className="flex flex-col items-center py-6 text-center">
-                            <Package className="h-7 w-7 text-zinc-700 mb-1.5" />
-                            <p className="text-xs text-zinc-500">Belum cukup data untuk prediksi</p>
+                        {/* Chart legend — only on mobile (header has it on desktop) */}
+                        <div className="sm:hidden mb-2 px-3 py-2 rounded-lg bg-zinc-800/40 border border-zinc-700/30">
+                          <p className="text-[10px] text-zinc-400">
+                            📊 <span className="text-emerald-400 font-medium">Hijau</span>: aktual • <span className="text-violet-400 font-medium">Ungu</span>: prediksi
+                          </p>
+                        </div>
+                        <RevenueLineChart trend={forecastData.trend} forecast={forecastData.forecast} />
+                        {/* Forecast summary line */}
+                        <div className="mt-3 flex items-center justify-between px-1">
+                          <div className="flex items-center gap-4">
+                            <div>
+                              <p className="text-[10px] text-zinc-500">Rata-rata/hari</p>
+                              <p className="text-xs font-semibold text-zinc-200">{formatCurrency(forecastData.summary.avgDailyRevenue)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-zinc-500">Proyeksi minggu depan</p>
+                              <p className="text-xs font-semibold text-violet-400">{formatCurrency(forecastData.summary.projectedWeekly)}</p>
+                            </div>
                           </div>
-                        ) : (
-                          <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                            {forecastData.stockPredictions.map((p, i) => (
-                              <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${
-                                p.status === 'critical' ? 'bg-red-500/[0.04] border-red-500/15' :
-                                p.status === 'warning' ? 'bg-amber-500/[0.04] border-amber-500/15' :
-                                'bg-zinc-800/30 border-zinc-700/30'
-                              }`}>
-                                <span className="text-[10px] font-bold text-zinc-600 w-4 text-center shrink-0">{i + 1}</span>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-zinc-300 truncate">{p.name}</p>
-                                  <p className="text-[10px] text-zinc-500">
-                                    sisa {p.stock} • {p.dailyVelocity}/hari
-                                  </p>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <p className={`text-xs font-bold ${
-                                    p.status === 'critical' ? 'text-red-400' :
-                                    p.status === 'warning' ? 'text-amber-400' : 'text-zinc-300'
-                                  }`}>
-                                    {p.daysUntilEmpty === Infinity ? '∞' : `${p.daysUntilEmpty}h`}
-                                  </p>
-                                  <p className="text-[9px] text-zinc-600">habis</p>
-                                </div>
-                              </div>
-                            ))}
+                          <div className="text-right">
+                            <p className="text-[10px] text-zinc-500">Week vs Week</p>
+                            <p className={`text-xs font-semibold ${
+                              forecastData.summary.weekOverWeek > 0 ? 'text-emerald-400' :
+                              forecastData.summary.weekOverWeek < 0 ? 'text-red-400' : 'text-zinc-200'
+                            }`}>
+                              {forecastData.summary.weekOverWeek > 0 ? '+' : ''}{forecastData.summary.weekOverWeek}%
+                            </p>
                           </div>
-                        )}
+                        </div>
                       </CardContent>
                     </Card>
 
@@ -1079,6 +1031,54 @@ export default function DashboardPage() {
                       </CardContent>
                     </Card>
                   </div>
+
+                  {/* Stock Predictions — full width below */}
+                  <Card className="bg-zinc-900 border border-zinc-800/60 rounded-2xl">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Warehouse className="h-4 w-4 text-amber-400" />
+                        <h2 className="text-sm font-semibold text-zinc-200">Prediksi Stok</h2>
+                        {forecastData.stockPredictions.length > 0 && (
+                          <Badge className="text-[9px] bg-zinc-800 border-zinc-700/50 text-zinc-400 ml-auto">
+                            {forecastData.stockPredictions.length} produk
+                          </Badge>
+                        )}
+                      </div>
+                      {forecastData.stockPredictions.length === 0 ? (
+                        <div className="flex flex-col items-center py-6 text-center">
+                          <Package className="h-7 w-7 text-zinc-700 mb-1.5" />
+                          <p className="text-xs text-zinc-500">Belum cukup data untuk prediksi</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                          {forecastData.stockPredictions.map((p, i) => (
+                            <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg border ${
+                              p.status === 'critical' ? 'bg-red-500/[0.04] border-red-500/15' :
+                              p.status === 'warning' ? 'bg-amber-500/[0.04] border-amber-500/15' :
+                              'bg-zinc-800/30 border-zinc-700/30'
+                            }`}>
+                              <span className="text-[10px] font-bold text-zinc-600 w-4 text-center shrink-0">{i + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-zinc-300 truncate">{p.name}</p>
+                                <p className="text-[10px] text-zinc-500">
+                                  sisa {p.stock} • {p.dailyVelocity}/hari
+                                </p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className={`text-xs font-bold ${
+                                  p.status === 'critical' ? 'text-red-400' :
+                                  p.status === 'warning' ? 'text-amber-400' : 'text-zinc-300'
+                                }`}>
+                                  {p.daysUntilEmpty === Infinity ? '∞' : `${p.daysUntilEmpty}h`}
+                                </p>
+                                <p className="text-[9px] text-zinc-600">habis</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               ) : null}
             </TabsContent>

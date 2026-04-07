@@ -168,7 +168,7 @@ export default function SettingsPage() {
   const isOwner = session?.user?.role === 'OWNER'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-5xl mx-auto">
       <div>
         <h1 className="text-lg font-semibold text-zinc-100">Pengaturan</h1>
         <p className="text-xs text-zinc-400 mt-0.5">Konfigurasi outlet dan preferensi sistem</p>
@@ -225,12 +225,12 @@ function SettingsTabs({ isOwner }: { isOwner: boolean }) {
           )}
         </TabsContent>
         <TabsContent value="kasir">
-          <PaymentMethodsTab />
-          <div className="mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <PaymentMethodsTab />
             <LoyaltyTab />
           </div>
           {isOwner && (
-            <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
               <TaxTab />
               <PromoTab />
             </div>
@@ -321,7 +321,7 @@ function useSettings() {
 
 function OutletAndReceiptTab() {
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <OutletInfoTab />
       <ThemeReceiptTab />
     </div>
