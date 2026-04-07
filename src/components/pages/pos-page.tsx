@@ -1155,6 +1155,31 @@ export default function PosPage() {
 
   // ==================== RECEIPT PRINTING ====================
 
+  // Receipt CSS — embedded in content for both preview + print consistency
+  const RECEIPT_CSS = `
+    .r-center{text-align:center}.r-right{text-align:right}
+    .r-row{display:flex;justify-content:space-between;align-items:baseline}
+    .r-row-items{display:flex;align-items:baseline}
+    .r-bold{font-weight:700}.r-semibold{font-weight:600}.r-medium{font-weight:500}
+    .r-space>*+*{margin-top:4px}.r-space-sm>*+*{margin-top:2px}.r-space-md>*+*{margin-top:6px}.r-space-lg>*+*{margin-top:8px}
+    .r-py{padding-top:6px;padding-bottom:6px}.r-my{margin-top:6px;margin-bottom:6px}
+    .r-sep{border:none;border-top:1px dashed #bbb;margin:6px 0}
+    .r-sep-double{border:none;border-top:2px dashed #333;margin:6px 0}
+    .r-label{color:#555;font-size:9.5px}.r-value{color:#111;font-weight:600;font-size:10px}
+    .r-value-bold{color:#000;font-weight:700}.r-muted{color:#666;font-size:9px}
+    .r-success{color:#059669}.r-warning{color:#b45309}
+    .r-upper{text-transform:uppercase;letter-spacing:0.5px}
+    .r-lg{font-size:12px}.r-sm{font-size:9px}.r-xs{font-size:8.5px}
+    .r-w8{width:28px;text-align:center;flex-shrink:0}.r-w16{width:60px;text-align:right;flex-shrink:0}
+    .r-w20{width:72px;text-align:right;flex-shrink:0}.r-flex1{flex:1;min-width:0}.r-gap{gap:2px}
+    .r-logo{max-width:40px;max-height:40px;object-fit:contain}
+    .r-item-name{font-weight:600;font-size:10px;color:#000}
+    .r-item-variant{font-size:8.5px;color:#666}
+    .r-item-price{font-size:9px;color:#555}
+    .r-total-row{font-size:11px}.r-footer{color:#555;font-size:8.5px}
+    .r-wrap{font-family:'Courier New',Courier,monospace;width:100%;color:#000;font-size:10px;line-height:1.45}
+  `
+
   const handleReceiptPrint = () => {
     const content = receiptContentRef.current?.innerHTML
     if (!content) return
@@ -1162,49 +1187,13 @@ export default function PosPage() {
     if (!win) { toast.error('Gagal membuka jendela cetak'); return }
     win.document.write(`<!DOCTYPE html><html><head><title>Receipt</title>
       <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 13px; width: 300px; margin: 0 auto; padding: 16px 14px; color: #000; font-weight: 600; line-height: 1.5; }
-        .text-center { text-align: center; }
-        .text-right { text-align: right; }
-        .font-bold { font-weight: 800; }
-        .font-semibold { font-weight: 700; }
-        .font-medium { font-weight: 600; }
-        .text-sm { font-size: 12px; }
-        .text-xs { font-size: 11px; }
-        .text-[11px] { font-size: 11px; font-weight: 600; }
-        .space-y-1 > * + * { margin-top: 5px; }
-        .space-y-0\.5 > * + * { margin-top: 2px; }
-        .space-y-1\.5 > * + * { margin-top: 7px; }
-        .space-y-2 > * + * { margin-top: 10px; }
-        .py-2 { padding-top: 10px; padding-bottom: 10px; }
-        .py-1 { padding-top: 5px; padding-bottom: 5px; }
-        .py-3 { padding-top: 14px; padding-bottom: 14px; }
-        .my-2 { margin-top: 10px; margin-bottom: 10px; }
-        .mt-2 { margin-top: 10px; }
-        .mb-3 { margin-bottom: 12px; }
-        .mb-2 { margin-bottom: 8px; }
-        .mb-4 { margin-bottom: 16px; }
-        .border-t, .border-dashed { border-top: 1.5px dashed #555; }
-        .border-zinc-300 { border-color: #555; }
-        .flex { display: flex; justify-content: space-between; align-items: baseline; }
-        .text-zinc-500 { color: #444; font-weight: 600; }
-        .text-zinc-600 { color: #555; font-weight: 600; }
-        .text-zinc-400 { color: #777; }
-        .text-emerald-600 { color: #059669; }
-        .text-zinc-900 { color: #000; font-weight: 700; }
-        .text-base { font-size: 18px; }
-        .text-amber-600 { color: #b45309; }
-        .uppercase { text-transform: uppercase; }
-        .items-center { align-items: center; }
-        .gap-1 { gap: 4px; }
-        .gap-2 { gap: 8px; }
-        .inline-flex { display: inline-flex; }
-        img { max-width: 48px; max-height: 48px; object-fit: contain; }
+        body { width: 72mm; margin: 0 auto; padding: 10px 8px; }
+        ${RECEIPT_CSS}
         @media print {
-          img { max-width: 48px; max-height: 48px; object-fit: contain; }
-          body { margin: 0; padding: 10px 8px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          body { margin: 0; padding: 6px 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { margin: 0; size: 80mm auto; }
+          .r-sep { border-top: 1px dashed #000; }
         }
       </style>
     </head><body>${content}</body></html>`)
@@ -1540,91 +1529,97 @@ export default function PosPage() {
   const renderReceiptContent = () => {
     if (!checkoutResult) return null
     return (
-      <div ref={receiptContentRef} className="space-y-2">
+      <div ref={receiptContentRef}>
+        <style dangerouslySetInnerHTML={{ __html: RECEIPT_CSS }} />
+        <div className="r-wrap">
         {/* Header — Business Info */}
-        <div className="text-center space-y-2 py-3">
+        <div className="r-center r-space-lg">
           {settings.receiptLogo && (
-            <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '6px' }}>
               <img
                 src={settings.receiptLogo}
                 alt="Logo"
-                style={{ width: '48px', height: '48px', objectFit: 'contain', borderRadius: '8px', display: 'inline-block' }}
+                className="r-logo"
                 crossOrigin="anonymous"
               />
             </div>
           )}
-          <p className="text-lg font-bold">{settings.receiptBusinessName}</p>
-          {settings.receiptAddress && <p className="text-xs text-zinc-700">{settings.receiptAddress}</p>}
-          {settings.receiptPhone && <p className="text-xs text-zinc-700">{settings.receiptPhone}</p>}
+          <p className="r-bold r-lg">{settings.receiptBusinessName}</p>
+          {settings.receiptAddress && <p className="r-muted">{settings.receiptAddress}</p>}
+          {settings.receiptPhone && <p className="r-muted">{settings.receiptPhone}</p>}
         </div>
 
-        <div className="border-t border-dashed border-zinc-300 my-2" />
+        <hr className="r-sep" />
 
         {/* Transaction Info */}
-        <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-700">Invoice</span><span className="font-bold">{checkoutResult.invoiceNumber}</span></div>
-          <div className="flex"><span className="text-zinc-700">Tanggal</span><span className="font-medium">{formatReceiptDateTime()}</span></div>
-          <div className="flex"><span className="text-zinc-700">Customer</span><span className="font-medium">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
-          {isOfflineReceipt && <div className="flex"><span className="text-amber-600 text-xs">Status</span><span className="text-amber-600 text-xs font-semibold">Offline — Pending Sync</span></div>}
+        <div className="r-space-sm">
+          <div className="r-row"><span className="r-label">No. Invoice</span><span className="r-value-bold">{checkoutResult.invoiceNumber}</span></div>
+          <div className="r-row"><span className="r-label">Tanggal</span><span className="r-value">{formatReceiptDateTime()}</span></div>
+          <div className="r-row"><span className="r-label">Customer</span><span className="r-value">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
+          {isOfflineReceipt && <div className="r-row"><span className="r-warning r-sm">Status</span><span className="r-warning r-semibold r-sm">Offline — Pending Sync</span></div>}
         </div>
 
-        <div className="border-t border-dashed border-zinc-300 my-2" />
+        <hr className="r-sep" />
 
         {/* Items Table Header */}
-        <div className="flex items-center py-1">
-          <span className="flex-1 text-xs font-bold text-zinc-700">ITEM</span>
-          <span className="w-12 text-center text-xs font-bold text-zinc-700">QTY</span>
-          <span className="w-16 text-right text-xs font-bold text-zinc-700">HARGA</span>
-          <span className="w-20 text-right text-xs font-bold text-zinc-700">SUBTOTAL</span>
+        <div className="r-row-items r-py r-upper">
+          <span className="r-flex1 r-semibold r-sm">Item</span>
+          <span className="r-w8 r-semibold r-sm">Qty</span>
+          <span className="r-w20 r-semibold r-sm">Subtotal</span>
         </div>
-        <div className="border-t border-dashed border-zinc-300" />
+        <hr className="r-sep" />
 
         {/* Items */}
-        <div className="space-y-2 py-2">
+        <div className="r-space-md">
           {cart.map((item) => (
-            <div key={getCartKey(item.product.id, item.variant?.id || null)} className="space-y-0.5">
-              <p className="font-semibold text-xs">{item.product.name}</p>
-              {item.variant && <p className="text-[10px] text-zinc-800">{item.variant.name}</p>}
-              <div className="flex items-center">
-                <span className="flex-1 text-[11px] text-zinc-800">{formatCurrency(getItemPrice(item))}/pcs</span>
-                <span className="w-12 text-center text-[11px] font-bold">{item.qty}</span>
-                <span className="w-16 text-right text-[11px] text-zinc-800">{formatCurrency(getItemPrice(item))}</span>
-                <span className="w-20 text-right text-xs font-bold">{formatCurrency(getItemPrice(item) * item.qty)}</span>
+            <div key={getCartKey(item.product.id, item.variant?.id || null)} className="r-space-sm">
+              <p className="r-item-name">{item.product.name}</p>
+              {item.variant && <p className="r-item-variant">{item.variant.name}</p>}
+              <div className="r-row-items r-gap">
+                <span className="r-flex1 r-item-price">@ {formatCurrency(getItemPrice(item))}</span>
+                <span className="r-w8 r-value">{item.qty}</span>
+                <span className="r-w20 r-value-bold">{formatCurrency(getItemPrice(item) * item.qty)}</span>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="border-t border-dashed border-zinc-300 my-2" />
+        <hr className="r-sep" />
 
         {/* Totals */}
-        <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-700">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
-          {pointsDiscount > 0 && <div className="flex text-emerald-600"><span className="font-medium">Poin Diskon</span><span className="font-bold">-{formatCurrency(pointsDiscount)}</span></div>}
-          {promoDiscount > 0 && selectedPromo && <div className="flex text-amber-600"><span className="font-medium">Promo: {selectedPromo.name}</span><span className="font-bold">-{formatCurrency(promoDiscount)}</span></div>}
-          {ppnAmount > 0 && <div className="flex"><span className="text-zinc-700">PPN ({settings.ppnRate}%)</span><span className="font-medium">+{formatCurrency(ppnAmount)}</span></div>}
-          <div className="border-t border-dashed border-zinc-300 my-2" />
-          <div className="flex text-base font-bold"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
+        <div className="r-space-sm">
+          <div className="r-row"><span className="r-label">Subtotal</span><span className="r-value">{formatCurrency(subtotal)}</span></div>
+          {pointsDiscount > 0 && <div className="r-row"><span className="r-success r-medium">Poin Diskon</span><span className="r-success r-bold">-{formatCurrency(pointsDiscount)}</span></div>}
+          {promoDiscount > 0 && selectedPromo && <div className="r-row"><span className="r-warning r-medium">Promo ({selectedPromo.name})</span><span className="r-warning r-bold">-{formatCurrency(promoDiscount)}</span></div>}
+          {ppnAmount > 0 && <div className="r-row"><span className="r-label">PPN ({settings.ppnRate}%)</span><span className="r-value">+{formatCurrency(ppnAmount)}</span></div>}
         </div>
 
-        <div className="border-t border-dashed border-zinc-300 my-2" />
+        <hr className="r-sep-double" />
+
+        <div className="r-row r-total-row r-bold r-my">
+          <span>TOTAL</span>
+          <span>{formatCurrency(total)}</span>
+        </div>
+
+        <hr className="r-sep" />
 
         {/* Payment */}
-        <div className="space-y-1 py-2">
-          <div className="flex"><span className="text-zinc-700">Pembayaran</span><span className="font-bold uppercase">{paymentMethod}</span></div>
-          <div className="flex"><span className="text-zinc-700">Dibayar</span><span className="font-medium">{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
-          {paymentMethod === 'CASH' && change > 0 && <div className="flex font-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>}
+        <div className="r-space-sm">
+          <div className="r-row"><span className="r-label">Pembayaran</span><span className="r-semibold r-upper r-sm">{paymentMethod}</span></div>
+          <div className="r-row"><span className="r-label">Dibayar</span><span className="r-value">{formatCurrency(paymentMethod === 'CASH' ? Number(paidAmount) : total)}</span></div>
+          {paymentMethod === 'CASH' && change > 0 && <div className="r-row r-bold"><span>Kembalian</span><span>{formatCurrency(change)}</span></div>}
         </div>
 
         {/* Footer */}
         {settings.receiptFooter && (
           <>
-            <div className="border-t border-dashed border-zinc-300 my-2" />
-            <div className="text-center py-3">
-              <p className="text-xs text-zinc-600">{settings.receiptFooter}</p>
+            <hr className="r-sep" />
+            <div className="r-center r-py">
+              <p className="r-footer">{settings.receiptFooter}</p>
             </div>
           </>
         )}
+        </div>
       </div>
     )
   }
@@ -2357,10 +2352,8 @@ export default function PosPage() {
                   )}
 
                   {/* Receipt content — thermal preview */}
-                  <div className="bg-white border border-zinc-200 rounded-lg shadow-inner mx-auto max-w-[300px] p-4">
-                    <div className="font-mono text-xs" style={{ fontWeight: 600 }}>
-                      {renderReceiptContent()}
-                    </div>
+                  <div className="bg-white border border-zinc-200 rounded-lg shadow-inner mx-auto max-w-[280px] p-3 overflow-hidden">
+                    {renderReceiptContent()}
                   </div>
                 </div>
               </ScrollArea>

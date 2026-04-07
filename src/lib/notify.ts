@@ -165,20 +165,33 @@ export async function notifyNewTransaction(
 ): Promise<void> {
   // Fire-and-forget — don't await in critical path
   getTelegramConfig(outletId).then((config) => {
-    if (!config?.chatId || !config.notifyOnTransaction) return
+    if (!config?.chatId) {
+      console.log(`[notify] Transaction skipped: no chatId for outlet ${outletId}`)
+      return
+    }
+    if (!config.notifyOnTransaction) {
+      console.log(`[notify] Transaction skipped: notifyOnTransaction is OFF for outlet ${outletId}`)
+      return
+    }
 
     const message = formatTransactionMessage({
       ...data,
       outletName: config.outletName,
     })
 
+    console.log(`[notify] Sending transaction notification to Telegram chat ${config.chatId} (outlet: ${outletId})`)
+
     sendTelegramMessage(config.chatId, message, {
       botToken: config.botToken || undefined,
     }).then((result) => {
       if (result.ok) {
-        console.log(`[notify] Transaction sent to Telegram chat ${config.chatId}`)
+        console.log(`[notify] ✅ Transaction notification sent successfully (chatId: ${config.chatId})`)
+      } else {
+        console.error(`[notify] ❌ Transaction notification failed: ${result.error} (chatId: ${config.chatId})`)
       }
     })
+  }).catch((err) => {
+    console.error(`[notify] ❌ Failed to get Telegram config for outlet ${outletId}:`, err)
   })
 }
 
@@ -190,16 +203,33 @@ export async function notifyNewCustomer(
   data: { name: string; whatsapp: string }
 ): Promise<void> {
   getTelegramConfig(outletId).then((config) => {
-    if (!config?.chatId || !config.notifyOnCustomer) return
+    if (!config?.chatId) {
+      console.log(`[notify] Customer skipped: no chatId for outlet ${outletId}`)
+      return
+    }
+    if (!config.notifyOnCustomer) {
+      console.log(`[notify] Customer skipped: notifyOnCustomer is OFF for outlet ${outletId}`)
+      return
+    }
 
     const message = formatCustomerMessage({
       ...data,
       outletName: config.outletName,
     })
 
+    console.log(`[notify] Sending customer notification to Telegram chat ${config.chatId} (outlet: ${outletId})`)
+
     sendTelegramMessage(config.chatId, message, {
       botToken: config.botToken || undefined,
-    }).catch(() => {})
+    }).then((result) => {
+      if (result.ok) {
+        console.log(`[notify] ✅ Customer notification sent (chatId: ${config.chatId})`)
+      } else {
+        console.error(`[notify] ❌ Customer notification failed: ${result.error} (chatId: ${config.chatId})`)
+      }
+    })
+  }).catch((err) => {
+    console.error(`[notify] ❌ Failed to get Telegram config for outlet ${outletId}:`, err)
   })
 }
 

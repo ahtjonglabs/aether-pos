@@ -1422,66 +1422,120 @@ function ThemeReceiptTab() {
           </div>
 
           <div className="flex justify-center">
-            <div className="w-64 bg-white text-zinc-900 rounded-lg p-4 shadow-lg font-mono text-[11px] space-y-1.5">
-              {/* Header */}
-              <div className="text-center space-y-0.5">
-                {receiptLogo && (
-                  <img src={receiptLogo} alt="Logo" className="h-10 w-10 mx-auto object-contain mb-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                )}
-                <p className="font-bold text-xs text-zinc-900">
-                  {receiptBusinessName || 'Nama Usaha'}
-                </p>
-                <p className="text-zinc-600 text-[10px] whitespace-pre-line">
-                  {receiptAddress || 'Alamat usaha'}
-                </p>
-                <p className="text-zinc-600 text-[10px]">
-                  {receiptPhone || 'Telp: -'}
-                </p>
-              </div>
-
-              {/* Dashed line */}
-              <div className="border-t border-dashed border-zinc-400" />
-
-              {/* Sample items */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-zinc-700">Nasi Goreng x2</span>
-                  <span className="text-zinc-900">Rp30.000</span>
+            <div className="w-[260px] bg-white rounded-lg p-3 shadow-lg font-mono overflow-hidden">
+              <style dangerouslySetInnerHTML={{ __html: `
+                .r-center{text-align:center}.r-right{text-align:right}
+                .r-row{display:flex;justify-content:space-between;align-items:baseline}
+                .r-row-items{display:flex;align-items:baseline}
+                .r-bold{font-weight:700}.r-semibold{font-weight:600}.r-medium{font-weight:500}
+                .r-space>*+*{margin-top:4px}.r-space-sm>*+*{margin-top:2px}.r-space-md>*+*{margin-top:6px}.r-space-lg>*+*{margin-top:8px}
+                .r-py{padding-top:6px;padding-bottom:6px}.r-my{margin-top:6px;margin-bottom:6px}
+                .r-sep{border:none;border-top:1px dashed #bbb;margin:6px 0}
+                .r-sep-double{border:none;border-top:2px dashed #333;margin:6px 0}
+                .r-label{color:#555;font-size:9.5px}.r-value{color:#111;font-weight:600;font-size:10px}
+                .r-value-bold{color:#000;font-weight:700}.r-muted{color:#666;font-size:9px}
+                .r-success{color:#059669}.r-warning{color:#b45309}
+                .r-upper{text-transform:uppercase;letter-spacing:0.5px}
+                .r-lg{font-size:12px}.r-sm{font-size:9px}.r-xs{font-size:8.5px}
+                .r-w8{width:28px;text-align:center;flex-shrink:0}.r-w16{width:60px;text-align:right;flex-shrink:0}
+                .r-w20{width:72px;text-align:right;flex-shrink:0}.r-flex1{flex:1;min-width:0}.r-gap{gap:2px}
+                .r-logo{max-width:36px;max-height:36px;object-fit:contain}
+                .r-item-name{font-weight:600;font-size:10px;color:#000}
+                .r-item-variant{font-size:8.5px;color:#666}
+                .r-item-price{font-size:9px;color:#555}
+                .r-total-row{font-size:11px}.r-footer{color:#555;font-size:8.5px}
+                .r-wrap{font-family:'Courier New',Courier,monospace;width:100%;color:#000;font-size:10px;line-height:1.45}
+              ` }} />
+              <div className="r-wrap">
+                {/* Header */}
+                <div className="r-center r-space-lg">
+                  {receiptLogo && (
+                    <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                      <img src={receiptLogo} alt="Logo" className="r-logo" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                    </div>
+                  )}
+                  <p className="r-bold r-lg">{receiptBusinessName || 'Nama Usaha'}</p>
+                  {receiptAddress && <p className="r-muted" style={{ whiteSpace: 'pre-line' }}>{receiptAddress}</p>}
+                  {receiptPhone && <p className="r-muted">{receiptPhone}</p>}
                 </div>
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-zinc-700">Es Teh Manis x2</span>
-                  <span className="text-zinc-900">Rp10.000</span>
+
+                <hr className="r-sep" />
+
+                {/* Transaction Info */}
+                <div className="r-space-sm">
+                  <div className="r-row"><span className="r-label">No. Invoice</span><span className="r-value-bold">INV-001234</span></div>
+                  <div className="r-row"><span className="r-label">Tanggal</span><span className="r-value">01/01/2025 12:00</span></div>
+                  <div className="r-row"><span className="r-label">Customer</span><span className="r-value">Walk-in</span></div>
                 </div>
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-zinc-700">Ayam Bakar x1</span>
-                  <span className="text-zinc-900">Rp25.000</span>
+
+                <hr className="r-sep" />
+
+                {/* Items Header */}
+                <div className="r-row-items r-py r-upper">
+                  <span className="r-flex1 r-semibold r-sm">Item</span>
+                  <span className="r-w8 r-semibold r-sm">Qty</span>
+                  <span className="r-w20 r-semibold r-sm">Subtotal</span>
+                </div>
+                <hr className="r-sep" />
+
+                {/* Sample Items */}
+                <div className="r-space-md">
+                  <div className="r-space-sm">
+                    <p className="r-item-name">Nasi Goreng Spesial</p>
+                    <div className="r-row-items r-gap">
+                      <span className="r-flex1 r-item-price">@ Rp15.000</span>
+                      <span className="r-w8 r-value">2</span>
+                      <span className="r-w20 r-value-bold">Rp30.000</span>
+                    </div>
+                  </div>
+                  <div className="r-space-sm">
+                    <p className="r-item-name">Es Teh Manis</p>
+                    <div className="r-row-items r-gap">
+                      <span className="r-flex1 r-item-price">@ Rp5.000</span>
+                      <span className="r-w8 r-value">2</span>
+                      <span className="r-w20 r-value-bold">Rp10.000</span>
+                    </div>
+                  </div>
+                  <div className="r-space-sm">
+                    <p className="r-item-name">Ayam Bakar Madu</p>
+                    <div className="r-row-items r-gap">
+                      <span className="r-flex1 r-item-price">@ Rp25.000</span>
+                      <span className="r-w8 r-value">1</span>
+                      <span className="r-w20 r-value-bold">Rp25.000</span>
+                    </div>
+                  </div>
+                </div>
+
+                <hr className="r-sep" />
+
+                {/* Totals */}
+                <div className="r-space-sm">
+                  <div className="r-row"><span className="r-label">Subtotal</span><span className="r-value">Rp65.000</span></div>
+                </div>
+
+                <hr className="r-sep-double" />
+
+                <div className="r-row r-total-row r-bold r-my">
+                  <span>TOTAL</span>
+                  <span>Rp65.000</span>
+                </div>
+
+                <hr className="r-sep" />
+
+                {/* Payment */}
+                <div className="r-space-sm">
+                  <div className="r-row"><span className="r-label">Pembayaran</span><span className="r-semibold r-upper r-sm">CASH</span></div>
+                  <div className="r-row"><span className="r-label">Dibayar</span><span className="r-value">Rp100.000</span></div>
+                  <div className="r-row r-bold"><span>Kembalian</span><span>Rp35.000</span></div>
+                </div>
+
+                <hr className="r-sep" />
+
+                {/* Footer */}
+                <div className="r-center r-py">
+                  <p className="r-footer">{receiptFooter || 'Terima kasih atas kunjungan Anda!'}</p>
                 </div>
               </div>
-
-              {/* Dashed line */}
-              <div className="border-t border-dashed border-zinc-400" />
-
-              {/* Total */}
-              <div className="flex justify-between font-bold text-[11px]">
-                <span>TOTAL</span>
-                <span>Rp65.000</span>
-              </div>
-              <div className="flex justify-between text-[10px] text-zinc-600">
-                <span>Tunai</span>
-                <span>Rp100.000</span>
-              </div>
-              <div className="flex justify-between text-[10px] text-zinc-600">
-                <span>Kembalian</span>
-                <span>Rp35.000</span>
-              </div>
-
-              {/* Dashed line */}
-              <div className="border-t border-dashed border-zinc-400" />
-
-              {/* Footer */}
-              <p className="text-center text-[10px] text-zinc-600">
-                {receiptFooter || 'Terima kasih atas kunjungan Anda!'}
-              </p>
             </div>
           </div>
         </CardContent>
@@ -1513,12 +1567,13 @@ function TelegramTab() {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string; botName?: string } | null>(null)
   const [dirty, setDirty] = useState(false)
 
-  const isConnected = !!settings?.telegramChatId
+  const isConnected = !!settings?.telegramChatId && !!settings?.telegramBotToken
 
   useEffect(() => {
     if (settings) {
       setChatId(settings.telegramChatId || '')
-      setBotToken(settings.telegramBotToken && settings.telegramBotToken !== '••••••' ? '' : '')
+      // Never expose the real token — always show placeholder
+      setBotToken('')
     }
   }, [settings])
 
@@ -1560,27 +1615,40 @@ function TelegramTab() {
   }
 
   const handleSave = async () => {
-    const ok = await saveSettings({
-      telegramBotToken: botToken || null,
-      telegramChatId: chatId || null,
+    const updates: Partial<SettingsData> = {
+      // Only save notification toggles (these don't need botToken/chatId changes)
       notifyOnTransaction: settings?.notifyOnTransaction ?? true,
       notifyOnCustomer: settings?.notifyOnCustomer ?? true,
       notifyOnInsight: settings?.notifyOnInsight ?? true,
       notifyDailyReport: settings?.notifyDailyReport ?? true,
       notifyWeeklyReport: settings?.notifyWeeklyReport ?? false,
       notifyMonthlyReport: settings?.notifyMonthlyReport ?? true,
-    })
+    }
+
+    // Only include botToken if user has entered a NEW token
+    // (prevent wiping stored token when botToken field is empty after first save)
+    if (botToken.trim()) {
+      updates.telegramBotToken = botToken.trim()
+    }
+
+    // Always include chatId if user has entered one
+    if (chatId.trim()) {
+      updates.telegramChatId = chatId.trim()
+    }
+
+    const ok = await saveSettings(updates)
     if (ok) {
       setDirty(false)
       setBotToken('')
     }
   }
 
-  const handleToggle = (key: keyof Pick<SettingsData, 'notifyOnTransaction' | 'notifyOnCustomer' | 'notifyOnInsight' | 'notifyDailyReport' | 'notifyWeeklyReport' | 'notifyMonthlyReport'>, value: boolean) => {
-    if (settings) {
-      setSettings({ ...settings, [key]: value })
-      setDirty(true)
-    }
+  const handleToggle = async (key: keyof Pick<SettingsData, 'notifyOnTransaction' | 'notifyOnCustomer' | 'notifyOnInsight' | 'notifyDailyReport' | 'notifyWeeklyReport' | 'notifyMonthlyReport'>, value: boolean) => {
+    if (!settings) return
+
+    // Save immediately — don't go through handleSave to avoid accidentally wiping botToken
+    // saveSettings already updates settings state with server response, no need for local update
+    await saveSettings({ [key]: value } as Partial<SettingsData>)
   }
 
   const handleDisconnect = async () => {
