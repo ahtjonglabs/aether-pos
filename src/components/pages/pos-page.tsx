@@ -1175,8 +1175,8 @@ export default function PosPage() {
     .r-w20{width:72px;text-align:right;flex-shrink:0}.r-flex1{flex:1;min-width:0}.r-gap{gap:2px}
     .r-logo{max-width:40px;max-height:40px;object-fit:contain}
     .r-item-name{font-weight:600;font-size:10px;color:#000}
-    .r-item-variant{font-size:8.5px;color:#000;font-weight:400}
-    .r-item-price{font-size:9px;color:#000;font-weight:400}
+    .r-item-variant{font-size:9px;color:#000;font-weight:500}
+    .r-item-price{font-size:9px;color:#000;font-weight:500}
     .r-total-row{font-size:11px}.r-footer{color:#000;font-size:8.5px;font-weight:400}
     .r-wrap{font-family:'Courier New',Courier,monospace;width:100%;color:#000;font-size:10px;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:auto}
   `
@@ -1548,17 +1548,17 @@ export default function PosPage() {
             </div>
           )}
           <p className="r-bold r-lg">{settings.receiptBusinessName}</p>
-          {settings.receiptAddress && <p className="r-muted">{settings.receiptAddress}</p>}
-          {settings.receiptPhone && <p className="r-muted">{settings.receiptPhone}</p>}
+          {settings.receiptAddress && <p className="r-semibold">{settings.receiptAddress}</p>}
+          {settings.receiptPhone && <p className="r-semibold">{settings.receiptPhone}</p>}
         </div>
 
         <hr className="r-sep" />
 
         {/* Transaction Info */}
         <div className="r-space-sm">
-          <div className="r-row"><span className="r-label">No. Invoice</span><span className="r-value-bold">{checkoutResult.invoiceNumber}</span></div>
-          <div className="r-row"><span className="r-label">Tanggal</span><span className="r-value">{formatReceiptDateTime()}</span></div>
-          <div className="r-row"><span className="r-label">Customer</span><span className="r-value">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
+          <div className="r-row"><span className="r-semibold">No. Invoice</span><span className="r-value-bold">{checkoutResult.invoiceNumber}</span></div>
+          <div className="r-row"><span className="r-semibold">Tanggal</span><span className="r-value">{formatReceiptDateTime()}</span></div>
+          <div className="r-row"><span className="r-semibold">Customer</span><span className="r-value">{selectedCustomer ? selectedCustomer.name : 'Walk-in'}</span></div>
           {isOfflineReceipt && <div className="r-row"><span className="r-warning r-sm">Status</span><span className="r-warning r-semibold r-sm">Offline — Pending Sync</span></div>}
         </div>
 
